@@ -108,12 +108,35 @@ export function gmpPct(ipo: BoardIpo): string {
   return ((ipo.gmp.medianValue / ipo.priceBandHigh) * 100).toFixed(1);
 }
 
+// Our own ingestion cycle runs every 2 hours — anything more than double
+// that with no successful update is worth flagging explicitly rather
+// than making the user do the math on a timestamp themselves.
+const STALE_THRESHOLD_MS = 4 * 3600 * 1000;
+
+export function isStale(capturedAtIso: string, now: number): boolean {
+  return now - new Date(capturedAtIso).getTime() > STALE_THRESHOLD_MS;
+}
+
 export function gmpUpdatedText(capturedAtIso: string, now: number): string {
   const diffMin = Math.max(0, Math.round((now - new Date(capturedAtIso).getTime()) / 60000));
   if (diffMin < 60) return `${diffMin} min ago`;
   const h = Math.floor(diffMin / 60);
   const rem = diffMin % 60;
   return `${h}h${rem ? " " + rem + "m" : ""} ago`;
+}
+
+// Neutral, descriptive language rather than a rating — "confidence:
+// HIGH/LOW" reads like a verdict on whether to invest, which risks
+// looking like investment advice. This describes what was observed
+// (how much the sources agree), not a recommendation.
+const CONFIDENCE_LABELS: Record<NonNullable<BoardIpo["gmp"]>["confidence"], string> = {
+  HIGH: "Strong source agreement",
+  MEDIUM: "Mixed source agreement",
+  LOW: "Limited source agreement",
+};
+
+export function confidenceLabel(tier: NonNullable<BoardIpo["gmp"]>["confidence"]): string {
+  return CONFIDENCE_LABELS[tier];
 }
 
 export function subSummary(ipo: BoardIpo): string {

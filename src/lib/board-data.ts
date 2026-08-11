@@ -44,6 +44,7 @@ export type BoardIpo = {
     ronwPct: number | null;
     debtEquity: number | null;
     eps: number | null;
+    verified: boolean;
   }[];
 };
 
@@ -119,6 +120,7 @@ function shapeIpo(ipo: IpoWithRelations): BoardIpo {
       ronwPct: toNumOrNull(f.ronwPct),
       debtEquity: toNumOrNull(f.debtEquity),
       eps: toNumOrNull(f.eps),
+      verified: f.verified,
     })),
   };
 }

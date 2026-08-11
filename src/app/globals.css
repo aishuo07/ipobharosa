@@ -217,6 +217,7 @@ a, button { font-family: inherit; }
 
 .card-foot { font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted); display: flex; justify-content: space-between; }
 .pill-time { color: var(--warning); font-weight: 600; }
+.stale-flag { color: var(--warning); font-weight: 600; }
 
 /* ---------- detail ---------- */
 .detail-wrap { margin-top: 34px; }

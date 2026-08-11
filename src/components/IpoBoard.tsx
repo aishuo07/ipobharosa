@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { BoardIpo } from "@/lib/board-data";
 import {
   badgeText,
+  confidenceLabel,
   countdownText,
   effectiveStatus,
   fmtCr,
@@ -13,6 +14,7 @@ import {
   fmtINR,
   gmpPct,
   gmpUpdatedText,
+  isStale,
   lifecycleDoneUpTo,
   LIFECYCLE_STEPS,
   listingGainPct,
@@ -318,7 +320,8 @@ function Card({
       </div>
       {ipo.status !== "LISTED" && ipo.gmp && (
         <div className="gmp-meta" title={`Median of ${ipo.gmp.sourceCount} independent source${ipo.gmp.sourceCount !== 1 ? "s" : ""}, ±₹${ipo.gmp.maxDeviation.toFixed(0)} spread`}>
-          {gmpUpdatedText(ipo.gmp.capturedAt, now)} · {ipo.gmp.sourceCount} source{ipo.gmp.sourceCount !== 1 ? "s" : ""} · {ipo.gmp.confidence.charAt(0) + ipo.gmp.confidence.slice(1).toLowerCase()} confidence
+          {isStale(ipo.gmp.capturedAt, now) && <span className="stale-flag">Stale · </span>}
+          {gmpUpdatedText(ipo.gmp.capturedAt, now)} · {ipo.gmp.sourceCount} source{ipo.gmp.sourceCount !== 1 ? "s" : ""} · {confidenceLabel(ipo.gmp.confidence)}
         </div>
       )}
       <div className="card-foot">
@@ -533,9 +536,10 @@ function OverviewPanel({
                 {fmtINR(ipo.gmp.medianValue)} <span className="pct">+{gmpPct(ipo)}% implied</span>
               </div>
               <div className="gmp-summary-meta">
+                {isStale(ipo.gmp.capturedAt, now) && <span className="stale-flag">Stale · </span>}
                 Updated {gmpUpdatedText(ipo.gmp.capturedAt, now)} · Median of {ipo.gmp.sourceCount}{" "}
                 source{ipo.gmp.sourceCount !== 1 ? "s" : ""} ·{" "}
-                {ipo.gmp.confidence.charAt(0) + ipo.gmp.confidence.slice(1).toLowerCase()} confidence
+                {confidenceLabel(ipo.gmp.confidence)}
               </div>
               <p className="gmp-summary-disclaimer">
                 Unofficial and not indicative of listing performance. See the GMP Trend tab for the
@@ -647,9 +651,10 @@ function GmpPanel({ ipo, now }: { ipo: BoardIpo; now: number }) {
             <span className="pct">+{gmpPct(ipo)}% over cap</span>
           </span>
           <span className="chart-src">
+            {isStale(ipo.gmp.capturedAt, now) && <span className="stale-flag">Stale · </span>}
             Updated {gmpUpdatedText(ipo.gmp.capturedAt, now)} · median of {ipo.gmp.sourceCount} source
             {ipo.gmp.sourceCount !== 1 ? "s" : ""} ·{" "}
-            {ipo.gmp.confidence.charAt(0) + ipo.gmp.confidence.slice(1).toLowerCase()} confidence
+            {confidenceLabel(ipo.gmp.confidence)}
           </span>
         </div>
         {ipo.gmpHistory.length >= 2 ? (
@@ -748,16 +753,9 @@ function GmpTrendChart({ points }: { points: { value: number; capturedAt: string
   );
 }
 
-function FinancialsPanel({ ipo }: { ipo: BoardIpo }) {
-  if (ipo.financials.length === 0) {
-    return (
-      <p style={{ color: "var(--ink-muted)" }}>
-        Financials aren&apos;t available for this IPO yet.
-      </p>
-    );
-  }
+function FinancialsContent({ financials }: { financials: BoardIpo["financials"] }) {
   // Data arrives most-recent-year-first; charts/tables read left-to-right oldest-to-newest.
-  const years = [...ipo.financials].reverse();
+  const years = [...financials].reverse();
   const latest = years[years.length - 1];
   const maxRevenue = Math.max(...years.map((y) => y.revenueCr ?? 0));
 
@@ -827,9 +825,53 @@ function FinancialsPanel({ ipo }: { ipo: BoardIpo }) {
           <div className="stat-v">{latest.eps !== null ? `₹${latest.eps}` : "—"}</div>
         </div>
       </div>
+    </>
+  );
+}
+
+function FinancialsPanel({ ipo }: { ipo: BoardIpo }) {
+  const verified = ipo.financials.filter((f) => f.verified);
+  const unverified = ipo.financials.filter((f) => !f.verified);
+
+  if (verified.length === 0 && unverified.length === 0) {
+    return (
+      <p style={{ color: "var(--ink-muted)" }}>
+        Financials aren&apos;t available for this IPO yet.
+      </p>
+    );
+  }
+
+  if (verified.length === 0) {
+    // Data exists but no human has checked it against the RHP yet — don't
+    // present scraped numbers as fact by default. Real financials carry
+    // more reputational risk than GMP if wrong.
+    return (
+      <>
+        <p style={{ color: "var(--ink-muted)", marginBottom: 12 }}>
+          Financials for this IPO have been scraped from a public source but not yet manually
+          verified against the RHP — not shown by default.
+        </p>
+        <details className="src-detail">
+          <summary>View unverified scraped data anyway</summary>
+          <div style={{ marginTop: 12 }}>
+            <FinancialsContent financials={unverified} />
+            <p className="disclaimer">
+              Unverified — sourced from a third-party aggregator, not yet cross-checked against
+              the actual RHP filing by a human reviewer. Treat as indicative only.
+            </p>
+          </div>
+        </details>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <FinancialsContent financials={verified} />
       <p className="disclaimer">
-        Sourced from the IPO&apos;s RHP via a third-party aggregator — scraped, not yet manually
-        cross-checked against the filing. Treat as indicative pending review.
+        Verified against the IPO&apos;s RHP.
+        {unverified.length > 0 &&
+          ` ${unverified.length} more recent year${unverified.length > 1 ? "s" : ""} scraped but pending verification.`}
       </p>
     </>
   );

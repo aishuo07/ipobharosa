@@ -176,10 +176,30 @@ model FinancialSnapshot {
   ronwPct    Decimal?
   debtEquity Decimal?
   eps        Decimal?
-  enteredBy  String? // admin identifier — reviewed pipeline, not scraped
+  source     String? // e.g. "scraper:sahi.com" or "manual:<admin email>"
+  verified   Boolean  @default(false) // gates display — see CorrectionLog for the audit trail
+  verifiedBy String?
+  verifiedAt DateTime?
   createdAt  DateTime @default(now())
 
   @@index([ipoId])
+}
+
+// ---------- correction audit trail ----------
+
+model CorrectionLog {
+  id         String   @id @default(uuid())
+  entityType String // e.g. "FinancialSnapshot"
+  entityId   String
+  action     String // e.g. "verify", "correct"
+  fieldName  String? // which field, if a single-field correction
+  oldValue   String?
+  newValue   String?
+  performedBy String
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
 }
 
 // ---------- auth.js tables ----------

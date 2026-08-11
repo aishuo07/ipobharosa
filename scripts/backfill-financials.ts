@@ -35,7 +35,9 @@ async function main() {
           ronwPct: y.ronwPct,
           debtEquity: y.debtEquity,
           eps: y.eps,
-          enteredBy: "scraper:sahi.com (reviewed pipeline pending)",
+          source: "scraper:sahi.com",
+          // verified defaults to false — stays hidden from the default UI
+          // view until a human checks it against the actual RHP.
         },
       });
       inserted++;
