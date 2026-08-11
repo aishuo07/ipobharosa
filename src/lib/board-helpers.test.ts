@@ -14,6 +14,7 @@ import {
 function makeIpo(overrides: Partial<BoardIpo> = {}): BoardIpo {
   return {
     id: "1",
+    slug: "test-co",
     companyName: "Test Co",
     sector: "Tech",
     status: "OPEN",

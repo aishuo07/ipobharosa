@@ -377,9 +377,14 @@ function DetailPanel({
             {ipo.sector} · Registrar: {ipo.registrar ?? "Not available yet"}
           </div>
         </div>
-        <button className="btn btn-ghost" type="button" onClick={onClose} aria-label="Close details">
-          ✕ Close
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <a href={`/ipo/${ipo.slug}`} className="btn btn-ghost" style={{ textDecoration: "none" }}>
+            Permalink ↗
+          </a>
+          <button className="btn btn-ghost" type="button" onClick={onClose} aria-label="Close details">
+            ✕ Close
+          </button>
+        </div>
       </div>
 
       <div className="dtabs" role="tablist">
@@ -408,7 +413,7 @@ function DetailPanel({
   );
 }
 
-function OverviewPanel({
+export function OverviewPanel({
   ipo,
   now,
   watching,
@@ -417,7 +422,7 @@ function OverviewPanel({
   ipo: BoardIpo;
   now: number;
   watching: boolean;
-  onToggleWatch: () => void;
+  onToggleWatch?: () => void;
 }) {
   const doneUpTo = lifecycleDoneUpTo(ipo);
   const nextIndex = doneUpTo + 1;
@@ -581,19 +586,25 @@ function OverviewPanel({
               </span>
             );
           })()}
-        <button
-          className={"btn" + (watching ? " watching" : "")}
-          type="button"
-          onClick={onToggleWatch}
-        >
-          {watching ? "✓ Watching" : "+ Watchlist"}
-        </button>
+        {onToggleWatch ? (
+          <button
+            className={"btn" + (watching ? " watching" : "")}
+            type="button"
+            onClick={onToggleWatch}
+          >
+            {watching ? "✓ Watching" : "+ Watchlist"}
+          </button>
+        ) : (
+          <a className="btn" href="/login" style={{ textDecoration: "none", display: "inline-block" }}>
+            Sign in to add to watchlist
+          </a>
+        )}
       </div>
     </>
   );
 }
 
-function SubscriptionPanel({ ipo }: { ipo: BoardIpo }) {
+export function SubscriptionPanel({ ipo }: { ipo: BoardIpo }) {
   const s = ipo.subscription;
   if (!s || s.qibX === null || s.niiX === null || s.retailX === null) {
     return (
@@ -639,7 +650,7 @@ function SubscriptionPanel({ ipo }: { ipo: BoardIpo }) {
   );
 }
 
-function GmpPanel({ ipo, now }: { ipo: BoardIpo; now: number }) {
+export function GmpPanel({ ipo, now }: { ipo: BoardIpo; now: number }) {
   if (!ipo.gmp) {
     return (
       <p style={{ color: "var(--ink-muted)" }}>
@@ -835,7 +846,7 @@ function FinancialsContent({ financials }: { financials: BoardIpo["financials"] 
   );
 }
 
-function FinancialsPanel({ ipo }: { ipo: BoardIpo }) {
+export function FinancialsPanel({ ipo }: { ipo: BoardIpo }) {
   const verified = ipo.financials.filter((f) => f.verified);
   const unverified = ipo.financials.filter((f) => !f.verified);
 
@@ -883,7 +894,7 @@ function FinancialsPanel({ ipo }: { ipo: BoardIpo }) {
   );
 }
 
-function DocumentsPanel({ ipo }: { ipo: BoardIpo }) {
+export function DocumentsPanel({ ipo }: { ipo: BoardIpo }) {
   const registrarUrl = registrarAllotmentUrl(ipo.registrar);
   return (
     <>

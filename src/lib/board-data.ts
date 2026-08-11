@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/prisma";
+import { toIpoSlug } from "@/lib/ipo-slug";
 
 export type BoardIpo = {
   id: string;
+  slug: string;
   companyName: string;
   sector: string;
   status: "UPCOMING" | "OPEN" | "CLOSED" | "LISTED";
@@ -71,6 +73,7 @@ function shapeIpo(ipo: IpoWithRelations): BoardIpo {
 
   return {
     id: ipo.id,
+    slug: toIpoSlug(ipo.company.name),
     companyName: ipo.company.name,
     sector: ipo.company.sector ?? "",
     status: ipo.status,
@@ -131,6 +134,14 @@ export async function getBoardIpos(): Promise<BoardIpo[]> {
     orderBy: { createdAt: "asc" },
   });
   return ipos.map(shapeIpo);
+}
+
+// No dedicated slug column exists yet — company count is small enough
+// that computing the slug for every IPO and matching is simpler than a
+// migration.
+export async function getBoardIpoBySlug(slug: string): Promise<BoardIpo | null> {
+  const ipos = await getBoardIpos();
+  return ipos.find((ipo) => ipo.slug === slug) ?? null;
 }
 
 export async function getWatchlistIpos(userId: string): Promise<BoardIpo[]> {
