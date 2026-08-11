@@ -59,6 +59,7 @@ export default function IpoBoard({
     Object.fromEntries(watchlistedIds.map((id) => [id, true])),
   );
   const [now, setNow] = useState(() => Date.now());
+  const [query, setQuery] = useState("");
   const router = useRouter();
 
   async function toggleWatch(ipoId: string) {
@@ -82,6 +83,19 @@ export default function IpoBoard({
   }, []);
 
   const list = useMemo(() => {
+    // A search query overrides the status tab entirely — someone typing a
+    // company name wants to find it regardless of whether it's open,
+    // upcoming, or already listed, not just within whatever tab happens
+    // to be selected.
+    const trimmed = query.trim().toLowerCase();
+    if (trimmed) {
+      return ipos
+        .filter(
+          (i) => i.companyName.toLowerCase().includes(trimmed) || i.sector.toLowerCase().includes(trimmed),
+        )
+        .sort((a, b) => a.companyName.localeCompare(b.companyName));
+    }
+
     const filtered = ipos.filter((i) => i.status === tab);
     if (tab === "OPEN") {
       return [...filtered].sort(
@@ -89,7 +103,7 @@ export default function IpoBoard({
       );
     }
     return filtered;
-  }, [ipos, tab]);
+  }, [ipos, tab, query]);
 
   const selected = ipos.find((i) => i.id === selectedId) ?? null;
 
@@ -153,8 +167,32 @@ export default function IpoBoard({
             );
           })}
         </div>
+        <div className="search-wrap">
+          <input
+            type="search"
+            className="search-box"
+            placeholder="Search by company or sector"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Search IPOs by company or sector"
+          />
+          {query && (
+            <button
+              type="button"
+              className="search-clear"
+              onClick={() => setQuery("")}
+              aria-label="Clear search"
+            >
+              ×
+            </button>
+          )}
+        </div>
         <div className="sort-note">
-          {tab === "OPEN" ? "Sorted by closing soonest" : ""}
+          {query
+            ? `${list.length} result${list.length !== 1 ? "s" : ""} for "${query.trim()}"`
+            : tab === "OPEN"
+              ? "Sorted by closing soonest"
+              : ""}
         </div>
       </div>
 
@@ -172,7 +210,7 @@ export default function IpoBoard({
         ))}
         {list.length === 0 && (
           <p style={{ color: "var(--ink-muted)", fontSize: 14 }}>
-            No IPOs in this category right now.
+            {query ? `No IPOs match "${query.trim()}".` : "No IPOs in this category right now."}
           </p>
         )}
       </div>
