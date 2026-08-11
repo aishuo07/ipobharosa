@@ -1,5 +1,22 @@
 import type { BoardIpo } from "./board-data";
 
+// Real public allotment-status-check portals, keyed by a lowercase
+// substring match against the registrar name stored on the IPO —
+// registrar names in filings vary slightly in punctuation/suffix
+// ("Ltd." vs "Pvt. Ltd.") so substring match is more robust than exact.
+const REGISTRAR_ALLOTMENT_URLS: { match: string; url: string }[] = [
+  { match: "kfin", url: "https://ipostatus.kfintech.com/" },
+  { match: "bigshare", url: "https://ipo.bigshareonline.com/" },
+  { match: "mufg", url: "https://in.mpms.mufg.com/Initial_Offer/public-issues.html" },
+  { match: "link intime", url: "https://in.mpms.mufg.com/Initial_Offer/public-issues.html" },
+];
+
+export function registrarAllotmentUrl(registrar: string | null): string | null {
+  if (!registrar) return null;
+  const lower = registrar.toLowerCase();
+  return REGISTRAR_ALLOTMENT_URLS.find((r) => lower.includes(r.match))?.url ?? null;
+}
+
 export function fmtINR(n: number): string {
   return "₹" + Math.round(n).toLocaleString("en-IN");
 }
@@ -102,7 +119,12 @@ export function gmpUpdatedText(capturedAtIso: string, now: number): string {
 export function subSummary(ipo: BoardIpo): string {
   const s = ipo.subscription;
   if (!s || s.qibX === null || s.niiX === null || s.retailX === null) {
-    return "Bidding not open yet";
+    // Missing data means something different depending on the IPO's
+    // actual status — conflating "not open yet" with "not scraped yet"
+    // makes an OPEN IPO's card say something factually wrong.
+    if (ipo.status === "UPCOMING") return "Bidding not open yet";
+    if (ipo.status === "LISTED") return "Final subscription not available";
+    return "Subscription data pending";
   }
   const overall = ((s.qibX + s.niiX + s.retailX + (s.employeeX ?? 0)) / (s.employeeX !== null ? 4 : 3)).toFixed(1);
   return `${s.retailX.toFixed(1)}x retail · ${overall}x overall`;

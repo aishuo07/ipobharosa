@@ -16,6 +16,7 @@ import {
   lifecycleDoneUpTo,
   LIFECYCLE_STEPS,
   listingGainPct,
+  registrarAllotmentUrl,
   subSummary,
   timeUntil,
 } from "@/lib/board-helpers";
@@ -163,6 +164,8 @@ export default function IpoBoard({
             now={now}
             selected={ipo.id === selectedId}
             onSelect={() => selectCard(ipo.id)}
+            watching={!!watching[ipo.id]}
+            onToggleWatch={() => toggleWatch(ipo.id)}
           />
         ))}
         {list.length === 0 && (
@@ -200,11 +203,15 @@ function Card({
   now,
   selected,
   onSelect,
+  watching,
+  onToggleWatch,
 }: {
   ipo: BoardIpo;
   now: number;
   selected: boolean;
   onSelect: () => void;
+  watching: boolean;
+  onToggleWatch: () => void;
 }) {
   const es = effectiveStatus(ipo, now);
   const min = fmtINR(ipo.lotSize * ipo.priceBandHigh);
@@ -251,14 +258,35 @@ function Card({
     );
 
   return (
-    <button
+    <div
       className={"card status-" + es + (selected ? " selected" : "")}
-      type="button"
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
     >
       <div className="card-top">
         <span className={"badge badge-" + es}>{badgeText(es)}</span>
-        <span className="board-tag">{ipo.board === "MAINBOARD" ? "Mainboard" : "SME"}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span className="board-tag">{ipo.board === "MAINBOARD" ? "Mainboard" : "SME"}</span>
+          <button
+            type="button"
+            className="card-watch-btn"
+            aria-label={watching ? "Remove from watchlist" : "Add to watchlist"}
+            aria-pressed={watching}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleWatch();
+            }}
+          >
+            {watching ? "★" : "☆"}
+          </button>
+        </div>
       </div>
       <div>
         <div className="card-name">{ipo.companyName}</div>
@@ -289,15 +317,15 @@ function Card({
         {gmpBlock}
       </div>
       {ipo.status !== "LISTED" && ipo.gmp && (
-        <div className="gmp-meta">
-          {gmpUpdatedText(ipo.gmp.capturedAt, now)} · {ipo.gmp.confidence.charAt(0) + ipo.gmp.confidence.slice(1).toLowerCase()} confidence
+        <div className="gmp-meta" title={`Median of ${ipo.gmp.sourceCount} independent source${ipo.gmp.sourceCount !== 1 ? "s" : ""}, ±₹${ipo.gmp.maxDeviation.toFixed(0)} spread`}>
+          {gmpUpdatedText(ipo.gmp.capturedAt, now)} · {ipo.gmp.sourceCount} source{ipo.gmp.sourceCount !== 1 ? "s" : ""} · {ipo.gmp.confidence.charAt(0) + ipo.gmp.confidence.slice(1).toLowerCase()} confidence
         </div>
       )}
       <div className="card-foot">
         <span>{subSummary(ipo)}</span>
         {footRight}
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -524,15 +552,25 @@ function OverviewPanel({
       )}
 
       <div className="detail-cta" style={{ marginTop: 20 }}>
-        {ipo.status === "CLOSED" && (
-          <button
-            className="btn btn-primary"
-            type="button"
-            onClick={() => alert(`Would deep-link to ${ipo.registrar ?? "the registrar"}.`)}
-          >
-            Check allotment status ↗
-          </button>
-        )}
+        {ipo.status === "CLOSED" &&
+          (() => {
+            const url = registrarAllotmentUrl(ipo.registrar);
+            return url ? (
+              <a
+                className="btn btn-primary"
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ textDecoration: "none", display: "inline-block" }}
+              >
+                Check allotment status on {ipo.registrar} ↗
+              </a>
+            ) : (
+              <span className="btn" style={{ color: "var(--ink-faint)", cursor: "default" }}>
+                Registrar link not available — check {ipo.registrar ?? "your registrar"} directly
+              </span>
+            );
+          })()}
         <button
           className={"btn" + (watching ? " watching" : "")}
           type="button"
@@ -636,13 +674,21 @@ function FinancialsPanel() {
 }
 
 function DocumentsPanel({ ipo }: { ipo: BoardIpo }) {
+  const registrarUrl = registrarAllotmentUrl(ipo.registrar);
   return (
     <>
       <p style={{ color: "var(--ink-muted)", marginBottom: 16 }}>
         Document links (RHP/DRHP/anchor list) aren&apos;t loaded for this IPO yet.
       </p>
       <p className="contacts">
-        <b>Registrar:</b> {ipo.registrar ?? "Not available yet"}
+        <b>Registrar:</b>{" "}
+        {registrarUrl ? (
+          <a href={registrarUrl} target="_blank" rel="noopener noreferrer">
+            {ipo.registrar}
+          </a>
+        ) : (
+          ipo.registrar ?? "Not available yet"
+        )}
         <br />
         <b>Lead manager{ipo.leadManagers.length > 1 ? "s" : ""}:</b>{" "}
         {ipo.leadManagers.length ? ipo.leadManagers.join(", ") : "Not available yet"}
