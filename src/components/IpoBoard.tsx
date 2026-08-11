@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { BoardIpo } from "@/lib/board-data";
 import {
   badgeText,
@@ -35,12 +36,42 @@ const DTABS: { key: DTab; label: string }[] = [
   { key: "documents", label: "Documents" },
 ];
 
-export default function IpoBoard({ ipos }: { ipos: BoardIpo[] }) {
+type BoardUser = { email: string | null; name: string | null } | null;
+
+export default function IpoBoard({
+  ipos,
+  user = null,
+  watchlistedIds = [],
+  onSignOut,
+}: {
+  ipos: BoardIpo[];
+  user?: BoardUser;
+  watchlistedIds?: string[];
+  onSignOut?: () => Promise<void>;
+}) {
   const [tab, setTab] = useState<BoardIpo["status"]>("OPEN");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dtab, setDtab] = useState<DTab>("overview");
-  const [watching, setWatching] = useState<Record<string, boolean>>({});
+  const [watching, setWatching] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(watchlistedIds.map((id) => [id, true])),
+  );
   const [now, setNow] = useState(() => Date.now());
+  const router = useRouter();
+
+  async function toggleWatch(ipoId: string) {
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+    const nextWatching = !watching[ipoId];
+    setWatching((w) => ({ ...w, [ipoId]: nextWatching }));
+    try {
+      await fetch(`/api/watchlist/${ipoId}`, { method: nextWatching ? "POST" : "DELETE" });
+    } catch {
+      // Revert on network failure rather than leave the UI lying about state.
+      setWatching((w) => ({ ...w, [ipoId]: !nextWatching }));
+    }
+  }
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 60000);
@@ -77,6 +108,27 @@ export default function IpoBoard({ ipos }: { ipos: BoardIpo[] }) {
           <div className="brand">
             <span className="wordmark">IPODekho</span>
             <span className="eyebrow">Lot Size · GMP · Dates · Allotment</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 13 }}>
+            {user ? (
+              <>
+                <a href="/watchlist" className="btn btn-ghost" style={{ padding: "6px 12px" }}>
+                  Watchlist
+                </a>
+                <span style={{ color: "var(--ink-faint)" }}>{user.email ?? user.name}</span>
+                {onSignOut && (
+                  <form action={onSignOut}>
+                    <button type="submit" className="btn btn-ghost" style={{ padding: "6px 12px" }}>
+                      Sign out
+                    </button>
+                  </form>
+                )}
+              </>
+            ) : (
+              <a href="/login" className="btn" style={{ padding: "6px 12px" }}>
+                Sign in
+              </a>
+            )}
           </div>
         </div>
       </div>
@@ -128,9 +180,7 @@ export default function IpoBoard({ ipos }: { ipos: BoardIpo[] }) {
             dtab={dtab}
             setDtab={setDtab}
             watching={!!watching[selected.id]}
-            onToggleWatch={() =>
-              setWatching((w) => ({ ...w, [selected.id]: !w[selected.id] }))
-            }
+            onToggleWatch={() => toggleWatch(selected.id)}
             onClose={() => setSelectedId(null)}
           />
         </div>
