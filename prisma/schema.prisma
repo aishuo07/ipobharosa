@@ -1,0 +1,260 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------- enums ----------
+
+enum IpoStatus {
+  UPCOMING
+  OPEN
+  CLOSED
+  LISTED
+}
+
+enum IpoBoard {
+  MAINBOARD
+  SME
+}
+
+enum ConfidenceTier {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum AlertChannel {
+  EMAIL
+}
+
+enum AlertTrigger {
+  OPEN
+  CLOSING
+  ALLOTMENT
+  LISTING
+}
+
+// ---------- core IPO data ----------
+
+model Company {
+  id        String   @id @default(uuid())
+  name      String
+  sector    String?
+  ipos      Ipo[]
+  createdAt DateTime @default(now())
+}
+
+model Ipo {
+  id            String    @id @default(uuid())
+  company       Company   @relation(fields: [companyId], references: [id])
+  companyId     String
+  status        IpoStatus
+  board         IpoBoard
+  priceBandLow  Decimal?
+  priceBandHigh Decimal?
+  lotSize       Int?
+  issueSizeCr   Decimal?
+  freshIssueCr  Decimal?
+  ofsCr         Decimal?
+  openDate      DateTime?
+  closeDate     DateTime?
+  allotmentDate DateTime?
+  refundDate    DateTime?
+  listingDate   DateTime?
+  listingPrice  Decimal?
+  registrar     String?
+  leadManagers  String[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  documents             Document[]
+  gmpObservations       GmpObservation[]
+  gmpSnapshots          GmpSnapshot[]
+  subscriptionSnapshots SubscriptionSnapshot[]
+  financialSnapshots    FinancialSnapshot[]
+  watchlistItems        WatchlistItem[]
+  alertSubscriptions    AlertSubscription[]
+
+  @@index([status])
+}
+
+model Document {
+  id      String @id @default(uuid())
+  ipo     Ipo    @relation(fields: [ipoId], references: [id], onDelete: Cascade)
+  ipoId   String
+  label   String
+  url     String
+  docType String // rhp | drhp | anchor
+
+  @@index([ipoId])
+}
+
+// ---------- GMP: multi-source, fallback, provenance ----------
+
+model GmpSource {
+  id           String           @id @default(uuid())
+  name         String           @unique
+  baseUrl      String
+  adapterKey   String           @unique
+  active       Boolean          @default(true)
+  observations GmpObservation[]
+  health       SourceHealth?
+  createdAt    DateTime         @default(now())
+}
+
+model GmpObservation {
+  id           String    @id @default(uuid())
+  ipo          Ipo       @relation(fields: [ipoId], references: [id], onDelete: Cascade)
+  ipoId        String
+  source       GmpSource @relation(fields: [sourceId], references: [id])
+  sourceId     String
+  value        Decimal?
+  success      Boolean
+  errorMessage String?
+  capturedAt   DateTime  @default(now())
+
+  @@index([ipoId, capturedAt])
+  @@index([sourceId, capturedAt])
+}
+
+model GmpSnapshot {
+  id           String         @id @default(uuid())
+  ipo          Ipo            @relation(fields: [ipoId], references: [id], onDelete: Cascade)
+  ipoId        String
+  medianValue  Decimal
+  sourceCount  Int
+  maxDeviation Decimal
+  confidence   ConfidenceTier
+  capturedAt   DateTime       @default(now())
+
+  @@index([ipoId, capturedAt])
+}
+
+model SourceHealth {
+  id                  String    @id @default(uuid())
+  source              GmpSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId            String    @unique
+  lastSuccessAt       DateTime?
+  lastError           String?
+  consecutiveFailures Int       @default(0)
+  degraded            Boolean   @default(false)
+}
+
+// ---------- subscription (single primary source + exchange fallback) ----------
+
+model SubscriptionSnapshot {
+  id             String   @id @default(uuid())
+  ipo            Ipo      @relation(fields: [ipoId], references: [id], onDelete: Cascade)
+  ipoId          String
+  qibX           Decimal?
+  niiX           Decimal?
+  retailX        Decimal?
+  employeeX      Decimal?
+  sourceExchange String // "nse" | "bse"
+  capturedAt     DateTime @default(now())
+
+  @@index([ipoId, capturedAt])
+}
+
+// ---------- financials: reviewed/manual entry, not scraped-and-trusted ----------
+
+model FinancialSnapshot {
+  id         String   @id @default(uuid())
+  ipo        Ipo      @relation(fields: [ipoId], references: [id], onDelete: Cascade)
+  ipoId      String
+  fiscalYear String
+  revenueCr  Decimal?
+  patCr      Decimal?
+  peRatio    Decimal?
+  ronwPct    Decimal?
+  debtEquity Decimal?
+  eps        Decimal?
+  enteredBy  String? // admin identifier — reviewed pipeline, not scraped
+  createdAt  DateTime @default(now())
+
+  @@index([ipoId])
+}
+
+// ---------- auth.js tables ----------
+
+model User {
+  id            String    @id @default(uuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+
+  accounts           Account[]
+  sessions           Session[]
+  watchlistItems     WatchlistItem[]
+  alertSubscriptions AlertSubscription[]
+}
+
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------- watchlist / reminders ----------
+
+model WatchlistItem {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  ipo       Ipo      @relation(fields: [ipoId], references: [id], onDelete: Cascade)
+  ipoId     String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, ipoId])
+}
+
+model AlertSubscription {
+  id        String       @id @default(uuid())
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  ipo       Ipo          @relation(fields: [ipoId], references: [id], onDelete: Cascade)
+  ipoId     String
+  channel   AlertChannel @default(EMAIL)
+  trigger   AlertTrigger
+  createdAt DateTime     @default(now())
+
+  @@unique([userId, ipoId, trigger])
+}
