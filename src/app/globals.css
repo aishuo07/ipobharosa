@@ -234,6 +234,27 @@ a, button { font-family: inherit; }
 .pill-time { color: var(--warning); font-weight: 600; }
 .stale-flag { color: var(--warning); font-weight: 600; }
 
+.card-compare {
+  display: flex; align-items: center; gap: 6px; margin-top: 10px;
+  font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); cursor: pointer;
+}
+.card-compare input { cursor: pointer; accent-color: var(--accent); }
+.card-compare.disabled { opacity: 0.5; cursor: not-allowed; }
+.card-compare.disabled input { cursor: not-allowed; }
+
+.compare-bar {
+  position: sticky; bottom: 0; z-index: 15;
+  max-width: 1180px; margin: 20px auto 0; padding: 12px 16px;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: 4px;
+  box-shadow: 0 -2px 12px rgba(18,23,43,0.1);
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+}
+.compare-bar-names { font-size: 13px; color: var(--ink-muted); }
+
+.compare-table th:first-child, .compare-table td:first-child { white-space: nowrap; }
+.compare-table th a { color: var(--ink); text-decoration: none; }
+.compare-table th a:hover { text-decoration: underline; }
+
 /* ---------- detail ---------- */
 .detail-wrap { margin-top: 34px; }
 

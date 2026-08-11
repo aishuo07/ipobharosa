@@ -60,7 +60,11 @@ export default function IpoBoard({
   );
   const [now, setNow] = useState(() => Date.now());
   const [query, setQuery] = useState("");
+  const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [showCompare, setShowCompare] = useState(false);
   const router = useRouter();
+
+  const MAX_COMPARE = 3;
 
   async function toggleWatch(ipoId: string) {
     if (!user) {
@@ -76,6 +80,19 @@ export default function IpoBoard({
       setWatching((w) => ({ ...w, [ipoId]: !nextWatching }));
     }
   }
+
+  function toggleCompare(ipoId: string) {
+    setCompareIds((ids) => {
+      if (ids.includes(ipoId)) return ids.filter((id) => id !== ipoId);
+      if (ids.length >= MAX_COMPARE) return ids;
+      return [...ids, ipoId];
+    });
+  }
+
+  const compareList = useMemo(
+    () => compareIds.map((id) => ipos.find((i) => i.id === id)).filter((i): i is BoardIpo => !!i),
+    [compareIds, ipos],
+  );
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 60000);
@@ -206,6 +223,9 @@ export default function IpoBoard({
             onSelect={() => selectCard(ipo.id)}
             watching={!!watching[ipo.id]}
             onToggleWatch={() => toggleWatch(ipo.id)}
+            comparing={compareIds.includes(ipo.id)}
+            compareDisabled={!compareIds.includes(ipo.id) && compareIds.length >= MAX_COMPARE}
+            onToggleCompare={() => toggleCompare(ipo.id)}
           />
         ))}
         {list.length === 0 && (
@@ -214,6 +234,28 @@ export default function IpoBoard({
           </p>
         )}
       </div>
+
+      {compareList.length >= 2 && !showCompare && (
+        <div className="compare-bar">
+          <span className="compare-bar-names">
+            Comparing {compareList.length}: {compareList.map((i) => i.companyName).join(" · ")}
+          </span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" className="btn btn-primary" onClick={() => setShowCompare(true)}>
+              View comparison
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => setCompareIds([])}>
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showCompare && compareList.length >= 2 && (
+        <div className="detail-wrap">
+          <CompareTable ipos={compareList} now={now} onClose={() => setShowCompare(false)} onClear={() => { setCompareIds([]); setShowCompare(false); }} />
+        </div>
+      )}
 
       {selected && (
         <div className="detail-wrap" id="detail-wrap">
@@ -251,6 +293,9 @@ function Card({
   onSelect,
   watching,
   onToggleWatch,
+  comparing,
+  compareDisabled,
+  onToggleCompare,
 }: {
   ipo: BoardIpo;
   now: number;
@@ -258,6 +303,9 @@ function Card({
   onSelect: () => void;
   watching: boolean;
   onToggleWatch: () => void;
+  comparing: boolean;
+  compareDisabled: boolean;
+  onToggleCompare: () => void;
 }) {
   const es = effectiveStatus(ipo, now);
   const min = fmtINR(ipo.lotSize * ipo.priceBandHigh);
@@ -372,6 +420,19 @@ function Card({
         <span>{subSummary(ipo)}</span>
         {footRight}
       </div>
+      <label
+        className={"card-compare" + (compareDisabled ? " disabled" : "")}
+        onClick={(e) => e.stopPropagation()}
+        title={compareDisabled ? "Compare up to 3 IPOs at a time" : undefined}
+      >
+        <input
+          type="checkbox"
+          checked={comparing}
+          disabled={compareDisabled}
+          onChange={onToggleCompare}
+        />
+        Compare
+      </label>
     </div>
   );
 }
@@ -972,5 +1033,110 @@ export function DocumentsPanel({ ipo }: { ipo: BoardIpo }) {
         {ipo.leadManagers.length ? ipo.leadManagers.join(", ") : "Not available yet"}
       </p>
     </>
+  );
+}
+
+const COMPARE_ROWS: {
+  label: string;
+  render: (ipo: BoardIpo, now: number) => React.ReactNode;
+}[] = [
+  { label: "Status", render: (ipo, now) => badgeText(effectiveStatus(ipo, now)) },
+  { label: "Board", render: (ipo) => (ipo.board === "MAINBOARD" ? "Mainboard" : "SME") },
+  { label: "Price band", render: (ipo) => `₹${ipo.priceBandLow} – ₹${ipo.priceBandHigh}` },
+  { label: "Lot size", render: (ipo) => `${ipo.lotSize} shares` },
+  { label: "Min. investment", render: (ipo) => fmtINR(ipo.lotSize * ipo.priceBandHigh) },
+  { label: "Issue size", render: (ipo) => fmtCr(ipo.issueSizeCr) },
+  {
+    label: "GMP",
+    render: (ipo, now) =>
+      ipo.gmp ? (
+        <>
+          {fmtINR(ipo.gmp.medianValue)}{" "}
+          <span style={{ fontSize: 11, color: "var(--ink-faint)" }}>
+            ({confidenceLabel(ipo.gmp.confidence)}
+            {isStale(ipo.gmp.capturedAt, now) ? " · Stale" : ""})
+          </span>
+        </>
+      ) : (
+        "Not available yet"
+      ),
+  },
+  { label: "Subscription", render: (ipo) => subSummary(ipo) },
+  {
+    label: "Latest year revenue",
+    render: (ipo) => {
+      const verified = ipo.financials.filter((f) => f.verified);
+      const latest = verified[0];
+      return latest?.revenueCr != null ? fmtCr(latest.revenueCr) : "Not verified yet";
+    },
+  },
+  {
+    label: "Latest year P/E",
+    render: (ipo) => {
+      const verified = ipo.financials.filter((f) => f.verified);
+      const latest = verified[0];
+      return latest?.peRatio != null ? `${latest.peRatio}x` : "Not verified yet";
+    },
+  },
+  { label: "Opens", render: (ipo) => fmtDate(ipo.openDate) },
+  { label: "Closes", render: (ipo) => fmtDate(ipo.closeDate) },
+  { label: "Listing", render: (ipo) => fmtDate(ipo.listingDate) },
+  { label: "Registrar", render: (ipo) => ipo.registrar ?? "Not available yet" },
+];
+
+function CompareTable({
+  ipos,
+  now,
+  onClose,
+  onClear,
+}: {
+  ipos: BoardIpo[];
+  now: number;
+  onClose: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="detail">
+      <div className="detail-head">
+        <div>
+          <div className="detail-name">Compare {ipos.length} IPOs</div>
+          <div className="detail-meta">GMP, subscription, and financials are unofficial/unverified unless noted — see Methodology.</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button type="button" className="btn btn-ghost" onClick={onClear}>
+            Clear all
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Close comparison">
+            ✕ Close
+          </button>
+        </div>
+      </div>
+      <div className="dpanel">
+        <div className="table-wrap">
+          <table className="dates compare-table">
+            <thead>
+              <tr>
+                <th></th>
+                {ipos.map((ipo) => (
+                  <th key={ipo.id}>
+                    <a href={`/ipo/${ipo.slug}`}>{ipo.companyName}</a>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {COMPARE_ROWS.map((row) => (
+                <tr key={row.label}>
+                  <td style={{ color: "var(--ink-faint)", fontFamily: "var(--font-body)" }}>{row.label}</td>
+                  {ipos.map((ipo) => (
+                    <td key={ipo.id}>{row.render(ipo, now)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   );
 }
