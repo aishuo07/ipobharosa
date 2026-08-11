@@ -195,6 +195,12 @@ export default function IpoBoard({
         IPOBharosa tracks real Indian IPOs. Grey market premium (GMP) is
         informal, unregulated dealer-street pricing gathered from multiple
         public sources — not a guarantee of listing price.
+        <div className="page-foot-links">
+          <a href="/methodology">Methodology</a>
+          <a href="/disclaimer">Disclaimer</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+        </div>
       </footer>
     </div>
   );
