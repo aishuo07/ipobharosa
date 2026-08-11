@@ -3,10 +3,11 @@ import { collectObservations, successfulValues } from "@/lib/gmp/ingest";
 import { computeGmpSnapshot } from "@/lib/gmp/confidence";
 import { ipoWatchAdapter } from "@/lib/gmp/adapters/ipowatch";
 import { sahiAdapter } from "@/lib/gmp/adapters/sahi";
+import { ipojiAdapter } from "@/lib/gmp/adapters/ipoji";
 import { sahiSubscriptionAdapter } from "@/lib/subscription/adapters/sahi";
 import type { GmpAdapter } from "@/lib/gmp/types";
 
-const GMP_ADAPTERS: GmpAdapter[] = [ipoWatchAdapter, sahiAdapter];
+const GMP_ADAPTERS: GmpAdapter[] = [ipoWatchAdapter, sahiAdapter, ipojiAdapter];
 
 // GMP is relevant right up to listing; subscription only exists during
 // the open/awaiting-allotment window.
