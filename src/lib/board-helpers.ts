@@ -1,0 +1,124 @@
+import type { BoardIpo } from "./board-data";
+
+export function fmtINR(n: number): string {
+  return "₹" + Math.round(n).toLocaleString("en-IN");
+}
+export function fmtCr(n: number): string {
+  return "₹" + n.toLocaleString("en-IN") + " Cr";
+}
+export function fmtDate(iso: string): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-IN", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+export function fmtDateShort(iso: string): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+  });
+}
+
+export type EffectiveStatus =
+  | "open"
+  | "closing-soon"
+  | "upcoming"
+  | "closed"
+  | "listed-gain"
+  | "listed-loss";
+
+export function isClosingSoon(ipo: BoardIpo, now: number): boolean {
+  if (ipo.status !== "OPEN") return false;
+  const diff = new Date(ipo.closeDate).getTime() - now;
+  return diff > 0 && diff < 36 * 3600 * 1000;
+}
+
+export function effectiveStatus(ipo: BoardIpo, now: number): EffectiveStatus {
+  if (ipo.status === "OPEN") return isClosingSoon(ipo, now) ? "closing-soon" : "open";
+  if (ipo.status === "LISTED") {
+    const gainPct = listingGainPct(ipo);
+    return gainPct !== null && gainPct >= 0 ? "listed-gain" : "listed-loss";
+  }
+  if (ipo.status === "UPCOMING") return "upcoming";
+  return "closed";
+}
+
+export function listingGainPct(ipo: BoardIpo): number | null {
+  if (ipo.listingPrice === null) return null;
+  return ((ipo.listingPrice - ipo.priceBandHigh) / ipo.priceBandHigh) * 100;
+}
+
+export function badgeText(status: EffectiveStatus): string {
+  return {
+    open: "Open",
+    "closing-soon": "Closing soon",
+    upcoming: "Upcoming",
+    closed: "Awaiting allotment",
+    "listed-gain": "Listed · Gain",
+    "listed-loss": "Listed · Loss",
+  }[status];
+}
+
+export function countdownText(ipo: BoardIpo, now: number): string {
+  const diff = new Date(ipo.closeDate).getTime() - now;
+  if (diff <= 0) return "Closing";
+  const d = Math.floor(diff / 86400000);
+  const h = Math.floor((diff % 86400000) / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  if (d > 0) return `Closes in ${d}d ${h}h`;
+  if (h > 0) return `Closes in ${h}h ${m}m`;
+  return `Closes in ${m}m`;
+}
+
+export function timeUntil(iso: string, now: number): string {
+  if (!iso) return "—";
+  const diff = new Date(iso).getTime() - now;
+  if (diff <= 0) return "Today";
+  const d = Math.floor(diff / 86400000);
+  const h = Math.floor((diff % 86400000) / 3600000);
+  if (d > 0) return `in ${d}d ${h}h`;
+  const m = Math.floor((diff % 3600000) / 60000);
+  if (h > 0) return `in ${h}h ${m}m`;
+  return `in ${m}m`;
+}
+
+export function gmpPct(ipo: BoardIpo): string {
+  if (!ipo.gmp) return "0.0";
+  return ((ipo.gmp.medianValue / ipo.priceBandHigh) * 100).toFixed(1);
+}
+
+export function gmpUpdatedText(capturedAtIso: string, now: number): string {
+  const diffMin = Math.max(0, Math.round((now - new Date(capturedAtIso).getTime()) / 60000));
+  if (diffMin < 60) return `${diffMin} min ago`;
+  const h = Math.floor(diffMin / 60);
+  const rem = diffMin % 60;
+  return `${h}h${rem ? " " + rem + "m" : ""} ago`;
+}
+
+export function subSummary(ipo: BoardIpo): string {
+  const s = ipo.subscription;
+  if (!s || s.qibX === null || s.niiX === null || s.retailX === null) {
+    return "Bidding not open yet";
+  }
+  const overall = ((s.qibX + s.niiX + s.retailX + (s.employeeX ?? 0)) / (s.employeeX !== null ? 4 : 3)).toFixed(1);
+  return `${s.retailX.toFixed(1)}x retail · ${overall}x overall`;
+}
+
+export const LIFECYCLE_STEPS: { key: string; label: string; dateKey: keyof BoardIpo }[] = [
+  { key: "opens", label: "Opens", dateKey: "openDate" },
+  { key: "closes", label: "Closes", dateKey: "closeDate" },
+  { key: "allotment", label: "Allotment", dateKey: "allotmentDate" },
+  { key: "refund", label: "Refund", dateKey: "refundDate" },
+  { key: "listing", label: "Listing", dateKey: "listingDate" },
+];
+
+export function lifecycleDoneUpTo(ipo: BoardIpo): number {
+  if (ipo.status === "UPCOMING") return -1;
+  if (ipo.status === "OPEN") return 0;
+  if (ipo.status === "CLOSED") return 1;
+  return 4;
+}
