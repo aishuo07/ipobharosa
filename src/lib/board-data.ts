@@ -34,6 +34,17 @@ export type BoardIpo = {
     employeeX: number | null;
     capturedAt: string;
   } | null;
+  gmpHistory: { value: number; capturedAt: string }[];
+  documents: { label: string; url: string; docType: string }[];
+  financials: {
+    fiscalYear: string;
+    revenueCr: number | null;
+    patCr: number | null;
+    peRatio: number | null;
+    ronwPct: number | null;
+    debtEquity: number | null;
+    eps: number | null;
+  }[];
 };
 
 function toNum(v: unknown): number {
@@ -45,14 +56,16 @@ function toNumOrNull(v: unknown): number | null {
 
 const IPO_INCLUDE = {
   company: true,
-  gmpSnapshots: { orderBy: { capturedAt: "desc" as const }, take: 1 },
+  gmpSnapshots: { orderBy: { capturedAt: "asc" as const } },
   subscriptionSnapshots: { orderBy: { capturedAt: "desc" as const }, take: 1 },
+  documents: true,
+  financialSnapshots: { orderBy: { fiscalYear: "desc" as const } },
 };
 
 type IpoWithRelations = Awaited<ReturnType<typeof prisma.ipo.findFirstOrThrow<{ include: typeof IPO_INCLUDE }>>>;
 
 function shapeIpo(ipo: IpoWithRelations): BoardIpo {
-  const latestGmp = ipo.gmpSnapshots[0] ?? null;
+  const latestGmp = ipo.gmpSnapshots[ipo.gmpSnapshots.length - 1] ?? null;
   const latestSub = ipo.subscriptionSnapshots[0] ?? null;
 
   return {
@@ -93,6 +106,20 @@ function shapeIpo(ipo: IpoWithRelations): BoardIpo {
           capturedAt: latestSub.capturedAt.toISOString(),
         }
       : null,
+    gmpHistory: ipo.gmpSnapshots.map((s) => ({
+      value: toNum(s.medianValue),
+      capturedAt: s.capturedAt.toISOString(),
+    })),
+    documents: ipo.documents.map((d) => ({ label: d.label, url: d.url, docType: d.docType })),
+    financials: ipo.financialSnapshots.map((f) => ({
+      fiscalYear: f.fiscalYear,
+      revenueCr: toNumOrNull(f.revenueCr),
+      patCr: toNumOrNull(f.patCr),
+      peRatio: toNumOrNull(f.peRatio),
+      ronwPct: toNumOrNull(f.ronwPct),
+      debtEquity: toNumOrNull(f.debtEquity),
+      eps: toNumOrNull(f.eps),
+    })),
   };
 }
 

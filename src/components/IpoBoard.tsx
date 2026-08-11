@@ -390,7 +390,7 @@ function DetailPanel({
         {dtab === "overview" && (
           <OverviewPanel ipo={ipo} now={now} watching={watching} onToggleWatch={onToggleWatch} />
         )}
-        {dtab === "financials" && <FinancialsPanel />}
+        {dtab === "financials" && <FinancialsPanel ipo={ipo} />}
         {dtab === "subscription" && <SubscriptionPanel ipo={ipo} />}
         {dtab === "gmp" && <GmpPanel ipo={ipo} now={now} />}
         {dtab === "documents" && <DocumentsPanel ipo={ipo} />}
@@ -652,9 +652,13 @@ function GmpPanel({ ipo, now }: { ipo: BoardIpo; now: number }) {
             {ipo.gmp.confidence.charAt(0) + ipo.gmp.confidence.slice(1).toLowerCase()} confidence
           </span>
         </div>
-        <p style={{ fontSize: 12.5, color: "var(--ink-muted)", margin: "8px 0 0" }}>
-          Trend chart appears once the pipeline has collected enough history for this IPO.
-        </p>
+        {ipo.gmpHistory.length >= 2 ? (
+          <GmpTrendChart points={ipo.gmpHistory} />
+        ) : (
+          <p style={{ fontSize: 12.5, color: "var(--ink-muted)", margin: "8px 0 0" }}>
+            Trend chart appears once the pipeline has collected enough history for this IPO.
+          </p>
+        )}
       </div>
       <p className="disclaimer">
         GMP is informal, unregulated grey-market pricing gathered from multiple public sources
@@ -664,12 +668,170 @@ function GmpPanel({ ipo, now }: { ipo: BoardIpo; now: number }) {
   );
 }
 
-function FinancialsPanel() {
+function GmpTrendChart({ points }: { points: { value: number; capturedAt: string }[] }) {
+  const W = 560;
+  const H = 130;
+  const padTop = 14;
+  const padBottom = 22;
+  const padL = 6;
+  const padR = 6;
+  const values = points.map((p) => p.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const innerW = W - padL - padR;
+  const innerH = H - padTop - padBottom;
+  const stepX = innerW / (points.length - 1);
+  const pts = points.map((p, i) => [
+    padL + i * stepX,
+    padTop + innerH - ((p.value - min) / range) * innerH,
+    p.value,
+  ]);
+  const linePath = pts.map((p, i) => (i === 0 ? "M" : "L") + p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
+  const areaPath =
+    linePath +
+    ` L${pts[pts.length - 1][0].toFixed(1)},${padTop + innerH} L${pts[0][0].toFixed(1)},${padTop + innerH} Z`;
+  const last = pts[pts.length - 1];
+  const first = points[0];
+
   return (
-    <p style={{ color: "var(--ink-muted)" }}>
-      Financials are entered through a reviewed pipeline sourced from the RHP, not scraped — not
-      yet available for this IPO.
-    </p>
+    <div className="chart-wrap">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        role="img"
+        aria-label={`GMP trend over ${points.length} data points, ending at ₹${last[2]}`}
+        preserveAspectRatio="none"
+      >
+        <path d={areaPath} fill="var(--accent)" fillOpacity={0.14} stroke="none" />
+        <path d={linePath} fill="none" stroke="var(--accent)" strokeWidth={2} />
+        {pts.map((p, i) => (
+          <circle
+            key={i}
+            cx={p[0]}
+            cy={p[1]}
+            r={i === pts.length - 1 ? 4 : 2}
+            fill={i === pts.length - 1 ? "var(--accent)" : "var(--surface-2)"}
+            stroke="var(--accent)"
+            strokeWidth={1}
+          >
+            <title>
+              {fmtDateShort(points[i].capturedAt)} — ₹{p[2]}
+            </title>
+          </circle>
+        ))}
+        <text
+          x={last[0]}
+          y={last[1] - 10}
+          textAnchor="end"
+          fontFamily="var(--font-mono)"
+          fontSize={12}
+          fontWeight={700}
+          fill="var(--accent)"
+        >
+          ₹{last[2]}
+        </text>
+        <text x={padL} y={H - 4} fontFamily="var(--font-mono)" fontSize={10} fill="var(--ink-faint)">
+          {fmtDateShort(first.capturedAt)}
+        </text>
+        <text
+          x={W - padR}
+          y={H - 4}
+          textAnchor="end"
+          fontFamily="var(--font-mono)"
+          fontSize={10}
+          fill="var(--ink-faint)"
+        >
+          Today
+        </text>
+      </svg>
+    </div>
+  );
+}
+
+function FinancialsPanel({ ipo }: { ipo: BoardIpo }) {
+  if (ipo.financials.length === 0) {
+    return (
+      <p style={{ color: "var(--ink-muted)" }}>
+        Financials aren&apos;t available for this IPO yet.
+      </p>
+    );
+  }
+  // Data arrives most-recent-year-first; charts/tables read left-to-right oldest-to-newest.
+  const years = [...ipo.financials].reverse();
+  const latest = years[years.length - 1];
+  const maxRevenue = Math.max(...years.map((y) => y.revenueCr ?? 0));
+
+  return (
+    <>
+      <p className="section-label" style={{ marginTop: 0 }}>
+        Revenue trend
+      </p>
+      <div className="fin-chart">
+        {years.map((y) => (
+          <div className="fin-bar-col" key={y.fiscalYear}>
+            <span className="fin-bar-label-top">
+              {y.revenueCr !== null ? fmtCr(y.revenueCr) : "—"}
+            </span>
+            <div
+              className="fin-bar"
+              style={{
+                height: `${y.revenueCr && maxRevenue ? Math.max(8, (y.revenueCr / maxRevenue) * 100) : 8}%`,
+              }}
+            />
+            <span className="fin-bar-x">{y.fiscalYear}</span>
+          </div>
+        ))}
+      </div>
+      <div className="table-wrap">
+        <table className="dates">
+          <thead>
+            <tr>
+              <th>Year</th>
+              <th>Revenue</th>
+              <th>Profit after tax</th>
+            </tr>
+          </thead>
+          <tbody>
+            {years.map((y) => (
+              <tr key={y.fiscalYear}>
+                <td>{y.fiscalYear}</td>
+                <td>{y.revenueCr !== null ? fmtCr(y.revenueCr) : "—"}</td>
+                <td>{y.patCr !== null ? fmtCr(y.patCr) : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="section-label" style={{ marginTop: 22 }}>
+        Key ratios (latest year: {latest.fiscalYear})
+      </p>
+      <div className="ratio-grid">
+        <div className="ratio-tile">
+          <div className="stat-k">P/E</div>
+          <div className="stat-v">{latest.peRatio !== null ? `${latest.peRatio}x` : "Not yet listed"}</div>
+        </div>
+        <div className="ratio-tile">
+          <div className="stat-k">
+            <abbr title="Return on Net Worth (reported as ROE in source filings)">RoNW</abbr>
+          </div>
+          <div className="stat-v">{latest.ronwPct !== null ? `${latest.ronwPct}%` : "—"}</div>
+        </div>
+        <div className="ratio-tile">
+          <div className="stat-k">
+            <abbr title="Debt to Equity ratio">D/E</abbr>
+          </div>
+          <div className="stat-v">{latest.debtEquity ?? "—"}</div>
+        </div>
+        <div className="ratio-tile">
+          <div className="stat-k">EPS</div>
+          <div className="stat-v">{latest.eps !== null ? `₹${latest.eps}` : "—"}</div>
+        </div>
+      </div>
+      <p className="disclaimer">
+        Sourced from the IPO&apos;s RHP via a third-party aggregator — scraped, not yet manually
+        cross-checked against the filing. Treat as indicative pending review.
+      </p>
+    </>
   );
 }
 
@@ -677,9 +839,28 @@ function DocumentsPanel({ ipo }: { ipo: BoardIpo }) {
   const registrarUrl = registrarAllotmentUrl(ipo.registrar);
   return (
     <>
-      <p style={{ color: "var(--ink-muted)", marginBottom: 16 }}>
-        Document links (RHP/DRHP/anchor list) aren&apos;t loaded for this IPO yet.
-      </p>
+      {ipo.documents.length > 0 ? (
+        <div className="doc-list" style={{ marginBottom: 16 }}>
+          {ipo.documents.map((doc) => (
+            <a
+              key={doc.url}
+              className="doc-row"
+              href={doc.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ textDecoration: "none" }}
+            >
+              <span className="stamp">{doc.docType === "drhp" ? "DR" : doc.docType === "rhp" ? "RHP" : "DOC"}</span>
+              <span className="doc-name">{doc.label}</span>
+              <span className="doc-sub">PDF ↗</span>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <p style={{ color: "var(--ink-muted)", marginBottom: 16 }}>
+          Document links (RHP/DRHP/anchor list) aren&apos;t loaded for this IPO yet.
+        </p>
+      )}
       <p className="contacts">
         <b>Registrar:</b>{" "}
         {registrarUrl ? (
