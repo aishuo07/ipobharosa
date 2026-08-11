@@ -62,6 +62,11 @@ export default function IpoBoard({
   const [query, setQuery] = useState("");
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [showCompare, setShowCompare] = useState(false);
+  const [view, setView] = useState<"board" | "calendar">("board");
+  const [calMonth, setCalMonth] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
   const router = useRouter();
 
   const MAX_COMPARE = 3;
@@ -168,93 +173,133 @@ export default function IpoBoard({
       </div>
 
       <div className="controls">
-        <div className="tabs" role="tablist" aria-label="IPO status">
-          {TAB_DEFS.map((t) => {
-            const count = ipos.filter((i) => i.status === t.key).length;
-            return (
-              <button
-                key={t.key}
-                type="button"
-                role="tab"
-                className={"tab" + (tab === t.key ? " active" : "")}
-                onClick={() => changeTab(t.key)}
-              >
-                {t.label} <span className="n">{count}</span>
-              </button>
-            );
-          })}
+        <div className="tabs" role="tablist" aria-label="View">
+          <button
+            type="button"
+            className={"tab" + (view === "board" ? " active" : "")}
+            onClick={() => setView("board")}
+          >
+            Board
+          </button>
+          <button
+            type="button"
+            className={"tab" + (view === "calendar" ? " active" : "")}
+            onClick={() => setView("calendar")}
+          >
+            Calendar
+          </button>
         </div>
-        <div className="search-wrap">
-          <input
-            type="search"
-            className="search-box"
-            placeholder="Search by company or sector"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            aria-label="Search IPOs by company or sector"
-          />
-          {query && (
-            <button
-              type="button"
-              className="search-clear"
-              onClick={() => setQuery("")}
-              aria-label="Clear search"
-            >
-              ×
-            </button>
-          )}
-        </div>
-        <div className="sort-note">
-          {query
-            ? `${list.length} result${list.length !== 1 ? "s" : ""} for "${query.trim()}"`
-            : tab === "OPEN"
-              ? "Sorted by closing soonest"
-              : ""}
-        </div>
-      </div>
-
-      <div className="board">
-        {list.map((ipo) => (
-          <Card
-            key={ipo.id}
-            ipo={ipo}
-            now={now}
-            selected={ipo.id === selectedId}
-            onSelect={() => selectCard(ipo.id)}
-            watching={!!watching[ipo.id]}
-            onToggleWatch={() => toggleWatch(ipo.id)}
-            comparing={compareIds.includes(ipo.id)}
-            compareDisabled={!compareIds.includes(ipo.id) && compareIds.length >= MAX_COMPARE}
-            onToggleCompare={() => toggleCompare(ipo.id)}
-          />
-        ))}
-        {list.length === 0 && (
-          <p style={{ color: "var(--ink-muted)", fontSize: 14 }}>
-            {query ? `No IPOs match "${query.trim()}".` : "No IPOs in this category right now."}
-          </p>
+        {view === "board" && (
+          <>
+            <div className="tabs" role="tablist" aria-label="IPO status">
+              {TAB_DEFS.map((t) => {
+                const count = ipos.filter((i) => i.status === t.key).length;
+                return (
+                  <button
+                    key={t.key}
+                    type="button"
+                    role="tab"
+                    className={"tab" + (tab === t.key ? " active" : "")}
+                    onClick={() => changeTab(t.key)}
+                  >
+                    {t.label} <span className="n">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="search-wrap">
+              <input
+                type="search"
+                className="search-box"
+                placeholder="Search by company or sector"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="Search IPOs by company or sector"
+              />
+              {query && (
+                <button
+                  type="button"
+                  className="search-clear"
+                  onClick={() => setQuery("")}
+                  aria-label="Clear search"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+            <div className="sort-note">
+              {query
+                ? `${list.length} result${list.length !== 1 ? "s" : ""} for "${query.trim()}"`
+                : tab === "OPEN"
+                  ? "Sorted by closing soonest"
+                  : ""}
+            </div>
+          </>
         )}
       </div>
 
-      {compareList.length >= 2 && !showCompare && (
-        <div className="compare-bar">
-          <span className="compare-bar-names">
-            Comparing {compareList.length}: {compareList.map((i) => i.companyName).join(" · ")}
-          </span>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button type="button" className="btn btn-primary" onClick={() => setShowCompare(true)}>
-              View comparison
-            </button>
-            <button type="button" className="btn btn-ghost" onClick={() => setCompareIds([])}>
-              Clear
-            </button>
+      {view === "board" ? (
+        <>
+          <div className="board">
+            {list.map((ipo) => (
+              <Card
+                key={ipo.id}
+                ipo={ipo}
+                now={now}
+                selected={ipo.id === selectedId}
+                onSelect={() => selectCard(ipo.id)}
+                watching={!!watching[ipo.id]}
+                onToggleWatch={() => toggleWatch(ipo.id)}
+                comparing={compareIds.includes(ipo.id)}
+                compareDisabled={!compareIds.includes(ipo.id) && compareIds.length >= MAX_COMPARE}
+                onToggleCompare={() => toggleCompare(ipo.id)}
+              />
+            ))}
+            {list.length === 0 && (
+              <p style={{ color: "var(--ink-muted)", fontSize: 14 }}>
+                {query ? `No IPOs match "${query.trim()}".` : "No IPOs in this category right now."}
+              </p>
+            )}
           </div>
-        </div>
-      )}
 
-      {showCompare && compareList.length >= 2 && (
-        <div className="detail-wrap">
-          <CompareTable ipos={compareList} now={now} onClose={() => setShowCompare(false)} onClear={() => { setCompareIds([]); setShowCompare(false); }} />
-        </div>
+          {compareList.length >= 2 && !showCompare && (
+            <div className="compare-bar">
+              <span className="compare-bar-names">
+                Comparing {compareList.length}: {compareList.map((i) => i.companyName).join(" · ")}
+              </span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button type="button" className="btn btn-primary" onClick={() => setShowCompare(true)}>
+                  View comparison
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={() => setCompareIds([])}>
+                  Clear
+                </button>
+              </div>
+            </div>
+          )}
+
+          {showCompare && compareList.length >= 2 && (
+            <div className="detail-wrap">
+              <CompareTable
+                ipos={compareList}
+                now={now}
+                onClose={() => setShowCompare(false)}
+                onClear={() => {
+                  setCompareIds([]);
+                  setShowCompare(false);
+                }}
+              />
+            </div>
+          )}
+        </>
+      ) : (
+        <CalendarView
+          ipos={ipos}
+          now={now}
+          month={calMonth}
+          onPrevMonth={() => setCalMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
+          onNextMonth={() => setCalMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
+        />
       )}
 
       {selected && (
@@ -1137,6 +1182,116 @@ function CompareTable({
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+const CAL_EVENT_TYPES = [
+  { key: "opens", label: "Opens", dateKey: "openDate" as const },
+  { key: "closes", label: "Closes", dateKey: "closeDate" as const },
+  { key: "lists", label: "Lists", dateKey: "listingDate" as const },
+];
+
+type CalEvent = { ipo: BoardIpo; type: string; label: string };
+
+// Keying by the ISO string's own local calendar day (not a UTC slice)
+// matches how fmtDate/fmtDateShort already render these same dates
+// elsewhere on the site — the grid and the label always agree.
+function localDayKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function CalendarView({
+  ipos,
+  now,
+  month,
+  onPrevMonth,
+  onNextMonth,
+}: {
+  ipos: BoardIpo[];
+  now: number;
+  month: Date;
+  onPrevMonth: () => void;
+  onNextMonth: () => void;
+}) {
+  const eventsByDay = useMemo(() => {
+    const map: Record<string, CalEvent[]> = {};
+    for (const ipo of ipos) {
+      for (const t of CAL_EVENT_TYPES) {
+        const iso = ipo[t.dateKey] as string;
+        if (!iso) continue;
+        const key = localDayKey(iso);
+        (map[key] ??= []).push({ ipo, type: t.key, label: t.label });
+      }
+    }
+    return map;
+  }, [ipos]);
+
+  const year = month.getFullYear();
+  const m = month.getMonth();
+  const firstWeekday = new Date(year, m, 1).getDay();
+  const daysInMonth = new Date(year, m + 1, 0).getDate();
+  const todayKey = localDayKey(new Date(now).toISOString());
+
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const monthLabel = new Date(year, m, 1).toLocaleDateString("en-IN", {
+    month: "long",
+    year: "numeric",
+  });
+
+  return (
+    <div className="calendar">
+      <div className="calendar-head">
+        <button type="button" className="btn btn-ghost" onClick={onPrevMonth} aria-label="Previous month">
+          ‹
+        </button>
+        <span className="calendar-month">{monthLabel}</span>
+        <button type="button" className="btn btn-ghost" onClick={onNextMonth} aria-label="Next month">
+          ›
+        </button>
+      </div>
+      <div className="calendar-legend">
+        <span className="cal-legend-item"><span className="cal-dot cal-opens" /> Opens</span>
+        <span className="cal-legend-item"><span className="cal-dot cal-closes" /> Closes</span>
+        <span className="cal-legend-item"><span className="cal-dot cal-lists" /> Lists</span>
+      </div>
+      <div className="calendar-grid calendar-dow">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+          <div key={d}>{d}</div>
+        ))}
+      </div>
+      <div className="calendar-grid">
+        {cells.map((d, i) => {
+          if (d === null) return <div key={i} className="cal-cell cal-empty" />;
+          const key = `${year}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+          const dayEvents = eventsByDay[key] ?? [];
+          return (
+            <div key={i} className={"cal-cell" + (key === todayKey ? " cal-today" : "")}>
+              <div className="cal-daynum">{d}</div>
+              {dayEvents.map((e, idx) => (
+                <a
+                  key={idx}
+                  href={`/ipo/${e.ipo.slug}`}
+                  className={"cal-event cal-" + e.type}
+                  title={`${e.ipo.companyName} — ${e.label}`}
+                >
+                  {e.ipo.companyName}
+                </a>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+      {Object.keys(eventsByDay).length === 0 && (
+        <p style={{ color: "var(--ink-muted)", fontSize: 13.5, marginTop: 12 }}>
+          No IPO dates to show yet.
+        </p>
+      )}
     </div>
   );
 }

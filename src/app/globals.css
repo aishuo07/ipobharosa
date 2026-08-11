@@ -255,6 +255,41 @@ a, button { font-family: inherit; }
 .compare-table th a { color: var(--ink); text-decoration: none; }
 .compare-table th a:hover { text-decoration: underline; }
 
+/* ---------- calendar ---------- */
+.calendar { margin-top: 4px; }
+.calendar-head {
+  display: flex; align-items: center; justify-content: center; gap: 18px;
+  margin-bottom: 10px;
+}
+.calendar-month { font-family: var(--font-display); font-weight: 700; font-size: 18px; min-width: 180px; text-align: center; }
+.calendar-legend { display: flex; gap: 16px; justify-content: center; margin-bottom: 14px; font-size: 12px; color: var(--ink-muted); }
+.cal-legend-item { display: flex; align-items: center; gap: 5px; }
+.cal-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.cal-dot.cal-opens, .cal-event.cal-opens { background: var(--good); }
+.cal-dot.cal-closes, .cal-event.cal-closes { background: var(--warning); }
+.cal-dot.cal-lists, .cal-event.cal-lists { background: var(--cat-qib); }
+
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.calendar-dow { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-faint); text-align: center; margin-bottom: 4px; }
+.cal-cell {
+  min-height: 78px; padding: 6px; border: 1px solid var(--border); border-radius: 3px;
+  background: var(--surface); display: flex; flex-direction: column; gap: 3px;
+}
+.cal-cell.cal-empty { background: transparent; border-color: transparent; }
+.cal-cell.cal-today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.cal-daynum { font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); }
+.cal-event {
+  display: block; font-size: 10.5px; line-height: 1.3; color: #fff;
+  padding: 2px 5px; border-radius: 2px; text-decoration: none; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .cal-cell { min-height: 56px; padding: 4px; }
+  .cal-event { font-size: 9.5px; padding: 1px 4px; }
+  .calendar-legend { flex-wrap: wrap; gap: 10px; }
+}
+
 /* ---------- detail ---------- */
 .detail-wrap { margin-top: 34px; }
 
