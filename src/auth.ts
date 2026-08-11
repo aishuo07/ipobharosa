@@ -11,7 +11,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     Google,
     Resend({
       apiKey: process.env.RESEND_API_KEY,
-      from: process.env.AUTH_EMAIL_FROM ?? "IPODekho <no-reply@ipodekho.com>",
+      from: process.env.AUTH_EMAIL_FROM ?? "IPOBharosa <no-reply@ipobharosa.com>",
     }),
   ],
   pages: {

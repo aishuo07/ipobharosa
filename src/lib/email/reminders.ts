@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email/resend";
 import type { StatusTransition } from "@/lib/ipo-status";
 
-const SITE_URL = "https://ipodekho-ten.vercel.app";
+const SITE_URL = "https://ipobharosa.vercel.app";
 
 const TEMPLATES: Record<string, (companyName: string) => { subject: string; body: string }> = {
   "UPCOMING->OPEN": (name) => ({
@@ -37,8 +37,8 @@ export async function notifyWatchersOfTransitions(transitions: StatusTransition[
     const { subject, body } = template(t.companyName);
     const html = `
       <p>${body}</p>
-      <p><a href="${SITE_URL}">View on IPODekho</a></p>
-      <p style="color:#888;font-size:12px">You're getting this because you added ${t.companyName} to your IPODekho watchlist.</p>
+      <p><a href="${SITE_URL}">View on IPOBharosa</a></p>
+      <p style="color:#888;font-size:12px">You're getting this because you added ${t.companyName} to your IPOBharosa watchlist.</p>
     `.trim();
 
     for (const watcher of watchers) {

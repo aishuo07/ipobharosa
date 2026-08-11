@@ -16,7 +16,7 @@ jobs:
         run: |
           status=$(curl -s -o /tmp/response.json -w "%{http_code}" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            https://ipodekho-ten.vercel.app/api/cron/ingest)
+            https://ipobharosa.vercel.app/api/cron/ingest)
           echo "HTTP status: $status"
           cat /tmp/response.json
           if [ "$status" -ne 200 ]; then

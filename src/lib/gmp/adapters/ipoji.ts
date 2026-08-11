@@ -3,7 +3,7 @@ import type { GmpAdapter } from "../types";
 import { toIpoSlug } from "@/lib/ipo-slug";
 
 const USER_AGENT =
-  "Mozilla/5.0 (compatible; IPODekhoBot/1.0; +https://ipodekho-ten.vercel.app)";
+  "Mozilla/5.0 (compatible; IPOBharosaBot/1.0; +https://ipobharosa.vercel.app)";
 
 export const ipojiAdapter: GmpAdapter = {
   key: "ipoji",

@@ -6,7 +6,7 @@ export default async function LoginErrorPage({
   const { error } = await searchParams;
   return (
     <div className="wrap" style={{ maxWidth: 400, paddingTop: 64 }}>
-      <span className="wordmark">IPODekho</span>
+      <span className="wordmark">IPOBharosa</span>
       <p className="section-label" style={{ marginTop: 24 }}>Sign-in failed</p>
       <p style={{ fontSize: 14 }}>
         {error ? `Error: ${error}. ` : ""}Please try again from the{" "}

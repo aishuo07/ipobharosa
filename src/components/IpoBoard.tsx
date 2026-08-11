@@ -106,7 +106,7 @@ export default function IpoBoard({
       <div className="masthead">
         <div className="masthead-top">
           <div className="brand">
-            <span className="wordmark">IPODekho</span>
+            <span className="wordmark">IPOBharosa</span>
             <span className="eyebrow">Lot Size · GMP · Dates · Allotment</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 13 }}>
@@ -187,7 +187,7 @@ export default function IpoBoard({
       )}
 
       <footer className="page-foot">
-        IPODekho tracks real Indian IPOs. Grey market premium (GMP) is
+        IPOBharosa tracks real Indian IPOs. Grey market premium (GMP) is
         informal, unregulated dealer-street pricing gathered from multiple
         public sources — not a guarantee of listing price.
       </footer>

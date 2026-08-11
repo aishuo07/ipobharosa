@@ -10,7 +10,7 @@ export default async function LoginPage() {
 
   return (
     <div className="wrap" style={{ maxWidth: 400, paddingTop: 64 }}>
-      <span className="wordmark">IPODekho</span>
+      <span className="wordmark">IPOBharosa</span>
       <p className="section-label" style={{ marginTop: 24, marginBottom: 16 }}>
         Sign in to save a watchlist and get reminders
       </p>

@@ -1,4 +1,4 @@
-const FROM_ADDRESS = process.env.AUTH_EMAIL_FROM ?? "IPODekho <no-reply@ipodekho.com>";
+const FROM_ADDRESS = process.env.AUTH_EMAIL_FROM ?? "IPOBharosa <no-reply@ipobharosa.com>";
 
 export async function sendEmail({
   to,
