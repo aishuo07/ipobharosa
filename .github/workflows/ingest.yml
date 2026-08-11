@@ -1,0 +1,25 @@
+name: IPO data ingestion
+
+on:
+  schedule:
+    # Every 2 hours. Vercel's free Hobby plan only allows daily native
+    # cron jobs, so this runs on GitHub Actions' free scheduler instead
+    # and just hits the deployed, CRON_SECRET-protected API route.
+    - cron: "0 */2 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger ingestion cycle
+        run: |
+          status=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://ipodekho-ten.vercel.app/api/cron/ingest)
+          echo "HTTP status: $status"
+          cat /tmp/response.json
+          if [ "$status" -ne 200 ]; then
+            echo "Ingestion request failed"
+            exit 1
+          fi
