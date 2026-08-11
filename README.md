@@ -1,36 +1,34 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# IPODekho
 
-## Getting Started
+An IPO board for Indian retail investors — lot size, price band, subscription, and grey market premium (GMP), with honest source confidence instead of blind numbers.
 
-First, run the development server:
+## Why
+
+GMP is informal, unregulated dealer-street pricing — no official source exists anywhere. Every existing tracker shows it as a single number with false confidence. IPODekho scrapes multiple independent public GMP sources, aggregates with median + spread, and surfaces a confidence tier (High/Medium/Low) driven by how many sources agree and how far apart they are. A failing source degrades confidence; it never breaks the pipeline.
+
+See `/Users/aikanodi/.claude/plans/fuzzy-dreaming-eagle.md` for the full build plan.
+
+## Stack
+
+- Next.js (App Router, TypeScript)
+- PostgreSQL (Neon, via Vercel) + Prisma 7 (driver adapter: `@prisma/adapter-pg`)
+- Vitest for ingestion/normalization logic
+
+## Getting started
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Command | Purpose |
+|---|---|
+| `npm run dev` | Local dev server |
+| `npm run build` | Production build |
+| `npm test` | Vitest suite (GMP confidence/fallback logic) |
+| `npm run lint` | ESLint |
+| `npx prisma migrate dev` | Apply schema changes locally |
