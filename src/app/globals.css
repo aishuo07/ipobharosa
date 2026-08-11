@@ -136,7 +136,12 @@ a, button { font-family: inherit; }
   display: flex; align-items: center; justify-content: space-between;
   gap: 16px; margin: 22px 0 16px; flex-wrap: wrap;
 }
-.tabs { display: flex; gap: 2px; background: var(--surface-2); padding: 3px; border-radius: 3px; border: 1px solid var(--border); overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
+.tabs {
+  display: flex; gap: 2px; background: var(--surface-2); padding: 3px; border-radius: 3px; border: 1px solid var(--border);
+  overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch;
+  mask-image: linear-gradient(to right, black calc(100% - 18px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 18px), transparent 100%);
+}
 .tab {
   font-family: var(--font-body); font-size: 13.5px; font-weight: 500;
   padding: 7px 14px; background: transparent; border: none; color: var(--ink-muted);
@@ -254,7 +259,11 @@ a, button { font-family: inherit; }
 
 .dpanel { padding: 24px; }
 
-.lifecycle { display: flex; align-items: flex-start; margin-bottom: 12px; overflow-x: auto; padding-bottom: 4px; }
+.lifecycle {
+  display: flex; align-items: flex-start; margin-bottom: 12px; overflow-x: auto; padding-bottom: 4px;
+  mask-image: linear-gradient(to right, transparent 0, black 12px, black calc(100% - 12px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, black 12px, black calc(100% - 12px), transparent 100%);
+}
 .lc-step { display: flex; flex-direction: column; align-items: center; text-align: center; flex: none; width: 92px; position: relative; }
 .lc-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 2px solid var(--border-strong); margin-bottom: 6px; }
 .lc-done .lc-dot { background: var(--good); border-color: var(--good); }
