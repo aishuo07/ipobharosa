@@ -209,8 +209,10 @@ a, button { font-family: inherit; }
   border: 1px solid var(--border); padding: 2px 6px; border-radius: 2px;
 }
 .card-watch-btn {
-  background: transparent; border: none; cursor: pointer; padding: 0 2px;
-  font-size: 15px; line-height: 1; color: var(--accent); flex: none;
+  background: transparent; border: none; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; margin: -6px -4px -6px 0;
+  font-size: 16px; line-height: 1; color: var(--accent); flex: none;
 }
 .card-watch-btn:hover { color: var(--accent-strong); }
 .card-watch-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -269,11 +271,11 @@ a, button { font-family: inherit; }
 .cal-dot.cal-closes, .cal-event.cal-closes { background: var(--warning); }
 .cal-dot.cal-lists, .cal-event.cal-lists { background: var(--cat-qib); }
 
-.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .calendar-dow { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-faint); text-align: center; margin-bottom: 4px; }
 .cal-cell {
-  min-height: 78px; padding: 6px; border: 1px solid var(--border); border-radius: 3px;
-  background: var(--surface); display: flex; flex-direction: column; gap: 3px;
+  min-height: 78px; min-width: 0; padding: 6px; border: 1px solid var(--border); border-radius: 3px;
+  background: var(--surface); display: flex; flex-direction: column; gap: 3px; overflow: hidden;
 }
 .cal-cell.cal-empty { background: transparent; border-color: transparent; }
 .cal-cell.cal-today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
@@ -470,6 +472,7 @@ footer.page-foot {
   .eyebrow { display: none; }
   .controls { margin: 16px 0 12px; }
   .tabs { width: 100%; }
+  .tab { padding: 11px 14px; }
   .search-wrap { width: 100%; max-width: none; order: 2; }
   .sort-note { width: 100%; order: 3; }
   .card-stats { grid-template-columns: 1fr 1fr; }
