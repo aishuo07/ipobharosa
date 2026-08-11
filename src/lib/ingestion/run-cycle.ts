@@ -5,6 +5,8 @@ import { ipoWatchAdapter } from "@/lib/gmp/adapters/ipowatch";
 import { sahiAdapter } from "@/lib/gmp/adapters/sahi";
 import { ipojiAdapter } from "@/lib/gmp/adapters/ipoji";
 import { sahiSubscriptionAdapter } from "@/lib/subscription/adapters/sahi";
+import { syncIpoStatuses } from "@/lib/ipo-status";
+import { notifyWatchersOfTransitions } from "@/lib/email/reminders";
 import type { GmpAdapter } from "@/lib/gmp/types";
 
 const GMP_ADAPTERS: GmpAdapter[] = [ipoWatchAdapter, sahiAdapter, ipojiAdapter];
@@ -19,9 +21,14 @@ export type IngestionSummary = {
   gmp: { snapshotsWritten: number; ipoWithNoData: number };
   subscription: { snapshotsWritten: number; failed: number };
   perSource: Record<string, { success: number; failure: number }>;
+  statusTransitions: number;
+  remindersSent: number;
 };
 
 export async function runIngestionCycle(): Promise<IngestionSummary> {
+  const transitions = await syncIpoStatuses();
+  const remindersSent = await notifyWatchersOfTransitions(transitions);
+
   const sourceRows = await Promise.all(
     GMP_ADAPTERS.map((adapter) =>
       prisma.gmpSource.upsert({
@@ -43,6 +50,8 @@ export async function runIngestionCycle(): Promise<IngestionSummary> {
     gmp: { snapshotsWritten: 0, ipoWithNoData: 0 },
     subscription: { snapshotsWritten: 0, failed: 0 },
     perSource: Object.fromEntries(GMP_ADAPTERS.map((a) => [a.key, { success: 0, failure: 0 }])),
+    statusTransitions: transitions.length,
+    remindersSent,
   };
 
   for (const ipo of ipos) {
