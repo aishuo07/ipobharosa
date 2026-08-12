@@ -51,10 +51,16 @@ export async function fetchIpoFacts(
   const $ = cheerio.load(html);
 
   const facts = new Map<string, string>();
+  let drhpUrl: string | null = null;
+  let rhpUrl: string | null = null;
   $("figure.wp-block-table table tr").each((_, tr) => {
     const cells = $(tr).find("td");
     if (cells.length < 2) return;
     const key = $(cells[0]).text().trim().replace(/:$/, "");
+    // The DRHP/RHP rows hold a bare <a><img></a> with no visible text —
+    // the link itself is what we need, not the (empty) cell text.
+    if (/^DRHP/i.test(key)) drhpUrl ??= $(cells[1]).find("a").attr("href") ?? null;
+    if (/^RHP/i.test(key)) rhpUrl ??= $(cells[1]).find("a").attr("href") ?? null;
     const value = $(cells[1]).text().trim();
     if (key && value && !facts.has(key)) facts.set(key, value);
   });
@@ -144,5 +150,7 @@ export async function fetchIpoFacts(
     listingDate,
     registrar,
     leadManagers,
+    drhpUrl,
+    rhpUrl,
   };
 }

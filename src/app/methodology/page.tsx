@@ -68,13 +68,26 @@ export default function MethodologyPage() {
       <h2>How a new IPO gets added</h2>
       <p>
         Every 2-hour cycle also checks IPO Watch&apos;s public listing for issues we aren&apos;t tracking yet.
-        A newly found IPO is <strong>never published automatically</strong>: its facts are scraped, checked for
-        internal consistency (a sane price band, dates in the right order, a lot size that&apos;s actually a
-        positive number, and so on), and — if a second independent source also has a page for the same
-        company — marked as cross-verified. Whatever survives that becomes a draft that only a human can
-        publish, after checking it against the real filing and adding the sector. Anything that fails the
-        consistency check or can&apos;t be parsed is skipped and logged rather than saved half-wrong.
+        Every candidate&apos;s facts get checked for internal consistency (a sane price band, dates in the
+        right order, a lot size that&apos;s actually a positive number, and so on) before anything happens to
+        it:
       </p>
+      <ul>
+        <li>
+          <strong>Fails the consistency check</strong> — kept, not discarded, with the specific reason
+          recorded, so a real inconsistency is visible rather than silently retried and re-failing forever.
+        </li>
+        <li>
+          <strong>Consistent, and both cross-verified by a second independent source and backed by an
+          official DRHP/RHP filing link</strong> — published automatically. No human touches this path, but
+          every auto-published IPO is logged as such.
+        </li>
+        <li>
+          <strong>Consistent, but missing the second source or the filing link</strong> — held as a draft
+          until a human checks it against the real filing and adds the sector (which isn&apos;t something we
+          try to guess automatically).
+        </li>
+      </ul>
 
       <h2>Financials</h2>
       <p>

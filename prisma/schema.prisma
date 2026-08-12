@@ -50,6 +50,7 @@ enum PublicationState {
   DRAFT
   PUBLISHED
   REJECTED
+  QUARANTINED
 }
 
 // ---------- core IPO data ----------
@@ -85,14 +86,24 @@ model Ipo {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  // Discovery pipeline: a scraped candidate is never shown on the public
-  // board until a human reviews and approves it — see CorrectionLog for
-  // the publish/reject audit trail.
+  // Discovery pipeline: PUBLISHED here can mean either a human approved
+  // it (reviewedBy set) or it cleared every auto-publish rule on its own
+  // (reviewedBy null, autoPublished true) — see CorrectionLog for the
+  // full publish/reject/auto-publish audit trail. QUARANTINED candidates
+  // failed validation or source agreement and are kept (not silently
+  // discarded) so a human can see exactly why.
   publicationState PublicationState @default(DRAFT)
   discoveredFrom   String[] // e.g. ["ipowatch", "sahi"] — which sources found this candidate
   discoveredAt     DateTime?
   reviewedBy       String?
   reviewedAt       DateTime?
+  autoPublished    Boolean   @default(false)
+  quarantineReason String? // why validation/confidence checks failed
+  drhpUrl          String?
+  rhpUrl           String?
+  sourceUrl        String? // the exact discovery detail-page URL — reconstructing it from the
+  // company name later (e.g. for reclassification) is a guess that fails on
+  // multi-word/punctuated names; storing it once avoids ever needing to guess.
 
   documents             Document[]
   gmpObservations       GmpObservation[]
@@ -323,4 +334,30 @@ model ReminderDelivery {
 
   @@unique([userId, ipoId, transition])
   @@index([status])
+}
+
+// ---------- cron reliability ----------
+
+// A single well-known row acts as a mutex: acquiring the lock is one
+// conditional UPDATE (only succeeds if unlocked or stale), which is
+// atomic in Postgres without needing separate distributed-lock infra.
+// A `runningSince` older than the staleness threshold is treated as
+// abandoned (e.g. a crashed run that never released it) and can be
+// re-acquired rather than blocking the pipeline forever.
+model IngestionLock {
+  id           String    @id @default("singleton")
+  runningSince DateTime?
+  startedBy    String?
+}
+
+model IngestionRun {
+  id                 String   @id @default(uuid())
+  startedAt          DateTime @default(now())
+  finishedAt         DateTime?
+  ok                 Boolean
+  skippedDueToLock   Boolean  @default(false)
+  summary            Json?
+  error              String?
+
+  @@index([startedAt])
 }

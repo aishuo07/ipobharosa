@@ -19,6 +19,8 @@ function makeFacts(overrides: Partial<IpoFacts> = {}): IpoFacts {
     listingDate: new Date("2026-08-25"),
     registrar: "Kfin Technologies Ltd.",
     leadManagers: ["Some Bank Ltd"],
+    drhpUrl: "https://example.com/drhp.pdf",
+    rhpUrl: null,
     ...overrides,
   };
 }

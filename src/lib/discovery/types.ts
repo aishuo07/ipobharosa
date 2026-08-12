@@ -20,4 +20,6 @@ export type IpoFacts = {
   listingDate: Date;
   registrar: string;
   leadManagers: string[];
+  drhpUrl: string | null;
+  rhpUrl: string | null;
 };

@@ -8,7 +8,12 @@ import { sahiSubscriptionAdapter } from "@/lib/subscription/adapters/sahi";
 import { syncIpoStatuses } from "@/lib/ipo-status";
 import { notifyWatchersOfTransitions } from "@/lib/email/reminders";
 import { runDiscovery, type DiscoverySummary } from "@/lib/discovery/discover";
+import { acquireIngestionLock, releaseIngestionLock } from "@/lib/ingestion/lock";
+import { computeAlertReasons } from "@/lib/ingestion/alert";
+import { sendEmail } from "@/lib/email/resend";
 import type { GmpAdapter } from "@/lib/gmp/types";
+
+const ALERT_RECIPIENT = "aish.iiitb@gmail.com";
 
 const GMP_ADAPTERS: GmpAdapter[] = [ipoWatchAdapter, sahiAdapter, ipojiAdapter];
 
@@ -25,9 +30,69 @@ export type IngestionSummary = {
   statusTransitions: number;
   reminders: { sent: number; failed: number; skipped: number };
   discovery: DiscoverySummary | { error: string };
+  skippedDueToLock?: boolean;
 };
 
-export async function runIngestionCycle(): Promise<IngestionSummary> {
+const EMPTY_SUMMARY: IngestionSummary = {
+  ipoCount: 0,
+  gmp: { snapshotsWritten: 0, ipoWithNoData: 0 },
+  subscription: { snapshotsWritten: 0, failed: 0 },
+  perSource: {},
+  statusTransitions: 0,
+  reminders: { sent: 0, failed: 0, skipped: 0 },
+  discovery: { candidatesSeen: 0, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, fetchFailed: [], dbErrors: [], queueCapped: false },
+};
+
+/**
+ * Public entry point: acquires the cron lock (refusing to run if another
+ * invocation is already in flight — see lib/ingestion/lock.ts), runs the
+ * actual cycle, always releases the lock, persists a structured
+ * IngestionRun record either way, and emails a heads-up if anything in
+ * the run looks wrong rather than leaving it to be noticed later.
+ */
+export async function runIngestionCycle(startedBy = "cron"): Promise<IngestionSummary> {
+  const acquired = await acquireIngestionLock(startedBy);
+  if (!acquired) {
+    const summary = { ...EMPTY_SUMMARY, skippedDueToLock: true };
+    await prisma.ingestionRun.create({
+      data: { ok: true, skippedDueToLock: true, summary },
+    });
+    return summary;
+  }
+
+  let summary: IngestionSummary = EMPTY_SUMMARY;
+  let ok = true;
+  let error: string | undefined;
+  try {
+    summary = await runIngestionCycleInner();
+  } catch (e) {
+    ok = false;
+    error = (e as Error).message;
+    throw e;
+  } finally {
+    await releaseIngestionLock();
+    await prisma.ingestionRun.create({
+      data: { ok, summary, error, finishedAt: new Date() },
+    });
+
+    const reasons = ok ? computeAlertReasons(summary) : [`Ingestion cycle crashed entirely: ${error}`];
+    if (reasons.length > 0) {
+      try {
+        await sendEmail({
+          to: ALERT_RECIPIENT,
+          subject: `IPOBharosa ingestion alert: ${reasons.length} issue(s)`,
+          html: `<p>This ingestion run flagged:</p><ul>${reasons.map((r) => `<li>${r}</li>`).join("")}</ul><pre>${JSON.stringify(summary, null, 2)}</pre>`,
+        });
+      } catch (e) {
+        // An alert-email failure must never mask the run's own result.
+        console.error("Failed to send ingestion alert email:", (e as Error).message);
+      }
+    }
+  }
+  return summary;
+}
+
+async function runIngestionCycleInner(): Promise<IngestionSummary> {
   const transitions = await syncIpoStatuses();
   const reminders = await notifyWatchersOfTransitions(transitions);
 
