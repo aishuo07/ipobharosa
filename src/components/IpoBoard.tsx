@@ -1005,48 +1005,42 @@ function FinancialsContent({ financials }: { financials: BoardIpo["financials"] 
 }
 
 export function FinancialsPanel({ ipo }: { ipo: BoardIpo }) {
-  const verified = ipo.financials.filter((f) => f.verified);
-  const unverified = ipo.financials.filter((f) => !f.verified);
-
-  if (verified.length === 0 && unverified.length === 0) {
+  if (ipo.financials.length === 0) {
     return (
       <StatePanel title="Verified financials are not available yet">
-        We only publish financial figures after they have been checked against the IPO filing.
+        We only publish figures after a reviewer approves filing-backed values with a source link and audit record.
       </StatePanel>
-    );
-  }
-
-  if (verified.length === 0) {
-    // Data exists but no human has checked it against the RHP yet — don't
-    // present scraped numbers as fact by default. Real financials carry
-    // more reputational risk than GMP if wrong.
-    return (
-      <>
-        <StatePanel title="Financials are awaiting filing review">
-          Third-party figures exist, but they are hidden until a reviewer checks them against the RHP.
-        </StatePanel>
-        <details className="src-detail">
-          <summary>View unverified scraped data anyway</summary>
-          <div style={{ marginTop: 12 }}>
-            <FinancialsContent financials={unverified} />
-            <p className="disclaimer">
-              Unverified — sourced from a third-party aggregator, not yet cross-checked against
-              the actual RHP filing by a human reviewer. Treat as indicative only.
-            </p>
-          </div>
-        </details>
-      </>
     );
   }
 
   return (
     <>
-      <FinancialsContent financials={verified} />
+      <FinancialsContent financials={ipo.financials} />
       <p className="disclaimer">
-        Verified against the IPO&apos;s RHP.
-        {unverified.length > 0 &&
-          ` ${unverified.length} more recent year${unverified.length > 1 ? "s" : ""} scraped but pending verification.`}
+        Published only after filing review. Open the evidence used for each year:
       </p>
+      <div className="doc-list">
+        {ipo.financials.flatMap((year) => year.sources.map((source) => (
+          <a
+            key={`${year.fiscalYear}-${source.url}-${source.pageNumber ?? "document"}`}
+            className="doc-row"
+            href={source.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ textDecoration: "none" }}
+          >
+            <span className="stamp">{source.documentType}</span>
+            <span className="doc-copy">
+              <span className="doc-name">{year.fiscalYear} filing evidence</span>
+              <span className="doc-source">
+                Reviewed {new Date(source.verificationDate).toLocaleDateString("en-IN")}
+                {source.pageNumber ? ` · page ${source.pageNumber}` : ""}
+              </span>
+            </span>
+            <span className="doc-sub">Open ↗</span>
+          </a>
+        )))}
+      </div>
     </>
   );
 }

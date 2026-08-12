@@ -48,6 +48,13 @@ export type BoardIpo = {
     debtEquity: number | null;
     eps: number | null;
     verified: boolean;
+    sources: {
+      url: string;
+      documentType: string;
+      pageNumber: number | null;
+      approvedBy: string | null;
+      verificationDate: string;
+    }[];
   }[];
   provenance: {
     discovery: { name: string; url: string; note: string }[];
@@ -68,7 +75,10 @@ const IPO_INCLUDE = {
   gmpSnapshots: { orderBy: { capturedAt: "asc" as const } },
   subscriptionSnapshots: { orderBy: { capturedAt: "desc" as const }, take: 1 },
   documents: true,
-  financialSnapshots: { orderBy: { fiscalYear: "desc" as const } },
+  publishedFinancials: {
+    where: { revokedReason: null, supersededBy: null },
+    orderBy: [{ fiscalYear: "desc" as const }, { publishedAt: "desc" as const }],
+  },
   gmpObservations: { orderBy: { capturedAt: "desc" as const }, take: 12, include: { source: true } },
 };
 
@@ -99,6 +109,33 @@ function shapeIpo(ipo: IpoWithRelations): BoardIpo {
     url: ipo.sourceUrl,
     note: `Discovered from ${ipo.discoveredFrom.join(" + ") || "stored source"}`,
   }] : [];
+  const publishedByYear = new Map<string, BoardIpo["financials"][number]>();
+  for (const value of ipo.publishedFinancials) {
+    const row = publishedByYear.get(value.fiscalYear) ?? {
+      fiscalYear: value.fiscalYear,
+      revenueCr: null,
+      patCr: null,
+      peRatio: null,
+      ronwPct: null,
+      debtEquity: null,
+      eps: null,
+      verified: true,
+      sources: [],
+    };
+    if (value.metric === "REVENUE") row.revenueCr = toNum(value.value);
+    if (value.metric === "PAT") row.patCr = toNum(value.value);
+    if (value.metric === "EPS") row.eps = toNum(value.value);
+    if (!row.sources.some((source) => source.url === value.sourceUrl && source.pageNumber === value.pageNumber)) {
+      row.sources.push({
+        url: value.sourceUrl,
+        documentType: value.sourceDocument,
+        pageNumber: value.pageNumber,
+        approvedBy: value.approvedBy,
+        verificationDate: value.verificationDate.toISOString(),
+      });
+    }
+    publishedByYear.set(value.fiscalYear, row);
+  }
 
   return {
     id: ipo.id,
@@ -150,16 +187,10 @@ function shapeIpo(ipo: IpoWithRelations): BoardIpo {
       evidenceLabel: filingEvidenceLabel(d.url),
       sourceHost: filingSourceHost(d.url),
     })),
-    financials: ipo.financialSnapshots.map((f) => ({
-      fiscalYear: f.fiscalYear,
-      revenueCr: toNumOrNull(f.revenueCr),
-      patCr: toNumOrNull(f.patCr),
-      peRatio: toNumOrNull(f.peRatio),
-      ronwPct: toNumOrNull(f.ronwPct),
-      debtEquity: toNumOrNull(f.debtEquity),
-      eps: toNumOrNull(f.eps),
-      verified: f.verified,
-    })),
+    // Only immutable, human-approved FinancialPublished records reach the
+    // public contract. Legacy scraped snapshots stay internal even when an
+    // old boolean says "verified"; they do not carry sufficient provenance.
+    financials: [...publishedByYear.values()],
     provenance: {
       discovery,
       gmp: [...gmpSourceLinks.values()],
