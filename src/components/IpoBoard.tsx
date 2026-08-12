@@ -765,10 +765,10 @@ export function SubscriptionPanel({ ipo }: { ipo: BoardIpo }) {
   const s = ipo.subscription;
   if (!s || s.qibX === null || s.niiX === null || s.retailX === null) {
     return (
-      <p style={{ color: "var(--ink-muted)" }}>
+      <StatePanel title="Subscription data is not available yet">
         Bidding hasn&apos;t opened yet, or no subscription data has been captured for this IPO —
         it will appear here once the ingestion pipeline picks it up.
-      </p>
+      </StatePanel>
     );
   }
   const cats: { key: string; label: string; title: string; value: number; color: string }[] = [
@@ -810,10 +810,10 @@ export function SubscriptionPanel({ ipo }: { ipo: BoardIpo }) {
 export function GmpPanel({ ipo, now }: { ipo: BoardIpo; now: number }) {
   if (!ipo.gmp) {
     return (
-      <p style={{ color: "var(--ink-muted)" }}>
+      <StatePanel title="No GMP signal has been captured yet">
         No GMP data captured yet for this IPO. The ingestion pipeline scrapes multiple public
         sources every 2 hours during market hours — check back soon.
-      </p>
+      </StatePanel>
     );
   }
   return (
@@ -1009,9 +1009,9 @@ export function FinancialsPanel({ ipo }: { ipo: BoardIpo }) {
 
   if (verified.length === 0 && unverified.length === 0) {
     return (
-      <p style={{ color: "var(--ink-muted)" }}>
-        Financials aren&apos;t available for this IPO yet.
-      </p>
+      <StatePanel title="Verified financials are not available yet">
+        We only publish financial figures after they have been checked against the IPO filing.
+      </StatePanel>
     );
   }
 
@@ -1021,10 +1021,9 @@ export function FinancialsPanel({ ipo }: { ipo: BoardIpo }) {
     // more reputational risk than GMP if wrong.
     return (
       <>
-        <p style={{ color: "var(--ink-muted)", marginBottom: 12 }}>
-          Financials for this IPO have been scraped from a public source but not yet manually
-          verified against the RHP — not shown by default.
-        </p>
+        <StatePanel title="Financials are awaiting filing review">
+          Third-party figures exist, but they are hidden until a reviewer checks them against the RHP.
+        </StatePanel>
         <details className="src-detail">
           <summary>View unverified scraped data anyway</summary>
           <div style={{ marginTop: 12 }}>
@@ -1067,15 +1066,18 @@ export function DocumentsPanel({ ipo }: { ipo: BoardIpo }) {
               style={{ textDecoration: "none" }}
             >
               <span className="stamp">{doc.docType === "drhp" ? "DR" : doc.docType === "rhp" ? "RHP" : "DOC"}</span>
-              <span className="doc-name">{doc.label}</span>
-              <span className="doc-sub">PDF ↗</span>
+              <span className="doc-copy">
+                <span className="doc-name">{doc.label}</span>
+                <span className="doc-source">Official filing · opens original source</span>
+              </span>
+              <span className="doc-sub">Open ↗</span>
             </a>
           ))}
         </div>
       ) : (
-        <p style={{ color: "var(--ink-muted)", marginBottom: 16 }}>
-          Document links (RHP/DRHP/anchor list) aren&apos;t loaded for this IPO yet.
-        </p>
+        <StatePanel title="Primary documents are not available yet">
+          RHP, DRHP, and anchor-allocation links will appear here once their official sources are loaded.
+        </StatePanel>
       )}
       <p className="contacts">
         <b>Registrar:</b>{" "}

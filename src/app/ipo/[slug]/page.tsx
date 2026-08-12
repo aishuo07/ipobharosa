@@ -9,7 +9,8 @@ import {
   OverviewPanel,
   SubscriptionPanel,
 } from "@/components/IpoBoard";
-import { badgeText, confidenceLabel, countdownText, effectiveStatus, fmtDate } from "@/lib/board-helpers";
+import { Badge, Surface } from "@/components/ui";
+import { badgeText, confidenceLabel, countdownText, effectiveStatus, fmtDate, fmtINR } from "@/lib/board-helpers";
 
 // GMP figures matter most for this page and refresh every 2 hours —
 // 30 minutes keeps a crawled/cached copy reasonably current without
@@ -67,71 +68,68 @@ export default async function IpoDetailPage({
     ) : null;
 
   return (
-    <div className="wrap">
-      <div className="legal-head">
+    <div className="wrap ipo-detail-page">
+      <div className="legal-head ipo-detail-back">
         <Link href="/" className="legal-back">
-          ← IPOBharosa
+          ← Back to IPO board
         </Link>
       </div>
 
-      <article className="detail-wrap" style={{ marginTop: 8 }}>
-        <div className="detail">
-          <div className="detail-head">
-            <div>
-              <div className="detail-title-row">
-                <span className={"badge badge-" + es}>{badgeText(es)}</span>
-                {countdown}
-                <span className="board-tag">{ipo.board === "MAINBOARD" ? "Mainboard" : "SME"}</span>
-              </div>
-              <h1 className="detail-name">{ipo.companyName} IPO</h1>
-              <div className="detail-meta">
-                {ipo.sector} · Registrar: {ipo.registrar ?? "Not available yet"}
-              </div>
-            </div>
+      <article className="detail-wrap ipo-detail-wrap">
+        <Surface as="div" className="ipo-detail-hero">
+          <div className="detail-title-row">
+            <span className={"badge badge-" + es}>{badgeText(es)}</span>
+            {countdown}
+            <span className="board-tag">{ipo.board === "MAINBOARD" ? "Mainboard" : "SME"}</span>
           </div>
+          <p className="ipo-detail-kicker">IPO research brief</p>
+          <h1 className="detail-name">{ipo.companyName} IPO</h1>
+          <p className="detail-meta">
+            {ipo.sector} · Registrar: {ipo.registrar ?? "Not available yet"}
+          </p>
+          <div className="ipo-detail-hero-facts" aria-label="IPO highlights">
+            <div><span>Price band</span><strong>₹{ipo.priceBandLow}–₹{ipo.priceBandHigh}</strong></div>
+            <div><span>Lot size</span><strong>{ipo.lotSize} shares</strong></div>
+            <div><span>Minimum</span><strong>{fmtINR(ipo.lotSize * ipo.priceBandHigh)}</strong></div>
+            <div><span>Listing</span><strong>{fmtDate(ipo.listingDate)}</strong></div>
+          </div>
+        </Surface>
 
-          <div className="dpanel">
-            <h2 className="section-label" style={{ fontSize: 13, textTransform: "none", letterSpacing: 0, color: "var(--ink)" }}>
-              Overview
-            </h2>
+        <nav className="ipo-detail-nav" aria-label="IPO detail sections">
+          <a href="#overview">Overview</a>
+          <a href="#subscription">Subscription</a>
+          <a href="#gmp">GMP</a>
+          <a href="#financials">Financials</a>
+          <a href="#documents">Documents</a>
+        </nav>
+
+        <div className="ipo-detail-evidence" aria-label="Evidence guide">
+          <div>
+            <Badge tone="positive">Official / verified</Badge>
+            <p>Issue documents and reviewed financials are tied to primary filings.</p>
+          </div>
+          <div>
+            <Badge tone="warning">Unofficial signal</Badge>
+            <p>GMP is market sentiment from public sources, not exchange data or a prediction.</p>
+          </div>
+        </div>
+
+        <div className="ipo-detail-sections">
+          <DetailSection id="overview" eyebrow="Decision essentials" title="Overview">
             <OverviewPanel ipo={ipo} now={now} watching={false} />
-          </div>
-        </div>
-
-        <div className="detail" style={{ marginTop: 20 }}>
-          <div className="dpanel">
-            <h2 className="section-label" style={{ fontSize: 13, textTransform: "none", letterSpacing: 0, color: "var(--ink)" }}>
-              Subscription
-            </h2>
+          </DetailSection>
+          <DetailSection id="subscription" eyebrow="Demand" title="Subscription">
             <SubscriptionPanel ipo={ipo} />
-          </div>
-        </div>
-
-        <div className="detail" style={{ marginTop: 20 }}>
-          <div className="dpanel">
-            <h2 className="section-label" style={{ fontSize: 13, textTransform: "none", letterSpacing: 0, color: "var(--ink)" }}>
-              GMP trend
-            </h2>
+          </DetailSection>
+          <DetailSection id="gmp" eyebrow="Unofficial market signal" title="GMP trend" tone="unofficial">
             <GmpPanel ipo={ipo} now={now} />
-          </div>
-        </div>
-
-        <div className="detail" style={{ marginTop: 20 }}>
-          <div className="dpanel">
-            <h2 className="section-label" style={{ fontSize: 13, textTransform: "none", letterSpacing: 0, color: "var(--ink)" }}>
-              Financials
-            </h2>
+          </DetailSection>
+          <DetailSection id="financials" eyebrow="Filing-backed fundamentals" title="Financials" tone="official">
             <FinancialsPanel ipo={ipo} />
-          </div>
-        </div>
-
-        <div className="detail" style={{ marginTop: 20 }}>
-          <div className="dpanel">
-            <h2 className="section-label" style={{ fontSize: 13, textTransform: "none", letterSpacing: 0, color: "var(--ink)" }}>
-              Documents
-            </h2>
+          </DetailSection>
+          <DetailSection id="documents" eyebrow="Primary sources" title="Documents" tone="official">
             <DocumentsPanel ipo={ipo} />
-          </div>
+          </DetailSection>
         </div>
 
         <div className="legal-cross">
@@ -140,5 +138,36 @@ export default async function IpoDetailPage({
         </div>
       </article>
     </div>
+  );
+}
+
+function DetailSection({
+  id,
+  eyebrow,
+  title,
+  tone,
+  children,
+}: {
+  id: string;
+  eyebrow: string;
+  title: string;
+  tone?: "official" | "unofficial";
+  children: React.ReactNode;
+}) {
+  return (
+    <Surface as="section" id={id} className="ipo-detail-section">
+      <header className="ipo-detail-section-head">
+        <div>
+          <p>{eyebrow}</p>
+          <h2>{title}</h2>
+        </div>
+        {tone && (
+          <Badge tone={tone === "official" ? "positive" : "warning"}>
+            {tone === "official" ? "Official / verified" : "Unofficial signal"}
+          </Badge>
+        )}
+      </header>
+      <div className="dpanel">{children}</div>
+    </Surface>
   );
 }
