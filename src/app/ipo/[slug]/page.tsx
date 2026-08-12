@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getBoardIpoBySlug, getBoardIpos } from "@/lib/board-data";
+import { getBoardIpoBySlug } from "@/lib/board-data";
 import {
   DocumentsPanel,
   FinancialsPanel,
@@ -19,8 +19,10 @@ import { googleCalendarSubscriptionUrl } from "@/lib/calendar";
 export const revalidate = 1800;
 
 export async function generateStaticParams() {
-  const ipos = await getBoardIpos();
-  return ipos.map((ipo) => ({ slug: ipo.slug }));
+  // IPOs are database-driven and can be published every two hours. Avoid a
+  // build-time database/schema dependency: pages are generated on first
+  // request and then follow the ISR policy above.
+  return [];
 }
 
 export async function generateMetadata({

@@ -28,9 +28,9 @@ export async function approveIpo(formData: FormData) {
       where: { id },
       data: { publicationState: "PUBLISHED", reviewedBy: performedBy, reviewedAt: new Date() },
     }),
-    prisma.company.update({ where: { id: ipo.companyId }, data: { sector } }),
+    ...(sector ? [prisma.company.update({ where: { id: ipo.companyId }, data: { sector } })] : []),
     prisma.correctionLog.create({
-      data: { entityType: "Ipo", entityId: id, action: "publish", performedBy, note: `sector: ${sector}` },
+      data: { entityType: "Ipo", entityId: id, action: "publish", performedBy, note: sector ? `sector: ${sector}` : "sector left for optional enrichment" },
     }),
   ]);
 

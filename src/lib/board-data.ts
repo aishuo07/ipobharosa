@@ -80,6 +80,11 @@ const IPO_INCLUDE = {
     orderBy: [{ fiscalYear: "desc" as const }, { publishedAt: "desc" as const }],
   },
   gmpObservations: { orderBy: { capturedAt: "desc" as const }, take: 12, include: { source: true } },
+  officialEvidence: {
+    orderBy: { capturedAt: "desc" as const },
+    take: 1,
+    include: { comparisons: { orderBy: { field: "asc" as const } } },
+  },
 };
 
 type IpoWithRelations = Awaited<ReturnType<typeof prisma.ipo.findFirstOrThrow<{ include: typeof IPO_INCLUDE }>>>;
@@ -109,6 +114,18 @@ function shapeIpo(ipo: IpoWithRelations): BoardIpo {
     url: ipo.sourceUrl,
     note: `Discovered from ${ipo.discoveredFrom.join(" + ") || "stored source"}`,
   }] : [];
+  const latestOfficial = ipo.officialEvidence[0];
+  if (latestOfficial) {
+    const matchedFields = latestOfficial.comparisons
+      .filter((comparison) => comparison.status === "MATCH")
+      .map((comparison) => comparison.field)
+      .join(", ");
+    discovery.unshift({
+      name: `${latestOfficial.source} official issue details`,
+      url: latestOfficial.sourceUrl,
+      note: matchedFields ? `Matched fields: ${matchedFields}` : `Checked ${latestOfficial.capturedAt.toISOString()}`,
+    });
+  }
   const publishedByYear = new Map<string, BoardIpo["financials"][number]>();
   for (const value of ipo.publishedFinancials) {
     const row = publishedByYear.get(value.fiscalYear) ?? {
