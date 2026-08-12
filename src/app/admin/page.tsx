@@ -1,8 +1,9 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdminEmail } from "@/lib/admin";
+import { loginPathFor } from "@/lib/auth-redirect";
 import { approveIpo, rejectIpo } from "./actions";
 
 export const revalidate = 0;
@@ -14,6 +15,7 @@ function fmtDate(d: Date | null | undefined): string {
 
 export default async function AdminPage() {
   const session = await auth();
+  if (!session?.user) redirect(loginPathFor("/admin"));
   if (!isAdminEmail(session?.user?.email)) notFound();
 
   const [stateCounts, sources, recentRuns, reviewQueue] = await Promise.all([

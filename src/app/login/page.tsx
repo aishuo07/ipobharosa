@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
 import { auth, signIn } from "@/auth";
+import { safeRedirectPath } from "@/lib/auth-redirect";
 
 const SIGNIN_ERROR_URL = "/login/error";
 
@@ -9,22 +10,28 @@ const SIGNIN_ERROR_URL = "/login/error";
 // until that's verified working; re-enable the form below once it is.
 const EMAIL_SIGNIN_ENABLED = false;
 
-export default async function LoginPage() {
+type LoginPageProps = {
+  searchParams: Promise<{ callbackUrl?: string | string[] }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const { callbackUrl } = await searchParams;
+  const redirectTo = safeRedirectPath(callbackUrl);
   const session = await auth();
-  if (session) redirect("/");
+  if (session) redirect(redirectTo);
 
   return (
     <div className="wrap" style={{ maxWidth: 400, paddingTop: 64 }}>
       <span className="wordmark">IPOBharosa</span>
       <p className="section-label" style={{ marginTop: 24, marginBottom: 16 }}>
-        Sign in to save a watchlist
+        {redirectTo.startsWith("/admin") ? "Sign in to continue to admin" : "Sign in to save a watchlist"}
       </p>
 
       <form
         action={async () => {
           "use server";
           try {
-            await signIn("google", { redirectTo: "/" });
+            await signIn("google", { redirectTo });
           } catch (error) {
             if (error instanceof AuthError) {
               redirect(`${SIGNIN_ERROR_URL}?error=${error.type}`);
@@ -57,7 +64,7 @@ export default async function LoginPage() {
             action={async (formData) => {
               "use server";
               try {
-                await signIn("resend", formData, { redirectTo: "/" });
+                await signIn("resend", formData, { redirectTo });
               } catch (error) {
                 if (error instanceof AuthError) {
                   redirect(`${SIGNIN_ERROR_URL}?error=${error.type}`);

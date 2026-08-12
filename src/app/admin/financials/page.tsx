@@ -1,8 +1,9 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdminEmail } from "@/lib/admin";
+import { loginPathFor } from "@/lib/auth-redirect";
 import { approveFinancialRevision, rejectFinancialRevision } from "./actions";
 
 export const revalidate = 0;
@@ -18,6 +19,7 @@ function fmtValue(v: number | null | undefined): string {
 
 export default async function FinancialsReviewPage() {
   const session = await auth();
+  if (!session?.user) redirect(loginPathFor("/admin/financials"));
   if (!isAdminEmail(session?.user?.email)) notFound();
 
   const pending = await prisma.financialRevision.findMany({

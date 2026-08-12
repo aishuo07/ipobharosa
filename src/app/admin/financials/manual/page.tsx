@@ -1,14 +1,16 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdminEmail } from "@/lib/admin";
+import { loginPathFor } from "@/lib/auth-redirect";
 import { submitFinancialData } from "./actions";
 
 export const revalidate = 0;
 
 export default async function ManualFinancialEntryPage() {
   const session = await auth();
+  if (!session?.user) redirect(loginPathFor("/admin/financials/manual"));
   if (!isAdminEmail(session?.user?.email)) notFound();
 
   // Get all published IPOs for dropdown
