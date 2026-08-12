@@ -97,7 +97,6 @@ async function main() {
       await tx.ipo.update({
         where: { id: draft.id },
         data: {
-          officialDecision: decision.decision,
           publicationState: decision.decision === "AUTO_PUBLISH" ? "PUBLISHED" : decision.decision === "EXCEPTION" ? "QUARANTINED" : "DRAFT",
           autoPublished: decision.decision === "AUTO_PUBLISH",
           reviewedAt: decision.decision === "AUTO_PUBLISH" ? new Date() : draft.reviewedAt,

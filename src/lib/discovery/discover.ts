@@ -154,7 +154,6 @@ async function processCandidate(candidate: IpoListingCandidate): Promise<Candida
           publicationState,
           autoPublished: shouldPublish,
           quarantineReason: decision.decision === "EXCEPTION" ? decision.reasons.join("; ") : null,
-          officialDecision: decision.decision,
           discoveredFrom: ["ipowatch", decision.evidence!.source.toLowerCase()],
           discoveredAt: now,
           reviewedAt: shouldPublish ? now : null,

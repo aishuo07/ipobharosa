@@ -21,12 +21,11 @@ function reviewReasons(ipo: {
   discoveredFrom: string[];
   drhpUrl: string | null;
   rhpUrl: string | null;
-  officialDecision: string | null;
 }): string[] {
   if (ipo.quarantineReason) return [ipo.quarantineReason];
   const reasons: string[] = [];
-  if (ipo.officialDecision === "RETRY") reasons.push("Official source is incomplete or temporarily unavailable; the pipeline will retry automatically");
-  if (ipo.officialDecision === "EXCEPTION") reasons.push("Official and discovery facts conflict; only these fields need a human decision");
+  if (ipo.publicationState === "DRAFT") reasons.push("Official source is incomplete or temporarily unavailable; the pipeline will retry automatically");
+  if (ipo.publicationState === "QUARANTINED") reasons.push("Official and discovery facts conflict; only these fields need a human decision");
   const filingUrls = [ipo.drhpUrl, ipo.rhpUrl].filter((url): url is string => Boolean(url));
   if (!filingUrls.some((url) => filingEvidenceClass(url) === "OFFICIAL")) {
     reasons.push(filingUrls.length ? "Filing copy is not hosted by an exchange or SEBI" : "Official filing is missing");
@@ -111,7 +110,7 @@ export default async function AdminPage() {
         {reviewQueue.map((ipo) => {
           const reasons = reviewReasons(ipo);
           const latestOfficial = ipo.officialEvidence[0];
-          const needsDecision = ipo.publicationState === "QUARANTINED" || ipo.officialDecision === "EXCEPTION";
+          const needsDecision = ipo.publicationState === "QUARANTINED";
           const filingUrls = [
             ipo.drhpUrl ? { label: "DRHP", url: ipo.drhpUrl } : null,
             ipo.rhpUrl ? { label: "RHP", url: ipo.rhpUrl } : null,

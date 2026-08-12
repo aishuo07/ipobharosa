@@ -1,8 +1,6 @@
 CREATE TYPE "OfficialVerificationDecision" AS ENUM ('AUTO_PUBLISH', 'RETRY', 'EXCEPTION');
 CREATE TYPE "OfficialFieldStatus" AS ENUM ('MATCH', 'CONFLICT', 'MISSING_OFFICIAL');
 
-ALTER TABLE "Ipo" ADD COLUMN "officialDecision" "OfficialVerificationDecision";
-
 CREATE TABLE "OfficialEvidenceCapture" (
     "id" TEXT NOT NULL,
     "ipoId" TEXT NOT NULL,
@@ -34,4 +32,3 @@ CREATE INDEX "OfficialFieldComparison_captureId_field_idx" ON "OfficialFieldComp
 
 ALTER TABLE "OfficialEvidenceCapture" ADD CONSTRAINT "OfficialEvidenceCapture_ipoId_fkey" FOREIGN KEY ("ipoId") REFERENCES "Ipo"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "OfficialFieldComparison" ADD CONSTRAINT "OfficialFieldComparison_captureId_fkey" FOREIGN KEY ("captureId") REFERENCES "OfficialEvidenceCapture"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-

@@ -80,16 +80,13 @@ const IPO_INCLUDE = {
     orderBy: [{ fiscalYear: "desc" as const }, { publishedAt: "desc" as const }],
   },
   gmpObservations: { orderBy: { capturedAt: "desc" as const }, take: 12, include: { source: true } },
-  officialEvidence: {
-    orderBy: { capturedAt: "desc" as const },
-    take: 1,
-    include: { comparisons: { orderBy: { field: "asc" as const } } },
-  },
 };
 
 type IpoWithRelations = Awaited<ReturnType<typeof prisma.ipo.findFirstOrThrow<{ include: typeof IPO_INCLUDE }>>>;
 
-function shapeIpo(ipo: IpoWithRelations): BoardIpo {
+type OfficialProvenance = { name: string; url: string; note: string };
+
+function shapeIpo(ipo: IpoWithRelations, officialProvenance?: OfficialProvenance): BoardIpo {
   const latestGmp = ipo.gmpSnapshots[ipo.gmpSnapshots.length - 1] ?? null;
   const latestSub = ipo.subscriptionSnapshots[0] ?? null;
   const slug = toIpoSlug(ipo.company.name);
@@ -114,18 +111,7 @@ function shapeIpo(ipo: IpoWithRelations): BoardIpo {
     url: ipo.sourceUrl,
     note: `Discovered from ${ipo.discoveredFrom.join(" + ") || "stored source"}`,
   }] : [];
-  const latestOfficial = ipo.officialEvidence[0];
-  if (latestOfficial) {
-    const matchedFields = latestOfficial.comparisons
-      .filter((comparison) => comparison.status === "MATCH")
-      .map((comparison) => comparison.field)
-      .join(", ");
-    discovery.unshift({
-      name: `${latestOfficial.source} official issue details`,
-      url: latestOfficial.sourceUrl,
-      note: matchedFields ? `Matched fields: ${matchedFields}` : `Checked ${latestOfficial.capturedAt.toISOString()}`,
-    });
-  }
+  if (officialProvenance) discovery.unshift(officialProvenance);
   const publishedByYear = new Map<string, BoardIpo["financials"][number]>();
   for (const value of ipo.publishedFinancials) {
     const row = publishedByYear.get(value.fiscalYear) ?? {
@@ -226,7 +212,31 @@ export async function getBoardIpos(): Promise<BoardIpo[]> {
     include: IPO_INCLUDE,
     orderBy: { createdAt: "asc" },
   });
-  return ipos.map(shapeIpo);
+  // Deployment order is code -> migration in some preview/production flows.
+  // Keep public pages available during that window; once the append-only
+  // evidence table exists, provenance is added automatically.
+  const provenanceByIpo = new Map<string, OfficialProvenance>();
+  try {
+    const captures = await prisma.officialEvidenceCapture.findMany({
+      where: { ipoId: { in: ipos.map((ipo) => ipo.id) } },
+      orderBy: { capturedAt: "desc" },
+      include: { comparisons: { where: { status: "MATCH" }, orderBy: { field: "asc" } } },
+    });
+    for (const capture of captures) {
+      if (provenanceByIpo.has(capture.ipoId)) continue;
+      provenanceByIpo.set(capture.ipoId, {
+        name: `${capture.source} official issue details`,
+        url: capture.sourceUrl,
+        note: capture.comparisons.length
+          ? `Matched fields: ${capture.comparisons.map((comparison) => comparison.field).join(", ")}`
+          : `Checked ${capture.capturedAt.toISOString()}`,
+      });
+    }
+  } catch (error) {
+    const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
+    if (code !== "P2021" && code !== "P2022") throw error;
+  }
+  return ipos.map((ipo) => shapeIpo(ipo, provenanceByIpo.get(ipo.id)));
 }
 
 // No dedicated slug column exists yet — company count is small enough

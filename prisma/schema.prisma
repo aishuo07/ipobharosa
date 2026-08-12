@@ -128,7 +128,6 @@ model Ipo {
   reviewedAt       DateTime?
   autoPublished    Boolean                       @default(false)
   quarantineReason String? // why validation/confidence checks failed
-  officialDecision OfficialVerificationDecision?
   drhpUrl          String?
   rhpUrl           String?
   sourceUrl        String? // the exact discovery detail-page URL — reconstructing it from the
