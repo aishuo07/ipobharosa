@@ -1,4 +1,5 @@
-import { FinancialMetric, ExtractionStatus } from "@/generated/prisma";
+// Types from Prisma schema (enums)
+type FinancialMetric = "REVENUE" | "PAT" | "EPS" | "EBITDA" | "ASSETS" | "NET_WORTH" | "BORROWINGS";
 
 /**
  * Extractions from financial documents follow a strict audit trail:

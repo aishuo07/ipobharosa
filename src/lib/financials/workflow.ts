@@ -1,7 +1,18 @@
 import { prisma } from "@/lib/prisma";
-import { FinancialDocumentType, FinancialRevisionState } from "@/generated/prisma";
 import { normalize, validate, compareToExisting } from "./extraction";
 import type { RawExtraction } from "./extraction";
+
+type FinancialDocumentType = "DRHP" | "RHP" | "PROSPECTUS" | "CORRIGENDUM" | "ADDENDUM";
+type FinancialRevisionState =
+  | "EXTRACTED"
+  | "NORMALIZED"
+  | "VALIDATED"
+  | "AUTO_VERIFIED"
+  | "REVIEW_REQUIRED"
+  | "APPROVED"
+  | "PUBLISHED"
+  | "SUPERSEDED"
+  | "REVOKED";
 
 /**
  * Production financial verification workflow:
@@ -70,7 +81,10 @@ export async function processExtractions(ipoId: string, documentId: string, raws
       orderBy: { publishedAt: "desc" },
     });
 
-    const { mismatch, percent } = compareToExisting(validated.normalizedValue, existing?.value ?? null);
+    const { mismatch, percent } = compareToExisting(
+      validated.normalizedValue,
+      existing?.value ? Number(existing.value) : null,
+    );
 
     // Create extraction record
     const extraction = await prisma.financialExtraction.create({
