@@ -9,6 +9,7 @@ let createdLogs: Record<string, unknown>[] = [];
 let createdDocuments: Record<string, unknown>[] = [];
 let unreviewedCount = 0;
 let ipoCreateShouldThrow = false;
+let discoveryAttempts: Array<{ sourceUrl: string; companyName: string; attempts: number; lastAttemptAt: Date; nextAttemptAt: Date; lastError: string }> = [];
 let factsImpl: (url: string, name: string, board: "MAINBOARD" | "SME") => Promise<unknown>;
 
 vi.mock("./ipowatch-list", () => ({
@@ -58,6 +59,18 @@ vi.mock("@/lib/prisma", () => ({
     ipo: {
       count: async () => unreviewedCount,
     },
+    discoveryAttempt: {
+      findMany: async ({ where }: { where: { sourceUrl: { in: string[] } } }) =>
+        discoveryAttempts.filter((attempt) => where.sourceUrl.in.includes(attempt.sourceUrl)),
+      upsert: async ({ where, create, update }: { where: { sourceUrl: string }; create: typeof discoveryAttempts[number]; update: Partial<typeof discoveryAttempts[number]> }) => {
+        const index = discoveryAttempts.findIndex((attempt) => attempt.sourceUrl === where.sourceUrl);
+        if (index === -1) discoveryAttempts.push(create);
+        else discoveryAttempts[index] = { ...discoveryAttempts[index], ...update };
+      },
+      deleteMany: async ({ where }: { where: { sourceUrl: string } }) => {
+        discoveryAttempts = discoveryAttempts.filter((attempt) => attempt.sourceUrl !== where.sourceUrl);
+      },
+    },
     $transaction: async (fn: (tx: ReturnType<typeof makeTx>) => Promise<void>) => fn(makeTx()),
   },
 }));
@@ -102,6 +115,7 @@ describe("runDiscovery", () => {
     createdDocuments = [];
     unreviewedCount = 0;
     ipoCreateShouldThrow = false;
+    discoveryAttempts = [];
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
   });
 
@@ -292,5 +306,42 @@ describe("runDiscovery", () => {
     expect(summary.draftsCreated + summary.autoPublished + summary.quarantined).toBe(10);
     expect(summary.deferredCandidates).toBe(3);
     expect(summary.queueCapped).toBe(false);
+  });
+
+  it("backs off a failed candidate so fresh candidates advance next cycle", async () => {
+    listingResult = [
+      { companyName: "Broken Source", detailUrl: "https://ipowatch.in/broken-source-ipo/", board: "MAINBOARD" },
+      { companyName: "Fresh Source", detailUrl: "https://ipowatch.in/fresh-source-ipo/", board: "MAINBOARD" },
+    ];
+    factsImpl = async (_url, name) => {
+      if (name === "Broken Source") throw new Error("upstream timeout");
+      return validFacts(name);
+    };
+
+    const first = await runDiscovery();
+    const second = await runDiscovery();
+
+    expect(first.fetchFailed).toHaveLength(1);
+    expect(discoveryAttempts).toEqual([expect.objectContaining({ companyName: "Broken Source", attempts: 1 })]);
+    expect(second.fetchFailed).toHaveLength(0);
+    expect(second.draftsCreated + second.autoPublished).toBe(1);
+  });
+
+  it("retries a failed candidate after its backoff expires", async () => {
+    listingResult = [{ companyName: "Recovered Source", detailUrl: "https://ipowatch.in/recovered-source-ipo/", board: "MAINBOARD" }];
+    discoveryAttempts = [{
+      sourceUrl: listingResult[0].detailUrl,
+      companyName: listingResult[0].companyName,
+      attempts: 2,
+      lastAttemptAt: new Date(Date.now() - 10 * 60 * 60 * 1000),
+      nextAttemptAt: new Date(Date.now() - 1000),
+      lastError: "old timeout",
+    }];
+    factsImpl = async (_url, name) => validFacts(name);
+
+    const summary = await runDiscovery();
+
+    expect(summary.draftsCreated + summary.autoPublished).toBe(1);
+    expect(discoveryAttempts).toEqual([]);
   });
 });

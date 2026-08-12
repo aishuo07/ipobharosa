@@ -27,6 +27,8 @@ const MAX_CANDIDATES_PER_RUN = 10;
 // candidates are skipped (and it's surfaced as `queueCapped`) rather
 // than silently piling on more.
 const MAX_UNREVIEWED_QUEUE = 100;
+const RETRY_BASE_HOURS = 2;
+const RETRY_MAX_HOURS = 24;
 
 function deriveInitialStatus(facts: IpoFacts, now: Date): "UPCOMING" | "OPEN" | "CLOSED" {
   if (now < facts.openDate) return "UPCOMING";
@@ -228,21 +230,63 @@ export async function runDiscovery(): Promise<DiscoverySummary> {
     newCandidates.push(candidate);
   }
 
+  const now = new Date();
+  const previousAttempts = await prisma.discoveryAttempt.findMany({
+    where: { sourceUrl: { in: newCandidates.map((candidate) => candidate.detailUrl) } },
+  });
+  const attemptByUrl = new Map(previousAttempts.map((attempt) => [attempt.sourceUrl, attempt]));
+  // Fresh candidates come first. A failed source page becomes eligible only
+  // after its exponential backoff; it can no longer occupy every batch.
+  const eligibleCandidates = newCandidates
+    .filter((candidate) => {
+      const attempt = attemptByUrl.get(candidate.detailUrl);
+      return !attempt || attempt.nextAttemptAt <= now;
+    })
+    .sort((a, b) => Number(attemptByUrl.has(a.detailUrl)) - Number(attemptByUrl.has(b.detailUrl)));
+
   // Respect the same cap mid-run: stop admitting new unreviewed rows once
   // the queue fills up, even if this run alone would otherwise blow past it.
   const room = Math.max(0, MAX_UNREVIEWED_QUEUE - unreviewedCount);
-  const admitted = newCandidates.slice(0, room);
-  if (newCandidates.length > admitted.length) summary.queueCapped = true;
+  const admitted = eligibleCandidates.slice(0, room);
+  if (eligibleCandidates.length > admitted.length) summary.queueCapped = true;
   const toProcess = admitted.slice(0, MAX_CANDIDATES_PER_RUN);
   summary.deferredCandidates = newCandidates.length - toProcess.length;
 
   const outcomes = await mapWithConcurrency(toProcess, CONCURRENCY, processCandidate);
-  for (const outcome of outcomes) {
+  for (let index = 0; index < outcomes.length; index++) {
+    const outcome = outcomes[index];
+    const candidate = toProcess[index];
     if (outcome.kind === "autoPublished") summary.autoPublished++;
     else if (outcome.kind === "draftCreated") summary.draftsCreated++;
     else if (outcome.kind === "quarantined") summary.quarantined++;
     else if (outcome.kind === "fetchFailed") summary.fetchFailed.push(outcome);
     else summary.dbErrors.push(outcome);
+
+    if (outcome.kind === "fetchFailed") {
+      const priorAttempts = attemptByUrl.get(candidate.detailUrl)?.attempts ?? 0;
+      const attempts = priorAttempts + 1;
+      const delayHours = Math.min(RETRY_MAX_HOURS, RETRY_BASE_HOURS * 2 ** (attempts - 1));
+      await prisma.discoveryAttempt.upsert({
+        where: { sourceUrl: candidate.detailUrl },
+        create: {
+          sourceUrl: candidate.detailUrl,
+          companyName: candidate.companyName,
+          attempts,
+          lastAttemptAt: now,
+          nextAttemptAt: new Date(now.getTime() + delayHours * 60 * 60 * 1000),
+          lastError: outcome.error,
+        },
+        update: {
+          companyName: candidate.companyName,
+          attempts,
+          lastAttemptAt: now,
+          nextAttemptAt: new Date(now.getTime() + delayHours * 60 * 60 * 1000),
+          lastError: outcome.error,
+        },
+      });
+    } else if (outcome.kind !== "dbError") {
+      await prisma.discoveryAttempt.deleteMany({ where: { sourceUrl: candidate.detailUrl } });
+    }
   }
 
   return summary;

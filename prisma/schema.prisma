@@ -63,6 +63,23 @@ model Company {
   createdAt DateTime @default(now())
 }
 
+// Failed source fetches live outside Ipo because a complete/valid IPO row does
+// not exist yet. New candidates are always attempted before due retries; this
+// prevents one broken upstream page from starving the rest of the market.
+model DiscoveryAttempt {
+  id            String   @id @default(uuid())
+  sourceUrl     String   @unique
+  companyName   String
+  attempts      Int      @default(0)
+  lastAttemptAt DateTime
+  nextAttemptAt DateTime
+  lastError     String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([nextAttemptAt, attempts])
+}
+
 model Ipo {
   id            String    @id @default(uuid())
   company       Company   @relation(fields: [companyId], references: [id])
