@@ -19,6 +19,8 @@ IPOBharosa currently deploys every commit on `main` directly to Production. The 
 - [x] (2026-08-12 15:25 IST) Added and clean-database-tested the missing committed Prisma migration from the initial schema to the current schema.
 - [x] (2026-08-12 15:30 IST) Applied committed migrations and deterministic seed data twice to `ipobharosa_dev`; the second run preserved 6 companies and 6 IPOs without duplicates. Production remained unchanged.
 - [x] (2026-08-12 16:00 IST) Pushed the release-foundation branch, opened PR #1, passed CI and clean-migration checks, deployed an isolated Vercel Preview, ran frontend/backend smoke checks, and verified responsive overflow at five viewports. The PR remains intentionally unmerged for human approval.
+- [x] (2026-08-12 16:30 IST) Merged PR #1, created a seven-day Neon point-in-time backup branch, aligned the one missing Production column default, confirmed zero schema drift, marked `20260812152000_release_foundation` as already applied without replaying SQL, and verified all Production row counts were unchanged.
+- [x] (2026-08-12 16:32 IST) Reassigned `ipobharosa.vercel.app` from the stale Vercel project deployment to the merged `bbfa64a` Production deployment and passed the complete smoke suite through the canonical alias.
 - [ ] Split the ingestion process so a scheduled run completes below the Vercel function limit; verify three consecutive successful Development runs.
 - [ ] Port the standalone IPOBharosa design-system artifact into code tokens and reusable components, then update Board and IPO Detail in separate PRs.
 - [ ] Implement official-document ingestion and checksum storage, then native PDF table extraction, OCR fallback, human review, and public read migration in separate PRs.
@@ -43,6 +45,10 @@ IPOBharosa currently deploys every commit on `main` directly to Production. The 
 - Observation: the scheduled ingestion is currently unhealthy.
   Evidence: the latest two GitHub Actions runs returned HTTP 504 with `FUNCTION_INVOCATION_TIMEOUT` after about 60 seconds.
 - Observation: production has one user and zero watchlist items, so watchlist reminder delivery has not been demonstrated by a real user journey.
+- Observation: after PR #1 merged, the canonical `ipobharosa.vercel.app` alias still resolved to an older deployment from the `ipodekho` Vercel project, while the merged deployment lived in the `ipobharosa` project.
+  Evidence: the old alias returned 404 for `/api/admin/extract-all-financials`; after assigning it to deployment `dpl_4Cy1fMBjCF1et1Y57AYynxY1UguD`, the full smoke suite passed.
+- Observation: the Production schema was structurally complete except for the database default on `Ipo.discoveredFrom`.
+  Evidence: Prisma drift reported only `default changed from None to Some(Value(List([])))`; after setting `ARRAY[]::text[]`, `prisma migrate diff` reported `No difference detected`.
 - Observation: while this branch was being prepared, `main` received a direct automated-extractor commit containing a fallback bearer token and guessed financial context.
   Evidence: commit `36b2a2c` defaulted the token to `dev-token-123`, invented a virtual document URL, and defaulted fiscal period, scope, and audit status. The release-foundation branch rebased it, removed the fallback, required real document evidence, disabled submission by default, and kept all candidates behind human review.
 - Observation: the first pull-request run failed before application tests because the lockfile was incomplete and a fresh Vercel clone did not generate Prisma Client.
@@ -70,10 +76,13 @@ IPOBharosa currently deploys every commit on `main` directly to Production. The 
 - Decision: live IPO order submission remains out of scope until a provider grants sandbox credentials and confirms external-dematerialized-account, applicant-owned-UPI, consent, and intermediary requirements.
   Rationale: provider-neutral mock UX is reversible; accepting real PAN/demat/UPI or submitting orders without a supported compliance path is not.
   Date/Author: 2026-08-12 / Codex and Aish.
+- Decision: baseline the existing Production schema with `prisma migrate resolve --applied`, never `prisma migrate deploy` for `20260812152000_release_foundation`.
+  Rationale: Production already contained the migration's tables and columns. Replaying creation SQL would collide; recording the migration only after a backup and zero-drift proof preserves data and makes future migrations reproducible.
+  Date/Author: 2026-08-12 / Codex and Aish.
 
 ## Outcomes & Retrospective
 
-The audit converted a collection of optimistic feature summaries into an evidence-based release program. Production is still serving the existing product, but new work has an isolated Development database and a release-foundation branch. The release process is not complete until the first pull request passes CI, deploys to Preview, and is human-verified without touching Production.
+The release foundation is complete. PR #1 passed CI and Preview review, merged as `bbfa64a`, and deployed successfully. Production now has a recoverable Neon backup branch, both committed migrations recorded as applied, zero Prisma schema drift, unchanged data counts, and a canonical URL that resolves to the reviewed deployment. The next milestone is the bounded, restartable ingestion repair tracked in issue #2.
 
 ## Context and Orientation
 
@@ -144,3 +153,5 @@ The public financial read path will eventually consume only `FinancialPublished`
 The future IPO provider boundary will expose validation, placement, status, cancellation, and webhook verification without leaking Codifi- or ODIN-specific types into product UI. Until sandbox access is granted, only a mock implementation with dummy applicant data is permitted.
 
 Revision note (2026-08-12): Created after a full repository/deployment/database audit to replace direct-to-production work with a verifiable PR and Preview workflow.
+
+Revision note (2026-08-12 16:32 IST): Recorded the completed Production baseline, backup evidence, canonical alias correction, and release-foundation outcome after PR #1 merged.
