@@ -48,6 +48,11 @@ export type BoardIpo = {
     eps: number | null;
     verified: boolean;
   }[];
+  provenance: {
+    discovery: { name: string; url: string; note: string }[];
+    gmp: { name: string; url: string; note: string }[];
+    subscription: { name: string; url: string; note: string } | null;
+  };
 };
 
 function toNum(v: unknown): number {
@@ -63,6 +68,7 @@ const IPO_INCLUDE = {
   subscriptionSnapshots: { orderBy: { capturedAt: "desc" as const }, take: 1 },
   documents: true,
   financialSnapshots: { orderBy: { fiscalYear: "desc" as const } },
+  gmpObservations: { orderBy: { capturedAt: "desc" as const }, take: 12, include: { source: true } },
 };
 
 type IpoWithRelations = Awaited<ReturnType<typeof prisma.ipo.findFirstOrThrow<{ include: typeof IPO_INCLUDE }>>>;
@@ -70,10 +76,32 @@ type IpoWithRelations = Awaited<ReturnType<typeof prisma.ipo.findFirstOrThrow<{ 
 function shapeIpo(ipo: IpoWithRelations): BoardIpo {
   const latestGmp = ipo.gmpSnapshots[ipo.gmpSnapshots.length - 1] ?? null;
   const latestSub = ipo.subscriptionSnapshots[0] ?? null;
+  const slug = toIpoSlug(ipo.company.name);
+  const gmpSourceLinks = new Map<string, { name: string; url: string; note: string }>();
+  for (const observation of ipo.gmpObservations) {
+    if (!observation.success || gmpSourceLinks.has(observation.source.adapterKey)) continue;
+    const url = observation.source.adapterKey === "ipowatch"
+      ? `https://ipowatch.in/${slug}-ipo-gmp-grey-market-premium/`
+      : observation.source.adapterKey === "sahi"
+        ? `https://www.sahi.com/blogs/${slug}-ipo-gmp-today`
+        : observation.source.adapterKey === "ipoji"
+          ? `https://www.ipoji.com/ipo/${slug}-ipo`
+          : observation.source.baseUrl;
+    if (url.startsWith("https://")) gmpSourceLinks.set(observation.source.adapterKey, {
+      name: observation.source.name,
+      url,
+      note: `Successful observation captured ${observation.capturedAt.toISOString()}`,
+    });
+  }
+  const discovery = ipo.sourceUrl ? [{
+    name: "IPO Watch listing facts",
+    url: ipo.sourceUrl,
+    note: `Discovered from ${ipo.discoveredFrom.join(" + ") || "stored source"}`,
+  }] : [];
 
   return {
     id: ipo.id,
-    slug: toIpoSlug(ipo.company.name),
+    slug,
     companyName: ipo.company.name,
     sector: ipo.company.sector ?? "",
     status: ipo.status,
@@ -125,6 +153,15 @@ function shapeIpo(ipo: IpoWithRelations): BoardIpo {
       eps: toNumOrNull(f.eps),
       verified: f.verified,
     })),
+    provenance: {
+      discovery,
+      gmp: [...gmpSourceLinks.values()],
+      subscription: latestSub ? {
+        name: "Sahi subscription table",
+        url: `https://www.sahi.com/blogs/${slug}-ipo-gmp-today`,
+        note: `${latestSub.sourceExchange.toUpperCase()}-attributed data captured ${latestSub.capturedAt.toISOString()}`,
+      } : null,
+    },
   };
 }
 

@@ -11,6 +11,7 @@ import {
 } from "@/components/IpoBoard";
 import { Badge, Surface } from "@/components/ui";
 import { badgeText, confidenceLabel, countdownText, effectiveStatus, fmtDate, fmtINR } from "@/lib/board-helpers";
+import { googleCalendarSubscriptionUrl } from "@/lib/calendar";
 
 // GMP figures matter most for this page and refresh every 2 hours —
 // 30 minutes keeps a crawled/cached copy reasonably current without
@@ -93,6 +94,10 @@ export default async function IpoDetailPage({
             <div><span>Minimum</span><strong>{fmtINR(ipo.lotSize * ipo.priceBandHigh)}</strong></div>
             <div><span>Listing</span><strong>{fmtDate(ipo.listingDate)}</strong></div>
           </div>
+          <div className="ipo-calendar-actions" aria-label="Add IPO dates to calendar">
+            <a className="ui-button ui-button-primary" href={`/api/calendar?ipo=${ipo.slug}`}>Download this IPO&apos;s dates (.ics)</a>
+            <a className="ui-button ui-button-secondary" href={googleCalendarSubscriptionUrl()} target="_blank" rel="noopener noreferrer">Subscribe in Google Calendar ↗</a>
+          </div>
         </Surface>
 
         <nav className="ipo-detail-nav" aria-label="IPO detail sections">
@@ -113,6 +118,20 @@ export default async function IpoDetailPage({
             <p>GMP is market sentiment from public sources, not exchange data or a prediction.</p>
           </div>
         </div>
+
+        <Surface as="section" className="ipo-provenance">
+          <header>
+            <p className="ipo-detail-kicker">Transparent by default</p>
+            <h2>Sources & verification</h2>
+            <p>Every link opens the page we used. “Verified” is reserved for official filings or human-reviewed figures.</p>
+          </header>
+          <div className="provenance-grid">
+            <ProvenanceGroup title="IPO facts" sources={ipo.provenance.discovery} />
+            <ProvenanceGroup title="GMP · unofficial" sources={ipo.provenance.gmp} />
+            <ProvenanceGroup title="Subscription" sources={ipo.provenance.subscription ? [ipo.provenance.subscription] : []} />
+            <ProvenanceGroup title="Official filings" sources={ipo.documents.map((doc) => ({ name: doc.label, url: doc.url, note: doc.docType.toUpperCase() }))} />
+          </div>
+        </Surface>
 
         <div className="ipo-detail-sections">
           <DetailSection id="overview" eyebrow="Decision essentials" title="Overview">
@@ -137,6 +156,20 @@ export default async function IpoDetailPage({
           <Link href="/methodology">How we source this data</Link>
         </div>
       </article>
+    </div>
+  );
+}
+
+function ProvenanceGroup({ title, sources }: { title: string; sources: { name: string; url: string; note: string }[] }) {
+  return (
+    <div className="provenance-group">
+      <h3>{title}</h3>
+      {sources.length ? sources.map((source) => (
+        <a key={`${source.name}-${source.url}`} href={source.url} target="_blank" rel="noopener noreferrer">
+          <span>{source.name} ↗</span>
+          <small>{source.note}</small>
+        </a>
+      )) : <p>Not captured yet</p>}
     </div>
   );
 }
