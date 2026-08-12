@@ -2,6 +2,8 @@ export type IpoListingCandidate = {
   companyName: string;
   detailUrl: string;
   board: "MAINBOARD" | "SME";
+  dateLabel?: string;
+  closeDate?: Date;
 };
 
 export type IpoFacts = {

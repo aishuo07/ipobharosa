@@ -15,6 +15,12 @@ const FETCH_TIMEOUT_MS = 15000;
 // the source and more likely to trip rate limiting), keeps runs fast
 // without hammering ipowatch.in/sahi.com.
 const CONCURRENCY = 5;
+// Listing discovery should be complete, but detail-page validation is
+// intentionally bounded. The source is newest-first, so every two-hour
+// cycle takes the next untracked candidates without risking a serverless
+// timeout or hammering upstream sites. `deferredCandidates` makes the
+// remaining backlog visible instead of silently dropping it.
+const MAX_CANDIDATES_PER_RUN = 10;
 // A human review queue that grows forever isn't "human review", it's a
 // backlog nobody will ever clear. Once DRAFT+QUARANTINED hits this, new
 // candidates are skipped (and it's surfaced as `queueCapped`) rather
@@ -70,6 +76,7 @@ export type DiscoverySummary = {
   fetchFailed: { companyName: string; error: string }[];
   dbErrors: { companyName: string; error: string }[];
   queueCapped: boolean;
+  deferredCandidates: number;
 };
 
 type CandidateOutcome =
@@ -166,6 +173,7 @@ export async function runDiscovery(): Promise<DiscoverySummary> {
     fetchFailed: [],
     dbErrors: [],
     queueCapped: false,
+    deferredCandidates: 0,
   };
 
   const unreviewedCount = await prisma.ipo.count({
@@ -216,8 +224,10 @@ export async function runDiscovery(): Promise<DiscoverySummary> {
   // Respect the same cap mid-run: stop admitting new unreviewed rows once
   // the queue fills up, even if this run alone would otherwise blow past it.
   const room = Math.max(0, MAX_UNREVIEWED_QUEUE - unreviewedCount);
-  const toProcess = newCandidates.slice(0, room);
-  if (newCandidates.length > toProcess.length) summary.queueCapped = true;
+  const admitted = newCandidates.slice(0, room);
+  if (newCandidates.length > admitted.length) summary.queueCapped = true;
+  const toProcess = admitted.slice(0, MAX_CANDIDATES_PER_RUN);
+  summary.deferredCandidates = newCandidates.length - toProcess.length;
 
   const outcomes = await mapWithConcurrency(toProcess, CONCURRENCY, processCandidate);
   for (const outcome of outcomes) {

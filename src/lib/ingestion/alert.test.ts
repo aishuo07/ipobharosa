@@ -14,7 +14,7 @@ function makeSummary(overrides: Partial<IngestionSummary> = {}): IngestionSummar
     },
     statusTransitions: 0,
     reminders: { sent: 0, failed: 0, skipped: 0 },
-    discovery: { candidatesSeen: 0, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, fetchFailed: [], dbErrors: [], queueCapped: false },
+    discovery: { candidatesSeen: 0, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, fetchFailed: [], dbErrors: [], queueCapped: false, deferredCandidates: 0 },
     ...overrides,
   };
 }
@@ -32,7 +32,7 @@ describe("computeAlertReasons", () => {
   it("flags discovery database write failures", () => {
     const reasons = computeAlertReasons(
       makeSummary({
-        discovery: { candidatesSeen: 1, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, fetchFailed: [], dbErrors: [{ companyName: "X", error: "constraint violation" }], queueCapped: false },
+        discovery: { candidatesSeen: 1, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, fetchFailed: [], dbErrors: [{ companyName: "X", error: "constraint violation" }], queueCapped: false, deferredCandidates: 0 },
       }),
     );
     expect(reasons.some((r) => r.includes("database write failure"))).toBe(true);
@@ -41,7 +41,7 @@ describe("computeAlertReasons", () => {
   it("flags a capped review queue", () => {
     const reasons = computeAlertReasons(
       makeSummary({
-        discovery: { candidatesSeen: 1, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, fetchFailed: [], dbErrors: [], queueCapped: true },
+        discovery: { candidatesSeen: 1, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, fetchFailed: [], dbErrors: [], queueCapped: true, deferredCandidates: 1 },
       }),
     );
     expect(reasons.some((r) => r.includes("capacity"))).toBe(true);
