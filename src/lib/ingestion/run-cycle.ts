@@ -51,11 +51,12 @@ const EMPTY_SUMMARY: IngestionSummary = {
  * the run looks wrong rather than leaving it to be noticed later.
  */
 export async function runIngestionCycle(startedBy = "cron"): Promise<IngestionSummary> {
+  const startedAt = new Date();
   const acquired = await acquireIngestionLock(startedBy);
   if (!acquired) {
     const summary = { ...EMPTY_SUMMARY, skippedDueToLock: true };
     await prisma.ingestionRun.create({
-      data: { ok: true, skippedDueToLock: true, summary },
+      data: { startedAt, finishedAt: new Date(), ok: true, skippedDueToLock: true, summary },
     });
     return summary;
   }
@@ -72,7 +73,7 @@ export async function runIngestionCycle(startedBy = "cron"): Promise<IngestionSu
   } finally {
     await releaseIngestionLock();
     await prisma.ingestionRun.create({
-      data: { ok, summary, error, finishedAt: new Date() },
+      data: { startedAt, finishedAt: new Date(), ok, summary, error },
     });
 
     const reasons = ok ? computeAlertReasons(summary) : [`Ingestion cycle crashed entirely: ${error}`];
