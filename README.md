@@ -6,7 +6,8 @@ An IPO board for Indian retail investors — lot size, price band, subscription,
 
 GMP is informal, unregulated dealer-street pricing — no official source exists anywhere. Every existing tracker shows it as a single number with false confidence. IPOBharosa scrapes multiple independent public GMP sources, aggregates with median + spread, and surfaces a confidence tier (High/Medium/Low) driven by how many sources agree and how far apart they are. A failing source degrades confidence; it never breaks the pipeline.
 
-See `/Users/aikanodi/.claude/plans/fuzzy-dreaming-eagle.md` for the full build plan.
+See [`docs/EXECPLAN.md`](docs/EXECPLAN.md) for the verified current state,
+release workflow, and small-PR delivery sequence.
 
 ## Stack
 
@@ -17,7 +18,9 @@ See `/Users/aikanodi/.claude/plans/fuzzy-dreaming-eagle.md` for the full build p
 ## Getting started
 
 ```bash
-npm install
+npm ci
+npm run db:migrate:deploy
+npm run db:seed:dev
 npm run dev
 ```
 
@@ -29,6 +32,24 @@ Open [http://localhost:3000](http://localhost:3000).
 |---|---|
 | `npm run dev` | Local dev server |
 | `npm run build` | Production build |
-| `npm test` | Vitest suite (GMP confidence/fallback logic) |
-| `npm run lint` | ESLint |
-| `npx prisma migrate dev` | Apply schema changes locally |
+| `npm test` | Vitest suite |
+| `npm run lint` | ESLint with zero warnings allowed |
+| `npm run check` | Lint, tests, and production build |
+| `npm run db:validate` | Validate the Prisma schema |
+| `npm run db:migrate:deploy` | Apply committed migrations |
+| `npm run db:seed:dev` | Seed deterministic Development data |
+| `npm run smoke:preview -- <url>` | Smoke-test a deployed PR Preview |
+
+## Release workflow
+
+- `main` is Production. Do not commit feature work directly to it.
+- Create one short-lived branch and one small pull request per concern.
+- Every pull request must pass CI and receive a Vercel Preview backed by the
+  isolated Development database.
+- Test the affected frontend states, backend success/failure paths, responsive
+  layouts, and migrations on Preview. Attach the URL and evidence to the PR.
+- Merge only after the Preview is verified. Then perform read-only Production
+  smoke checks on the reviewed commit.
+
+Preview must never receive Production database credentials, personal data, or
+live email delivery credentials.

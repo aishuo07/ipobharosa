@@ -514,5 +514,8 @@ footer.page-foot {
   .stat-grid { grid-template-columns: 1fr 1fr; gap: 12px 14px; }
   .ratio-grid { grid-template-columns: 1fr 1fr; }
   .detail-cta { width: 100%; }
-  .detail-cta .btn { flex: 1; }
+  .detail-cta .btn {
+    flex: 1 1 100%; min-width: 0; max-width: 100%; white-space: normal;
+    overflow-wrap: anywhere; text-align: center; line-height: 1.35;
+  }
 }

@@ -6,7 +6,6 @@
 set -e
 
 API_BASE="${API_BASE:-http://localhost:3000}"
-ADMIN_TOKEN="${ADMIN_TOKEN:-dev-token-123}"
 
 # Configure your IPOs here (IPO_ID:RHP_URL pairs)
 # Get URLs from ipowatch.in, sahi.com, or company IR pages
@@ -52,7 +51,7 @@ for ipo in "${IPOS[@]}"; do
     echo "\n📄 Processing: $ipo_id"
     echo "   URL: $rhp_url"
 
-    if python extract.py "$rhp_url" "$ipo_id" RHP "$API_BASE" "$ADMIN_TOKEN"; then
+    if python extract.py "$rhp_url" "$ipo_id" RHP "$API_BASE"; then
         ((COMPLETED++))
         echo "   ✅ Success"
     else
@@ -69,7 +68,7 @@ echo "Failed:    $FAILED"
 
 if [ $FAILED -eq 0 ]; then
     echo "\n✅ All IPOs processed successfully!"
-    echo "Next: Review at http://localhost:3000/admin/financials"
+    echo "Next: inspect the candidate JSON; this experimental batch does not submit or publish."
 else
     echo "\n⚠️  Some extractions failed. Check logs above."
 fi

@@ -7,7 +7,7 @@ type FinancialMetric = "REVENUE" | "PAT" | "EPS" | "EBITDA" | "ASSETS" | "NET_WO
  * validate rules → publish only if approved.
  *
  * This module handles: parsing, normalization, and validation.
- * It does NOT apply business logic like "auto-publish if high confidence".
+ * It does NOT apply business logic like publishing based on confidence.
  * That is the responsibility of the review workflow.
  */
 
@@ -64,9 +64,6 @@ export function parseNumber(text: string): { value: number; unit: string; curren
     unit = "Mn";
   } else if (trimmed.toLowerCase().includes("crore") || trimmed.includes("Cr")) {
     unit = "Cr";
-  } else if (trimmed.includes("₹")) {
-    // "₹3,449.96" without explicit unit usually means Crores in Indian RHPs
-    unit = "Cr";
   }
 
   return { value, unit, currency: trimmed.includes("₹") ? "INR" : "INR" };
@@ -85,8 +82,7 @@ export function normalizeToCrores(value: number, unit: string): number {
     case "million":
       return value / 10; // 10 million = 1 crore
     case "actual":
-      // Assume it's already in Crores if no unit given in Indian context
-      return value;
+      throw new Error("Financial value requires an explicit Cr or Mn unit");
     default:
       throw new Error(`Unknown unit: ${unit}`);
   }

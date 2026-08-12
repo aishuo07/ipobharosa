@@ -21,14 +21,20 @@ type FinancialRevisionState =
  * 2. Extract candidate metrics
  * 3. Normalize and validate each
  * 4. Compare against existing published values
- * 5. Route to AUTO_VERIFIED or REVIEW_REQUIRED
+ * 5. Route every candidate to REVIEW_REQUIRED
  * 6. Human approval gate before publish
  * 7. Create immutable FinancialPublished record
  *
  * Every transition is logged in CorrectionLog for audit.
  */
 
-export async function syncDocument(ipoId: string, documentType: FinancialDocumentType, sourceUrl: string, sha256: string, pageCount: number) {
+export async function syncDocument(
+  ipoId: string,
+  documentType: FinancialDocumentType,
+  sourceUrl: string,
+  sha256: string,
+  pageCount: number | null,
+) {
   // Idempotent: check if this exact document is already ingested
   const existing = await prisma.financialDocument.findUnique({
     where: { sha256 },
@@ -81,7 +87,7 @@ export async function processExtractions(ipoId: string, documentId: string, raws
       orderBy: { publishedAt: "desc" },
     });
 
-    const { mismatch, percent } = compareToExisting(
+    const { percent } = compareToExisting(
       validated.normalizedValue,
       existing?.value ? Number(existing.value) : null,
     );
@@ -110,7 +116,10 @@ export async function processExtractions(ipoId: string, documentId: string, raws
     });
 
     // Create revision with initial state
-    const revisionState = !mismatch && validated.severity === "HIGH_CONFIDENCE" ? "AUTO_VERIFIED" : "REVIEW_REQUIRED";
+    // High parser/OCR confidence is not proof that the semantic value is
+    // correct. Every financial figure must pass a human evidence review
+    // before it can be published.
+    const revisionState = "REVIEW_REQUIRED";
 
     const revision = await prisma.financialRevision.create({
       data: {
@@ -220,7 +229,9 @@ export async function rejectRevision(revisionId: string, rejecterEmail: string, 
 }
 
 /**
- * Get all pending reviews for an IPO (state = REVIEW_REQUIRED or AUTO_VERIFIED awaiting final sign-off).
+ * Get all pending reviews for an IPO. AUTO_VERIFIED is retained only so
+ * records created before the mandatory-review rule cannot disappear from the
+ * queue; both states still require a human sign-off.
  */
 export async function getPendingReviews(ipoId: string) {
   return await prisma.financialRevision.findMany({
