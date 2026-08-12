@@ -41,6 +41,7 @@ export async function syncDocument(
   });
 
   if (existing) {
+    if (existing.ipoId !== ipoId) throw new Error("document checksum is already attached to another IPO");
     console.log(`[financials] Document ${sha256.slice(0, 8)} already ingested (IPO: ${existing.ipoId})`);
     return existing.id;
   }
@@ -55,7 +56,9 @@ export async function syncDocument(
       fetchedAt: new Date(),
       sha256,
       pageCount,
-      publicationDate: new Date(),
+      // Fetch time is known. Publication date must come from filing metadata;
+      // using "now" here would manufacture evidence, so leave it empty.
+      publicationDate: null,
     },
   });
 

@@ -5,6 +5,7 @@ import { fetchIpoFacts } from "./ipowatch-facts";
 import { validateIpoFacts } from "./validate";
 import { classifyCandidate } from "./classify";
 import type { IpoFacts, IpoListingCandidate } from "./types";
+import { filingEvidenceClass } from "@/lib/document-evidence";
 
 const USER_AGENT =
   "Mozilla/5.0 (compatible; IPOBharosaBot/1.0; +https://ipobharosa.vercel.app)";
@@ -96,7 +97,8 @@ async function processCandidate(candidate: IpoListingCandidate): Promise<Candida
 
   const problems = validateIpoFacts(facts);
   const crossVerified = await existsOnSahi(candidate.companyName);
-  const hasOfficialDocument = Boolean(facts.drhpUrl || facts.rhpUrl);
+  const filingUrls = [facts.drhpUrl, facts.rhpUrl].filter((url): url is string => Boolean(url));
+  const hasOfficialDocument = filingUrls.some((url) => filingEvidenceClass(url) === "OFFICIAL");
   const confidence = classifyCandidate({ validationProblems: problems, crossVerified, hasOfficialDocument });
 
   const now = new Date();
@@ -134,6 +136,11 @@ async function processCandidate(candidate: IpoListingCandidate): Promise<Candida
           reviewedAt: confidence === "HIGH" ? now : null,
         },
       });
+      const filingDocuments = [
+        facts.drhpUrl ? { ipoId: ipo.id, label: "Draft Red Herring Prospectus (DRHP)", url: facts.drhpUrl, docType: "drhp" } : null,
+        facts.rhpUrl ? { ipoId: ipo.id, label: "Red Herring Prospectus (RHP)", url: facts.rhpUrl, docType: "rhp" } : null,
+      ].filter((document): document is NonNullable<typeof document> => document !== null);
+      if (filingDocuments.length > 0) await tx.document.createMany({ data: filingDocuments });
       if (confidence === "HIGH") {
         await tx.correctionLog.create({
           data: {

@@ -15,6 +15,7 @@ function makeSummary(overrides: Partial<IngestionSummary> = {}): IngestionSummar
     statusTransitions: 0,
     reminders: { sent: 0, failed: 0, skipped: 0 },
     discovery: { candidatesSeen: 0, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, fetchFailed: [], dbErrors: [], queueCapped: false, deferredCandidates: 0 },
+    filings: { captured: 0, skipped: 0, failed: [] },
     ...overrides,
   };
 }
@@ -58,6 +59,13 @@ describe("computeAlertReasons", () => {
       }),
     );
     expect(reasons.some((r) => r.includes("Every GMP source"))).toBe(true);
+  });
+
+  it("flags filing evidence capture failures", () => {
+    const reasons = computeAlertReasons(makeSummary({
+      filings: { captured: 0, skipped: 0, failed: [{ ipoName: "X", error: "not a PDF" }] },
+    }));
+    expect(reasons.some((reason) => reason.includes("filing evidence"))).toBe(true);
   });
 
   it("does not flag a source with zero attempts as down", () => {

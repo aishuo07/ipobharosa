@@ -6,6 +6,7 @@ let existingCompanyNames: string[] = [];
 let createdCompanies: { id: string; name: string }[] = [];
 let createdIpos: Record<string, unknown>[] = [];
 let createdLogs: Record<string, unknown>[] = [];
+let createdDocuments: Record<string, unknown>[] = [];
 let unreviewedCount = 0;
 let ipoCreateShouldThrow = false;
 let factsImpl: (url: string, name: string, board: "MAINBOARD" | "SME") => Promise<unknown>;
@@ -38,6 +39,12 @@ function makeTx() {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         createdLogs.push(data);
         return data;
+      },
+    },
+    document: {
+      createMany: async ({ data }: { data: Record<string, unknown>[] }) => {
+        createdDocuments.push(...data);
+        return { count: data.length };
       },
     },
   };
@@ -80,7 +87,7 @@ function validFacts(
     // `??` would treat an explicitly-passed `null` the same as "not
     // provided" and fall through to the default — `"key" in overrides`
     // is needed to let tests deliberately pass null.
-    drhpUrl: "drhpUrl" in overrides ? overrides.drhpUrl : "https://example.com/drhp.pdf",
+    drhpUrl: "drhpUrl" in overrides ? overrides.drhpUrl : "https://www.bseindia.com/corporates/drhp.pdf",
     rhpUrl: "rhpUrl" in overrides ? overrides.rhpUrl : null,
   };
 }
@@ -92,6 +99,7 @@ describe("runDiscovery", () => {
     createdCompanies = [];
     createdIpos = [];
     createdLogs = [];
+    createdDocuments = [];
     unreviewedCount = 0;
     ipoCreateShouldThrow = false;
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
@@ -147,6 +155,9 @@ describe("runDiscovery", () => {
     expect(createdIpos[0]).toMatchObject({ publicationState: "PUBLISHED", autoPublished: true });
     expect(createdLogs).toHaveLength(1);
     expect(createdLogs[0]).toMatchObject({ action: "auto-publish" });
+    expect(createdDocuments).toEqual([
+      expect.objectContaining({ docType: "drhp", url: "https://www.bseindia.com/corporates/drhp.pdf" }),
+    ]);
   });
 
   it("holds a valid but not-cross-verified candidate as a draft, not auto-published", async () => {
@@ -171,6 +182,20 @@ describe("runDiscovery", () => {
 
     expect(summary.draftsCreated).toBe(1);
     expect(summary.autoPublished).toBe(0);
+  });
+
+  it("stores but does not treat a third-party hosted RHP copy as official evidence", async () => {
+    listingResult = [{ companyName: "Copied Filing Co", detailUrl: "https://ipowatch.in/copied-filing-co-ipo/", board: "MAINBOARD" }];
+    factsImpl = async () => validFacts("Copied Filing Co", { drhpUrl: null, rhpUrl: "https://ipowatch.in/wp-content/rhp.pdf" });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+
+    const summary = await runDiscovery();
+
+    expect(summary.draftsCreated).toBe(1);
+    expect(summary.autoPublished).toBe(0);
+    expect(createdDocuments).toEqual([
+      expect.objectContaining({ docType: "rhp", url: "https://ipowatch.in/wp-content/rhp.pdf" }),
+    ]);
   });
 
   it("quarantines a candidate with inconsistent data instead of discarding it silently", async () => {

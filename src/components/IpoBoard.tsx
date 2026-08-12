@@ -1069,7 +1069,7 @@ export function DocumentsPanel({ ipo }: { ipo: BoardIpo }) {
               <span className="stamp">{doc.docType === "drhp" ? "DR" : doc.docType === "rhp" ? "RHP" : "DOC"}</span>
               <span className="doc-copy">
                 <span className="doc-name">{doc.label}</span>
-                <span className="doc-source">Official filing · opens original source</span>
+                <span className="doc-source">{doc.evidenceLabel} · {doc.sourceHost}</span>
               </span>
               <span className="doc-sub">Open ↗</span>
             </a>
