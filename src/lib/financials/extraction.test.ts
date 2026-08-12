@@ -11,7 +11,7 @@ describe("Financial Extraction", () => {
     });
 
     it("parses rupee symbol with crore", () => {
-      const { value, unit } = parseNumber("₹3,449.96");
+      const { value, unit } = parseNumber("₹3,449.96 Cr");
       expect(value).toBe(3449.96);
       expect(unit).toBe("Cr");
     });
@@ -44,8 +44,8 @@ describe("Financial Extraction", () => {
       expect(normalizeToCrores(1000, "million")).toBe(100);
     });
 
-    it("assumes actual unit is crores", () => {
-      expect(normalizeToCrores(344.996, "actual")).toBe(344.996);
+    it("rejects a value without an explicit unit", () => {
+      expect(() => normalizeToCrores(344.996, "actual")).toThrow("explicit Cr or Mn unit");
     });
 
     it("throws on unknown unit", () => {
@@ -58,7 +58,7 @@ describe("Financial Extraction", () => {
       const raw: RawExtraction = {
         metric: "REVENUE" as const,
         originalLabel: "Revenue from Operations (Net)",
-        rawValue: "₹3,449.96",
+        rawValue: "₹3,449.96 Cr",
         fiscalYear: "31 Mar 2026",
         scope: "Consolidated",
         auditStatus: "Audited",

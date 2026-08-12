@@ -18,15 +18,19 @@ export interface PdfExtractionResult {
  * 3. Deploy to an environment with proper ESM worker support (Deno, Bun)
  * 4. Use a managed service like AWS Textract or Google Document AI
  *
- * For now: Use manual financial data entry via admin form.
- * The verification pipeline is fully operational and production-ready.
+ * For now: use manual financial data entry via the admin form. That path
+ * still requires human review and must not be described as automated PDF
+ * verification.
  */
 
 export async function extractFinancialsFromPdf(
   pdfUrl: string,
   ipoId: string,
-  documentType: "DRHP" | "RHP" | "PROSPECTUS" | "CORRIGENDUM" | "ADDENDUM"
+  documentType: "DRHP" | "RHP" | "PROSPECTUS" | "CORRIGENDUM" | "ADDENDUM",
 ): Promise<PdfExtractionResult> {
+  void pdfUrl;
+  void ipoId;
+  void documentType;
   return {
     rawExtractions: [],
     pageCount: 0,
@@ -34,8 +38,8 @@ export async function extractFinancialsFromPdf(
     issues: [
       "PDF extraction not configured for this environment.",
       "For now, use the admin financial entry form.",
-      "The entire verification→review→approval→publish pipeline is production-ready.",
-      "Production deployment would integrate a dedicated PDF microservice.",
+      "Candidates require evidence review before publication.",
+      "Automated document download, checksum, table extraction, and OCR are pending.",
     ],
   };
 }
@@ -47,7 +51,7 @@ export async function extractFinancialsForAllIpos(
     rhpUrl: string | null;
     drhpUrl: string | null;
     company: { name: string };
-  }>
+  }>,
 ): Promise<
   Array<{
     ipoId: string;
@@ -56,6 +60,7 @@ export async function extractFinancialsForAllIpos(
     source: "RHP" | "DRHP";
   }>
 > {
+  void ipos;
   // For now, return empty results - use manual entry instead
   return [];
 }

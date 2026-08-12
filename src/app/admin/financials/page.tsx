@@ -53,7 +53,7 @@ export default async function FinancialsReviewPage() {
         <h1>Financial Review Queue</h1>
         <div className="legal-updated">
           Signed in as {session!.user!.email} — {pending.length} pending ({stats.reviewRequired} review required,{" "}
-          {stats.autoVerified} auto-verified awaiting sign-off)
+          {stats.autoVerified} legacy auto-verified records still requiring sign-off)
         </div>
 
         {pending.length === 0 && (
@@ -92,7 +92,7 @@ export default async function FinancialsReviewPage() {
                     color: "white",
                   }}
                 >
-                  {rev.state === "REVIEW_REQUIRED" ? "NEEDS REVIEW" : "AUTO-VERIFIED"}
+                  {rev.state === "REVIEW_REQUIRED" ? "NEEDS REVIEW" : "LEGACY — REVIEW REQUIRED"}
                 </span>
                 <strong>{ipo.company.name}</strong>
                 <span style={{ fontSize: 12, color: "var(--ink-faint)" }}>({ipo.board})</span>

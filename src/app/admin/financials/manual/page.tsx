@@ -268,7 +268,7 @@ export default async function ManualFinancialEntryPage() {
         </form>
 
         <div style={{ marginTop: 40, padding: 16, background: "var(--surface-2)", borderRadius: 4, fontSize: 12, color: "var(--ink-muted)" }}>
-          <strong>Workflow:</strong> Entry → Normalized → Validated → AUTO_VERIFIED or REVIEW_REQUIRED → Admin approves at{" "}
+          <strong>Workflow:</strong> Entry → Normalized → Validated → Human review required → Admin approves at{" "}
           <Link href="/admin/financials" style={{ color: "var(--accent)" }}>
             /admin/financials
           </Link>{" "}

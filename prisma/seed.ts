@@ -186,28 +186,53 @@ async function main() {
         data: { name: item.companyName, sector: item.sector },
       }));
 
-    const ipo = await prisma.ipo.create({
-      data: {
-        companyId: company.id,
-        status: item.status,
-        board: item.board,
-        priceBandLow: item.priceBandLow,
-        priceBandHigh: item.priceBandHigh,
-        lotSize: item.lotSize,
-        issueSizeCr: item.issueSizeCr,
-        freshIssueCr: item.freshIssueCr,
-        ofsCr: item.ofsCr,
-        openDate: new Date(item.openDate),
-        closeDate: new Date(item.closeDate),
-        allotmentDate: new Date(item.allotmentDate),
-        refundDate: new Date(item.refundDate),
-        listingDate: new Date(item.listingDate),
-        registrar: item.registrar,
-        leadManagers: item.leadManagers,
-      },
-    });
+    const existingIpo = await prisma.ipo.findFirst({ where: { companyId: company.id } });
+    const ipo = existingIpo
+      ? await prisma.ipo.update({
+          where: { id: existingIpo.id },
+          data: {
+            status: item.status,
+            publicationState: "PUBLISHED",
+            board: item.board,
+            priceBandLow: item.priceBandLow,
+            priceBandHigh: item.priceBandHigh,
+            lotSize: item.lotSize,
+            issueSizeCr: item.issueSizeCr,
+            freshIssueCr: item.freshIssueCr,
+            ofsCr: item.ofsCr,
+            openDate: new Date(item.openDate),
+            closeDate: new Date(item.closeDate),
+            allotmentDate: new Date(item.allotmentDate),
+            refundDate: new Date(item.refundDate),
+            listingDate: new Date(item.listingDate),
+            registrar: item.registrar,
+            leadManagers: item.leadManagers,
+          },
+        })
+      : await prisma.ipo.create({
+          data: {
+            companyId: company.id,
+            status: item.status,
+            publicationState: "PUBLISHED",
+            board: item.board,
+            priceBandLow: item.priceBandLow,
+            priceBandHigh: item.priceBandHigh,
+            lotSize: item.lotSize,
+            issueSizeCr: item.issueSizeCr,
+            freshIssueCr: item.freshIssueCr,
+            ofsCr: item.ofsCr,
+            openDate: new Date(item.openDate),
+            closeDate: new Date(item.closeDate),
+            allotmentDate: new Date(item.allotmentDate),
+            refundDate: new Date(item.refundDate),
+            listingDate: new Date(item.listingDate),
+            registrar: item.registrar,
+            leadManagers: item.leadManagers,
+          },
+        });
 
-    if (item.gmpObservations?.length) {
+    const hasGmp = await prisma.gmpSnapshot.count({ where: { ipoId: ipo.id } });
+    if (item.gmpObservations?.length && hasGmp === 0) {
       const observationRows = item.gmpObservations.map((value, i) => ({
         ipoId: ipo.id,
         sourceId: seedSources[i % seedSources.length].id,
@@ -230,7 +255,8 @@ async function main() {
       }
     }
 
-    if (item.subscription) {
+    const hasSubscription = await prisma.subscriptionSnapshot.count({ where: { ipoId: ipo.id } });
+    if (item.subscription && hasSubscription === 0) {
       await prisma.subscriptionSnapshot.create({
         data: {
           ipoId: ipo.id,

@@ -93,7 +93,7 @@ model Ipo {
   // failed validation or source agreement and are kept (not silently
   // discarded) so a human can see exactly why.
   publicationState PublicationState @default(DRAFT)
-  discoveredFrom   String[] // e.g. ["ipowatch", "sahi"] — which sources found this candidate
+  discoveredFrom   String[]         @default([]) // e.g. ["ipowatch", "sahi"] — which sources found this candidate
   discoveredAt     DateTime?
   reviewedBy       String?
   reviewedAt       DateTime?

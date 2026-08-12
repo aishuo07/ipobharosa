@@ -6,8 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "test": "vitest run"
+    "postinstall": "prisma generate",
+    "lint": "eslint --max-warnings=0",
+    "test": "vitest run",
+    "check": "npm run lint && npm test && npm run build",
+    "db:validate": "prisma validate",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:seed:dev": "prisma generate && tsx prisma/seed.ts",
+    "smoke:preview": "node scripts/smoke-preview.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

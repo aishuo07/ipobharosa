@@ -4,7 +4,13 @@ import { extractFinancialsForAllIpos } from "@/lib/financials/pdf-extraction";
 import { syncDocument, processExtractions } from "@/lib/financials/workflow";
 import crypto from "crypto";
 
-const ADMIN_BEARER_TOKEN = process.env.ADMIN_BEARER_TOKEN || "dev-token-123";
+type ExtractionDetail = {
+  ipoName: string;
+  source: "RHP" | "DRHP";
+  extractionCount: number;
+  quality: "HIGH" | "MEDIUM" | "LOW";
+  issues: string[];
+};
 
 async function calculateSha256(url: string): Promise<string> {
   const response = await fetch(url);
@@ -13,6 +19,11 @@ async function calculateSha256(url: string): Promise<string> {
 }
 
 export async function POST(request: NextRequest) {
+  const adminBearerToken = process.env.ADMIN_BEARER_TOKEN;
+  if (!adminBearerToken) {
+    return NextResponse.json({ error: "ADMIN_BEARER_TOKEN not configured" }, { status: 503 });
+  }
+
   // Verify admin bearer token
   const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
@@ -20,7 +31,7 @@ export async function POST(request: NextRequest) {
   }
 
   const token = authHeader.slice(7);
-  if (token !== ADMIN_BEARER_TOKEN) {
+  if (token !== adminBearerToken) {
     return NextResponse.json({ error: "Invalid token" }, { status: 403 });
   }
 
@@ -31,7 +42,7 @@ export async function POST(request: NextRequest) {
     synced: 0,
     processed: 0,
     failed: [] as string[],
-    details: [] as any[],
+    details: [] as ExtractionDetail[],
   };
 
   try {
@@ -73,7 +84,7 @@ export async function POST(request: NextRequest) {
         const docId = await syncDocument(ipoId, source, docUrl, sha256, result.pageCount);
         results.synced++;
 
-        // Process extractions (route to AUTO_VERIFIED or REVIEW_REQUIRED)
+        // Process candidates into the mandatory human-review queue.
         await processExtractions(ipoId, docId, result.rawExtractions);
         results.processed++;
 
@@ -115,7 +126,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   // Health check / preview
   const ipos = await prisma.ipo.findMany({
     where: { publicationState: "PUBLISHED" },
@@ -128,9 +139,8 @@ export async function GET(request: NextRequest) {
   });
 
   return NextResponse.json({
-    message: "POST with Bearer token to extract financials for all IPOs",
+    message: "POST with the configured admin Bearer token to extract financials for all IPOs",
     iposWithUrls: ipos.filter((i) => i.rhpUrl || i.drhpUrl).length,
     totalIpos: ipos.length,
-    examplePostBody: { authorization: "Bearer " + ADMIN_BEARER_TOKEN },
   });
 }

@@ -12,6 +12,9 @@ import sys
 from typing import Optional, List, Dict, Any
 from urllib.parse import urlparse
 import hashlib
+from io import BytesIO
+
+MAX_PDF_BYTES = 100 * 1024 * 1024
 
 # Financial metric keywords
 METRICS_MAP = {
@@ -134,6 +137,10 @@ def extract_from_pdf(pdf_url: str, ipo_id: str, doc_type: str) -> Dict[str, Any]
     try:
         # Download PDF
         print(f"⬇️  Downloading {pdf_url}...")
+        parsed_url = urlparse(pdf_url)
+        if parsed_url.scheme != "https":
+            raise ValueError("Only HTTPS PDF sources are allowed")
+
         response = requests.get(pdf_url, timeout=30)
         if response.status_code != 200:
             return {
@@ -143,10 +150,17 @@ def extract_from_pdf(pdf_url: str, ipo_id: str, doc_type: str) -> Dict[str, Any]
                 "issues": [f"Failed to fetch PDF: HTTP {response.status_code}"]
             }
 
+        content_type = response.headers.get("content-type", "").lower()
         pdf_bytes = response.content
+        if "pdf" not in content_type and not pdf_bytes.startswith(b"%PDF"):
+            raise ValueError(f"Source did not return a PDF (content-type: {content_type or 'unknown'})")
+        if len(pdf_bytes) > MAX_PDF_BYTES:
+            raise ValueError("PDF exceeds the 100 MB extraction limit")
+
+        document_sha256 = hashlib.sha256(pdf_bytes).hexdigest()
 
         # Open with pdfplumber
-        with pdfplumber.open(pdf_bytes) as pdf:
+        with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
             page_count = len(pdf.pages)
             print(f"📄 PDF has {page_count} pages")
 
@@ -207,7 +221,13 @@ def extract_from_pdf(pdf_url: str, ipo_id: str, doc_type: str) -> Dict[str, Any]
             "rawExtractions": unique,
             "pageCount": page_count,
             "extractionQuality": quality,
-            "issues": issues
+            "issues": issues,
+            "document": {
+                "sourceUrl": pdf_url,
+                "documentType": doc_type,
+                "sha256": document_sha256,
+                "pageCount": page_count
+            }
         }
 
     except Exception as e:
@@ -252,15 +272,17 @@ def extract_from_lines(lines: List[str], page_num: int) -> List[Dict]:
                         break
 
                 if not fy:
-                    fy = "31 Mar 2026"  # Default
+                    # Do not manufacture a reporting period. Keep the
+                    # candidate visibly incomplete for human review.
+                    fy = "UNKNOWN"
 
                 extractions.append({
                     "metric": metric,
                     "originalLabel": matched_keyword.title(),
                     "rawValue": f"₹{value}",
                     "fiscalYear": fy,
-                    "scope": "Consolidated",
-                    "auditStatus": "Audited",
+                    "scope": "UNKNOWN",
+                    "auditStatus": "UNKNOWN",
                     "pageNumber": page_num,
                     "tableReference": f"Page {page_num}",
                     "ocrUsed": False,
@@ -303,9 +325,9 @@ def extract_from_table(table: List[List[str]], page_num: int, table_idx: int) ->
             "metric": metric,
             "originalLabel": label.title(),
             "rawValue": f"₹{value}",
-            "fiscalYear": "31 Mar 2026",
-            "scope": "Consolidated",
-            "auditStatus": "Audited",
+            "fiscalYear": "UNKNOWN",
+            "scope": "UNKNOWN",
+            "auditStatus": "UNKNOWN",
             "pageNumber": page_num,
             "tableReference": f"Table {table_idx + 1}",
             "ocrUsed": False,
@@ -325,6 +347,7 @@ def submit_to_api(base_url: str, ipo_id: str, extractions: Dict, admin_token: st
 
     payload = {
         "ipoId": ipo_id,
+        "document": extractions["document"],
         "extractions": extractions['rawExtractions']
     }
 
@@ -351,7 +374,7 @@ if __name__ == "__main__":
     import os
 
     if len(sys.argv) < 3:
-        print("Usage: python extract.py <RHP_URL> <IPO_ID> [DOC_TYPE] [API_BASE] [ADMIN_TOKEN]")
+        print("Usage: python extract.py <RHP_URL> <IPO_ID> [DOC_TYPE] [API_BASE] [ADMIN_TOKEN] [--submit]")
         print("\nExample:")
         print("  python extract.py https://example.com/technocraft-rhp.pdf abc123 RHP http://localhost:3000 token123")
         sys.exit(1)
@@ -360,7 +383,8 @@ if __name__ == "__main__":
     ipo_id = sys.argv[2]
     doc_type = sys.argv[3] if len(sys.argv) > 3 else "RHP"
     api_base = sys.argv[4] if len(sys.argv) > 4 else "http://localhost:3000"
-    admin_token = sys.argv[5] if len(sys.argv) > 5 else os.getenv("ADMIN_TOKEN", "dev-token-123")
+    admin_token = os.getenv("ADMIN_TOKEN")
+    should_submit = "--submit" in sys.argv[5:]
 
     print(f"\n🚀 Extracting from: {pdf_url}")
     print(f"   IPO: {ipo_id} | Type: {doc_type}\n")
@@ -370,6 +394,12 @@ if __name__ == "__main__":
     print(f"\n📊 Result:")
     print(json.dumps(result, indent=2))
 
-    # Optionally submit to API
-    if result['rawExtractions']:
+    # Extraction is review-only by default. Submission requires both an
+    # explicit flag and a configured Development token.
+    if should_submit and result['rawExtractions']:
+        if not admin_token:
+            print("❌ ADMIN_TOKEN is required with --submit")
+            sys.exit(1)
         submit_to_api(api_base, ipo_id, result, admin_token)
+    elif result['rawExtractions']:
+        print("\nℹ️  Candidates were not submitted. Re-run with ADMIN_TOKEN and --submit after reviewing the JSON evidence.")
