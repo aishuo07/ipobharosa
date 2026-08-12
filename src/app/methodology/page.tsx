@@ -65,6 +65,17 @@ export default function MethodologyPage() {
         wrong, please report it so we can correct it and check the source.
       </p>
 
+      <h2>How a new IPO gets added</h2>
+      <p>
+        Every 2-hour cycle also checks IPO Watch&apos;s public listing for issues we aren&apos;t tracking yet.
+        A newly found IPO is <strong>never published automatically</strong>: its facts are scraped, checked for
+        internal consistency (a sane price band, dates in the right order, a lot size that&apos;s actually a
+        positive number, and so on), and — if a second independent source also has a page for the same
+        company — marked as cross-verified. Whatever survives that becomes a draft that only a human can
+        publish, after checking it against the real filing and adding the sector. Anything that fails the
+        consistency check or can&apos;t be parsed is skipped and logged rather than saved half-wrong.
+      </p>
+
       <h2>Financials</h2>
       <p>
         Revenue, PAT, and ratio figures are first pulled from Sahi&apos;s per-IPO financial summary table, but

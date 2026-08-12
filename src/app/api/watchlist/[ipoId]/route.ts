@@ -12,6 +12,11 @@ export async function POST(
   }
   const { ipoId } = await params;
 
+  const ipo = await prisma.ipo.findUnique({ where: { id: ipoId }, select: { publicationState: true } });
+  if (!ipo || ipo.publicationState !== "PUBLISHED") {
+    return NextResponse.json({ error: "IPO not found" }, { status: 404 });
+  }
+
   await prisma.watchlistItem.upsert({
     where: { userId_ipoId: { userId: session.user.id, ipoId } },
     update: {},

@@ -130,6 +130,7 @@ function shapeIpo(ipo: IpoWithRelations): BoardIpo {
 
 export async function getBoardIpos(): Promise<BoardIpo[]> {
   const ipos = await prisma.ipo.findMany({
+    where: { publicationState: "PUBLISHED" },
     include: IPO_INCLUDE,
     orderBy: { createdAt: "asc" },
   });

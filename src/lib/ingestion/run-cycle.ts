@@ -7,6 +7,7 @@ import { ipojiAdapter } from "@/lib/gmp/adapters/ipoji";
 import { sahiSubscriptionAdapter } from "@/lib/subscription/adapters/sahi";
 import { syncIpoStatuses } from "@/lib/ipo-status";
 import { notifyWatchersOfTransitions } from "@/lib/email/reminders";
+import { runDiscovery, type DiscoverySummary } from "@/lib/discovery/discover";
 import type { GmpAdapter } from "@/lib/gmp/types";
 
 const GMP_ADAPTERS: GmpAdapter[] = [ipoWatchAdapter, sahiAdapter, ipojiAdapter];
@@ -23,11 +24,22 @@ export type IngestionSummary = {
   perSource: Record<string, { success: number; failure: number }>;
   statusTransitions: number;
   reminders: { sent: number; failed: number; skipped: number };
+  discovery: DiscoverySummary | { error: string };
 };
 
 export async function runIngestionCycle(): Promise<IngestionSummary> {
   const transitions = await syncIpoStatuses();
   const reminders = await notifyWatchersOfTransitions(transitions);
+
+  // New-IPO discovery is independent of everything else in this cycle —
+  // a failure here (e.g. the source's page layout changed) shouldn't
+  // block GMP/subscription ingestion or reminders from still running.
+  let discovery: IngestionSummary["discovery"];
+  try {
+    discovery = await runDiscovery();
+  } catch (e) {
+    discovery = { error: (e as Error).message };
+  }
 
   const sourceRows = await Promise.all(
     GMP_ADAPTERS.map((adapter) =>
@@ -52,6 +64,7 @@ export async function runIngestionCycle(): Promise<IngestionSummary> {
     perSource: Object.fromEntries(GMP_ADAPTERS.map((a) => [a.key, { success: 0, failure: 0 }])),
     statusTransitions: transitions.length,
     reminders,
+    discovery,
   };
 
   for (const ipo of ipos) {

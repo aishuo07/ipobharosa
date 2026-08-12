@@ -46,6 +46,12 @@ enum ReminderStatus {
   FAILED
 }
 
+enum PublicationState {
+  DRAFT
+  PUBLISHED
+  REJECTED
+}
+
 // ---------- core IPO data ----------
 
 model Company {
@@ -79,6 +85,15 @@ model Ipo {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // Discovery pipeline: a scraped candidate is never shown on the public
+  // board until a human reviews and approves it — see CorrectionLog for
+  // the publish/reject audit trail.
+  publicationState PublicationState @default(DRAFT)
+  discoveredFrom   String[] // e.g. ["ipowatch", "sahi"] — which sources found this candidate
+  discoveredAt     DateTime?
+  reviewedBy       String?
+  reviewedAt       DateTime?
+
   documents             Document[]
   gmpObservations       GmpObservation[]
   gmpSnapshots          GmpSnapshot[]
@@ -89,6 +104,7 @@ model Ipo {
   reminderDeliveries    ReminderDelivery[]
 
   @@index([status])
+  @@index([publicationState])
 }
 
 model Document {
