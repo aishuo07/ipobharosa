@@ -15,16 +15,16 @@ export default function TermsPage() {
       <p>
         IPOBharosa aggregates publicly available information about Indian IPOs — grey market premium,
         subscription figures, filing dates, and financials — from third-party sources, and lets signed-in
-        users maintain a watchlist and receive status-change email reminders. See our{" "}
+        users maintain a watchlist. Email status-change reminders are planned but not live yet. See our{" "}
         <a href="/methodology">Methodology</a> for exactly how that data is sourced, and our{" "}
         <a href="/disclaimer">Disclaimer</a> for what it isn&apos;t.
       </p>
 
       <h2>Accounts</h2>
       <p>
-        You need an account (via Google sign-in or email magic link) to use the watchlist and reminder
-        features. You&apos;re responsible for keeping your sign-in access secure. Don&apos;t use the service
-        to scrape, automate against, or place unreasonable load on our systems.
+        You need an account (currently via Google sign-in) to use the watchlist feature. You&apos;re
+        responsible for keeping your sign-in access secure. Don&apos;t use the service to scrape, automate
+        against, or place unreasonable load on our systems.
       </p>
 
       <h2>No warranty</h2>
