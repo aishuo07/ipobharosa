@@ -109,7 +109,14 @@ model Ipo {
   gmpObservations       GmpObservation[]
   gmpSnapshots          GmpSnapshot[]
   subscriptionSnapshots SubscriptionSnapshot[]
+
+  // New production financial pipeline
+  financialDocuments    FinancialDocument[] @relation("FinancialDocuments")
+  publishedFinancials   FinancialPublished[] @relation("PublishedFinancials")
+
+  // Legacy (to be deprecated after migration)
   financialSnapshots    FinancialSnapshot[]
+
   watchlistItems        WatchlistItem[]
   alertSubscriptions    AlertSubscription[]
   reminderDeliveries    ReminderDelivery[]
@@ -196,8 +203,161 @@ model SubscriptionSnapshot {
   @@index([ipoId, capturedAt])
 }
 
-// ---------- financials: reviewed/manual entry, not scraped-and-trusted ----------
+// ---------- financials: production-grade verification pipeline ----------
 
+enum FinancialDocumentType {
+  DRHP
+  RHP
+  PROSPECTUS
+  CORRIGENDUM
+  ADDENDUM
+}
+
+enum ExtractionStatus {
+  EXTRACTED
+  NORMALIZED
+  VALIDATION_PASSED
+  VALIDATION_FAILED
+  OCR_FALLBACK
+}
+
+enum FinancialRevisionState {
+  EXTRACTED           // raw extraction done
+  NORMALIZED          // units/scope normalized
+  VALIDATED           // deterministic rules passed or identified issues
+  AUTO_VERIFIED       // high-confidence, no human intervention needed
+  REVIEW_REQUIRED     // extraction issues, ambiguity, or mismatch detected
+  APPROVED            // human approved
+  PUBLISHED           // in production, immutable
+  SUPERSEDED          // newer document/revision published
+  REVOKED             // found to be incorrect
+}
+
+enum FinancialMetric {
+  REVENUE
+  PAT
+  EPS
+  EBITDA
+  ASSETS
+  NET_WORTH
+  BORROWINGS
+}
+
+model FinancialDocument {
+  id                 String                 @id @default(uuid())
+  ipo                Ipo                    @relation("FinancialDocuments", fields: [ipoId], references: [id], onDelete: Cascade)
+  ipoId              String
+  documentType       FinancialDocumentType
+  sourceUrl          String                 // official SEBI/NSE/BSE link
+  sourceHost         String                 // sebi.gov.in | nseindia.com | bseindia.com
+  fetchedAt          DateTime
+  sha256             String                 // immutable checksum for audit
+  pageCount          Int?
+  ocrRequired        Boolean  @default(false)
+  ocrModel           String? // which OCR version was used
+  publicationDate    DateTime? // document publication date (not fetch date)
+  isLatestForType    Boolean  @default(true) // helps select precedence when multiple RHPs exist
+
+  extractions FinancialExtraction[]
+  createdAt   DateTime              @default(now())
+
+  @@index([ipoId, documentType])
+  @@index([sourceUrl])
+  @@unique([sha256])
+}
+
+model FinancialExtraction {
+  id                String             @id @default(uuid())
+  document          FinancialDocument  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId        String
+  metric            FinancialMetric
+  originalLabel     String             // exact text as printed in source
+  rawValue          String             // before normalization
+  normalizedValue   Decimal?           // parsed, unit-converted
+  currency          String @default("INR")
+  unit              String @default("Cr") // Cr | Mn | actual number
+  fiscalYear        String             // e.g. "31 Mar 2026"
+  fiscalYearStart   DateTime?
+  fiscalYearEnd     DateTime?
+  scope             String @default("Consolidated") // Consolidated | Standalone
+  auditStatus       String @default("Audited") // Audited | Restated | Provisional
+  pageNumber        Int?
+  tableReference    String? // "Table 5.2" or similar
+  extractionStatus  ExtractionStatus   @default(EXTRACTED)
+  extractionConfidence Float            // 0.0 to 1.0
+  ocrUsed           Boolean            @default(false)
+  ocrConfidence     Float? // non-null only if ocrUsed
+  validationIssues  String[]           // array of flagged problems
+  createdAt         DateTime           @default(now())
+
+  revisions FinancialRevision[] @relation("ExtractionRevisions")
+
+  @@index([documentId, metric])
+  @@index([fiscalYear])
+}
+
+model FinancialRevision {
+  id              String                @id @default(uuid())
+  extraction      FinancialExtraction   @relation("ExtractionRevisions", fields: [extractionId], references: [id], onDelete: Cascade)
+  extractionId    String
+  state           FinancialRevisionState @default(EXTRACTED)
+
+  // Comparison to existing snapshot (if any)
+  existingValue   Decimal?
+  existingSource  String?
+  mismatchPercent Float?
+
+  // Validation decision
+  validationPass  Boolean?
+  validationNotes String?
+
+  // Review decision
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  reviewDecision  String? // "approved" | "rejected_reason"
+  reviewNotes     String?
+
+  // Published reference (if applicable)
+  publishedId     String?
+  published       FinancialPublished? @relation(fields: [publishedId], references: [id])
+
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([state, extractionId])
+}
+
+model FinancialPublished {
+  id              String              @id @default(uuid())
+  ipo             Ipo                 @relation("PublishedFinancials", fields: [ipoId], references: [id], onDelete: Cascade)
+  ipoId           String
+  metric          FinancialMetric
+  value           Decimal
+  fiscalYear      String
+
+  // Source audit trail
+  sourceDocument  String              // DRHP | RHP | PROSPECTUS (type)
+  sourceUrl       String
+  pageNumber      Int?
+  extractionDate  DateTime
+  verificationDate DateTime
+  approvedBy      String?
+
+  // Versioning
+  revisionNumber  Int @default(1)
+  supersededBy    String? // ID of newer published record if this is outdated
+  revokedReason   String?
+
+  // Immutable record
+  publishedAt     DateTime            @default(now())
+
+  revisions       FinancialRevision[]
+
+  @@index([ipoId, metric])
+  @@unique([ipoId, metric, fiscalYear, revisionNumber])
+}
+
+// Legacy: deprecated in favour of FinancialPublished, kept for transition
 model FinancialSnapshot {
   id         String   @id @default(uuid())
   ipo        Ipo      @relation(fields: [ipoId], references: [id], onDelete: Cascade)
@@ -209,8 +369,8 @@ model FinancialSnapshot {
   ronwPct    Decimal?
   debtEquity Decimal?
   eps        Decimal?
-  source     String? // e.g. "scraper:sahi.com" or "manual:<admin email>"
-  verified   Boolean  @default(false) // gates display — see CorrectionLog for the audit trail
+  source     String?
+  verified   Boolean  @default(false)
   verifiedBy String?
   verifiedAt DateTime?
   createdAt  DateTime @default(now())
