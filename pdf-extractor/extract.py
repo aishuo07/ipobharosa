@@ -4,7 +4,6 @@ RHP/DRHP Financial Table Extraction
 Parses Indian IPO prospectus documents and extracts financial metrics.
 """
 
-import pdfplumber
 import re
 import requests
 import json
@@ -13,6 +12,8 @@ from typing import Optional, List, Dict, Any
 from urllib.parse import urlparse
 import hashlib
 from io import BytesIO
+from pypdf import PdfReader
+from targeted import extract_from_pages
 
 MAX_PDF_BYTES = 100 * 1024 * 1024
 
@@ -159,47 +160,14 @@ def extract_from_pdf(pdf_url: str, ipo_id: str, doc_type: str) -> Dict[str, Any]
 
         document_sha256 = hashlib.sha256(pdf_bytes).hexdigest()
 
-        # Open with pdfplumber
-        with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
-            page_count = len(pdf.pages)
-            print(f"📄 PDF has {page_count} pages")
-
-            # Search for financial tables
-            # In Indian RHPs, financials usually page 8-20
-            start_page = min(7, max(0, page_count // 3))
-            end_page = min(page_count, start_page + 25)
-
-            print(f"🔍 Scanning pages {start_page+1}-{end_page} for financial tables...")
-
-            for page_idx in range(start_page, end_page):
-                page = pdf.pages[page_idx]
-                page_text = page.extract_text()
-
-                if not page_text:
-                    continue
-
-                # Check if page has financial keywords
-                has_financial = any(
-                    keyword.lower() in page_text.lower()
-                    for keyword in METRICS_MAP.keys()
-                )
-
-                if not has_financial:
-                    continue
-
-                print(f"  📊 Found financial content on page {page_idx + 1}")
-
-                # Try to extract tables from this page
-                tables = page.extract_tables()
-
-                if not tables:
-                    # Fallback: parse text line by line
-                    lines = page_text.split('\n')
-                    extractions.extend(extract_from_lines(lines, page_idx + 1))
-                else:
-                    # Process each table
-                    for table_idx, table in enumerate(tables):
-                        extractions.extend(extract_from_table(table, page_idx + 1, table_idx))
+        reader = PdfReader(BytesIO(pdf_bytes))
+        page_count = len(reader.pages)
+        print(f"📄 PDF has {page_count} pages")
+        print("🔍 Locating explicit summary/restated financial statements...")
+        page_texts = ((page.extract_text() or "") for page in reader.pages)
+        extractions, evidence_pages = extract_from_pages(page_texts)
+        if evidence_pages:
+            print(f"  📊 Filing-backed summary found on PDF page(s): {', '.join(map(str, evidence_pages))}")
 
         # Dedup by metric + fiscal year
         seen = set()
@@ -210,10 +178,10 @@ def extract_from_pdf(pdf_url: str, ipo_id: str, doc_type: str) -> Dict[str, Any]
                 seen.add(key)
                 unique.append(e)
 
-        quality = "HIGH" if len(unique) > 5 else "MEDIUM" if len(unique) > 2 else "LOW"
+        quality = "HIGH" if len(unique) >= 6 else "MEDIUM" if len(unique) >= 3 else "LOW"
 
         if len(unique) == 0:
-            issues.append(f"No financial metrics detected in {page_count} pages")
+            issues.append(f"No complete, filing-backed summary metrics detected in {page_count} pages")
 
         print(f"\n✅ Extracted {len(unique)} metrics (quality: {quality})")
 

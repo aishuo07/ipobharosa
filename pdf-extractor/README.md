@@ -1,11 +1,12 @@
-# Experimental financial candidate extractor
+# Filing-backed financial candidate extractor
 
 This local Python tool produces review candidates from an official RHP/DRHP.
 It is **not** a source of truth and it never publishes financial values.
 
-Current parser limitations include imperfect table detection, uncertain units,
-fiscal-period inference, consolidated/standalone scope, and audit/restatement
-classification. Every submitted candidate is routed to the human review queue.
+The worker locates explicit summary/restated profit-and-loss statements and
+submits only rows carrying an explicit unit, fiscal period, scope, page, and
+audit status. Unsupported layouts fail closed. Every submitted candidate is
+routed to the human review queue; extraction never publishes values.
 
 Run extraction without mutation:
 
@@ -27,7 +28,6 @@ ADMIN_TOKEN='<development-token>' \
   https://your-preview.vercel.app --submit
 ```
 
-Do not point this tool at Production until the later document-ingestion,
-native-extraction, semantic-validation, and review-hardening PRs are complete.
-The Preview must also set `ENABLE_EXPERIMENTAL_FINANCIAL_SUBMISSION=true`;
-Production must leave that flag unset.
+The scheduled GitHub Actions worker reads captured, unprocessed filing records
+through the token-protected API. Set `ADMIN_BEARER_TOKEN` in GitHub Actions and
+Vercel, and `ENABLE_EXPERIMENTAL_FINANCIAL_SUBMISSION=true` in Vercel.

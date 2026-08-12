@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { POST, parseFinancialSubmission } from "./route";
+import { GET, POST, parseFinancialSubmission } from "./route";
 
 const validPayload = {
   ipoId: "ipo-development-only",
@@ -61,5 +61,10 @@ describe("financial extraction submission boundary", () => {
     const response = await POST(request);
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toEqual({ error: "Experimental financial submission is disabled" });
+  });
+
+  it("keeps the worker document queue disabled by default", async () => {
+    const response = await GET(new NextRequest("https://preview.example/api/admin/submit-extracted-financials"));
+    expect(response.status).toBe(404);
   });
 });

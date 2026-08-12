@@ -196,3 +196,39 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+/** Lists only captured filings that have not produced extraction candidates. */
+export async function GET(request: NextRequest) {
+  if (process.env.ENABLE_EXPERIMENTAL_FINANCIAL_SUBMISSION !== "true") {
+    return NextResponse.json({ error: "Experimental financial submission is disabled" }, { status: 404 });
+  }
+  const adminBearerToken = process.env.ADMIN_BEARER_TOKEN;
+  const authHeader = request.headers.get("authorization");
+  if (!adminBearerToken || !authHeader?.startsWith("Bearer ")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const tokenBuffer = Buffer.from(authHeader.slice(7));
+  const expectedBuffer = Buffer.from(adminBearerToken);
+  if (tokenBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(tokenBuffer, expectedBuffer)) {
+    return NextResponse.json({ error: "Invalid token" }, { status: 403 });
+  }
+  const documents = await prisma.financialDocument.findMany({
+    where: { extractions: { none: {} }, isLatestForType: true },
+    select: {
+      ipoId: true,
+      documentType: true,
+      sourceUrl: true,
+      ipo: { select: { company: { select: { name: true } } } },
+    },
+    orderBy: { createdAt: "asc" },
+    take: 10,
+  });
+  return NextResponse.json({
+    documents: documents.map((document) => ({
+      ipoId: document.ipoId,
+      companyName: document.ipo.company.name,
+      documentType: document.documentType,
+      sourceUrl: document.sourceUrl,
+    })),
+  });
+}
