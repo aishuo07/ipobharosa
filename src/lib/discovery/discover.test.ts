@@ -248,6 +248,24 @@ describe("runDiscovery", () => {
     const summary = await runDiscovery();
 
     expect(summary.queueCapped).toBe(true);
+    expect(summary.deferredCandidates).toBe(1);
     expect(summary.draftsCreated + summary.autoPublished + summary.quarantined).toBe(1);
+  });
+
+  it("processes a bounded batch and reports the remaining candidates", async () => {
+    const suffixes = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel", "India", "Juliet", "Kilo", "Lima", "Mike"];
+    listingResult = suffixes.map((suffix) => ({
+      companyName: `Candidate ${suffix}`,
+      detailUrl: `https://ipowatch.in/candidate-${suffix.toLowerCase()}-ipo/`,
+      board: "MAINBOARD" as const,
+    }));
+    factsImpl = async (_url, name) => validFacts(name);
+
+    const summary = await runDiscovery();
+
+    expect(summary.candidatesSeen).toBe(13);
+    expect(summary.draftsCreated + summary.autoPublished + summary.quarantined).toBe(10);
+    expect(summary.deferredCandidates).toBe(3);
+    expect(summary.queueCapped).toBe(false);
   });
 });
