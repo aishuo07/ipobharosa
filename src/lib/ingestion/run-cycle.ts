@@ -22,12 +22,12 @@ export type IngestionSummary = {
   subscription: { snapshotsWritten: number; failed: number };
   perSource: Record<string, { success: number; failure: number }>;
   statusTransitions: number;
-  remindersSent: number;
+  reminders: { sent: number; failed: number; skipped: number };
 };
 
 export async function runIngestionCycle(): Promise<IngestionSummary> {
   const transitions = await syncIpoStatuses();
-  const remindersSent = await notifyWatchersOfTransitions(transitions);
+  const reminders = await notifyWatchersOfTransitions(transitions);
 
   const sourceRows = await Promise.all(
     GMP_ADAPTERS.map((adapter) =>
@@ -51,7 +51,7 @@ export async function runIngestionCycle(): Promise<IngestionSummary> {
     subscription: { snapshotsWritten: 0, failed: 0 },
     perSource: Object.fromEntries(GMP_ADAPTERS.map((a) => [a.key, { success: 0, failure: 0 }])),
     statusTransitions: transitions.length,
-    remindersSent,
+    reminders,
   };
 
   for (const ipo of ipos) {

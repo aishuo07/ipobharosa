@@ -3,6 +3,8 @@ import { sendEmail } from "@/lib/email/resend";
 import type { StatusTransition } from "@/lib/ipo-status";
 
 const SITE_URL = "https://ipobharosa.vercel.app";
+const MAX_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 1500;
 
 const TEMPLATES: Record<string, (companyName: string) => { subject: string; body: string }> = {
   "UPCOMING->OPEN": (name) => ({
@@ -15,18 +17,32 @@ const TEMPLATES: Record<string, (companyName: string) => { subject: string; body
   }),
 };
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export type ReminderSummary = { sent: number; failed: number; skipped: number };
+
 /**
  * Watchlisting an IPO implicitly opts a user into these transition
  * emails for v1 — there's no separate alert-preferences UI yet, so this
  * is simpler than the AlertSubscription table's full trigger-type
- * granularity implies, by design.
+ * granularity implies, by design. Removing the IPO from your watchlist
+ * (the existing DELETE /api/watchlist/[ipoId] route) is the unsubscribe
+ * path — no separate token system yet.
+ *
+ * Delivery is tracked per (user, ipo, transition) in ReminderDelivery:
+ * a row already marked SENT is never re-sent, even across duplicate
+ * cron invocations, and a FAILED row is retried on the next transition
+ * check rather than silently dropped.
  */
-export async function notifyWatchersOfTransitions(transitions: StatusTransition[]): Promise<number> {
-  let sent = 0;
+export async function notifyWatchersOfTransitions(transitions: StatusTransition[]): Promise<ReminderSummary> {
+  const summary: ReminderSummary = { sent: 0, failed: 0, skipped: 0 };
 
   for (const t of transitions) {
     const template = TEMPLATES[`${t.from}->${t.to}`];
     if (!template) continue;
+    const transitionKey = `${t.from}->${t.to}`;
 
     const watchers = await prisma.watchlistItem.findMany({
       where: { ipoId: t.ipoId },
@@ -38,19 +54,74 @@ export async function notifyWatchersOfTransitions(transitions: StatusTransition[
     const html = `
       <p>${body}</p>
       <p><a href="${SITE_URL}">View on IPOBharosa</a></p>
-      <p style="color:#888;font-size:12px">You're getting this because you added ${t.companyName} to your IPOBharosa watchlist.</p>
+      <p style="color:#888;font-size:12px">
+        You're getting this because you added ${t.companyName} to your IPOBharosa watchlist.
+        <a href="${SITE_URL}/watchlist">Manage your watchlist</a> to stop these.
+      </p>
     `.trim();
 
     for (const watcher of watchers) {
       if (!watcher.user.email) continue;
-      try {
-        await sendEmail({ to: watcher.user.email, subject, html });
-        sent++;
-      } catch (e) {
-        console.error(`Failed to send reminder to ${watcher.user.email}:`, (e as Error).message);
+
+      const existing = await prisma.reminderDelivery.findUnique({
+        where: {
+          userId_ipoId_transition: { userId: watcher.userId, ipoId: t.ipoId, transition: transitionKey },
+        },
+      });
+      if (existing?.status === "SENT") {
+        summary.skipped++;
+        continue;
+      }
+
+      let success = false;
+      let lastError: string | null = null;
+      let attempts = 0;
+      while (attempts < MAX_ATTEMPTS && !success) {
+        attempts++;
+        try {
+          await sendEmail({ to: watcher.user.email, subject, html });
+          success = true;
+        } catch (e) {
+          lastError = (e as Error).message;
+          if (attempts < MAX_ATTEMPTS) await sleep(RETRY_DELAY_MS);
+        }
+      }
+
+      const priorAttempts = existing?.attempts ?? 0;
+      await prisma.reminderDelivery.upsert({
+        where: {
+          userId_ipoId_transition: { userId: watcher.userId, ipoId: t.ipoId, transition: transitionKey },
+        },
+        create: {
+          userId: watcher.userId,
+          ipoId: t.ipoId,
+          transition: transitionKey,
+          status: success ? "SENT" : "FAILED",
+          attempts,
+          lastError: success ? null : lastError,
+          sentAt: success ? new Date() : null,
+        },
+        update: {
+          status: success ? "SENT" : "FAILED",
+          attempts: priorAttempts + attempts,
+          lastError: success ? null : lastError,
+          sentAt: success ? new Date() : undefined,
+        },
+      });
+
+      if (success) {
+        summary.sent++;
+      } else {
+        summary.failed++;
+        // Visible in Vercel function logs — the summary object returned
+        // from the cron route surfaces the count too, so a failure run
+        // is never just a silently-swallowed catch block.
+        console.error(
+          `Reminder delivery FAILED after ${attempts} attempt(s) for ${watcher.user.email} (${t.companyName} ${transitionKey}): ${lastError}`,
+        );
       }
     }
   }
 
-  return sent;
+  return summary;
 }

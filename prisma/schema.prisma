@@ -41,6 +41,11 @@ enum AlertTrigger {
   LISTING
 }
 
+enum ReminderStatus {
+  SENT
+  FAILED
+}
+
 // ---------- core IPO data ----------
 
 model Company {
@@ -81,6 +86,7 @@ model Ipo {
   financialSnapshots    FinancialSnapshot[]
   watchlistItems        WatchlistItem[]
   alertSubscriptions    AlertSubscription[]
+  reminderDeliveries    ReminderDelivery[]
 
   @@index([status])
 }
@@ -215,6 +221,7 @@ model User {
   sessions           Session[]
   watchlistItems     WatchlistItem[]
   alertSubscriptions AlertSubscription[]
+  reminderDeliveries ReminderDelivery[]
 }
 
 model Account {
@@ -277,4 +284,27 @@ model AlertSubscription {
   createdAt DateTime     @default(now())
 
   @@unique([userId, ipoId, trigger])
+}
+
+// One row per (user, ipo, transition) ever — the unique constraint is
+// the actual dedup guarantee: even if the cron somehow ran twice for
+// the same transition, a second attempt sees the existing SENT row and
+// skips instead of double-emailing. FAILED rows are retried on the next
+// cycle rather than silently dropped.
+model ReminderDelivery {
+  id         String         @id @default(uuid())
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  ipo        Ipo            @relation(fields: [ipoId], references: [id], onDelete: Cascade)
+  ipoId      String
+  transition String // e.g. "UPCOMING->OPEN"
+  status     ReminderStatus
+  attempts   Int            @default(1)
+  lastError  String?
+  sentAt     DateTime?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@unique([userId, ipoId, transition])
+  @@index([status])
 }
