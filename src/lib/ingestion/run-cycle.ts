@@ -14,13 +14,12 @@ import { sendEmail } from "@/lib/email/resend";
 import type { GmpAdapter } from "@/lib/gmp/types";
 
 const ALERT_RECIPIENT = "aish.iiitb@gmail.com";
-
+const BATCH_SIZE = 3;
 const GMP_ADAPTERS: GmpAdapter[] = [ipoWatchAdapter, sahiAdapter, ipojiAdapter];
-
-// GMP is relevant right up to listing; subscription only exists during
-// the open/awaiting-allotment window.
 const GMP_ELIGIBLE_STATUSES = ["UPCOMING", "OPEN", "CLOSED"] as const;
 const SUBSCRIPTION_ELIGIBLE_STATUSES = ["OPEN", "CLOSED"] as const;
+
+export type IngestionStage = "prepare" | "gmp" | "subscription" | "finalize" | "complete";
 
 export type IngestionSummary = {
   ipoCount: number;
@@ -33,7 +32,22 @@ export type IngestionSummary = {
   skippedDueToLock?: boolean;
 };
 
-const EMPTY_SUMMARY: IngestionSummary = {
+export type IngestionCheckpoint = {
+  version: 1;
+  stage: IngestionStage;
+  cursor: number;
+  attempts: number;
+  lastError: string | null;
+  summary: IngestionSummary;
+};
+
+export type IngestionStepResult = {
+  runId: string | null;
+  complete: boolean;
+  checkpoint: IngestionCheckpoint;
+};
+
+export const EMPTY_SUMMARY: IngestionSummary = {
   ipoCount: 0,
   gmp: { snapshotsWritten: 0, ipoWithNoData: 0 },
   subscription: { snapshotsWritten: 0, failed: 0 },
@@ -43,186 +57,205 @@ const EMPTY_SUMMARY: IngestionSummary = {
   discovery: { candidatesSeen: 0, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, fetchFailed: [], dbErrors: [], queueCapped: false },
 };
 
-/**
- * Public entry point: acquires the cron lock (refusing to run if another
- * invocation is already in flight — see lib/ingestion/lock.ts), runs the
- * actual cycle, always releases the lock, persists a structured
- * IngestionRun record either way, and emails a heads-up if anything in
- * the run looks wrong rather than leaving it to be noticed later.
- */
-export async function runIngestionCycle(startedBy = "cron"): Promise<IngestionSummary> {
-  const startedAt = new Date();
-  const acquired = await acquireIngestionLock(startedBy);
-  if (!acquired) {
-    const summary = { ...EMPTY_SUMMARY, skippedDueToLock: true };
-    await prisma.ingestionRun.create({
-      data: { startedAt, finishedAt: new Date(), ok: true, skippedDueToLock: true, summary },
-    });
-    return summary;
-  }
-
-  let summary: IngestionSummary = EMPTY_SUMMARY;
-  let ok = true;
-  let error: string | undefined;
-  try {
-    summary = await runIngestionCycleInner();
-  } catch (e) {
-    ok = false;
-    error = (e as Error).message;
-    throw e;
-  } finally {
-    await releaseIngestionLock();
-    await prisma.ingestionRun.create({
-      data: { startedAt, finishedAt: new Date(), ok, summary, error },
-    });
-
-    const reasons = ok ? computeAlertReasons(summary) : [`Ingestion cycle crashed entirely: ${error}`];
-    if (reasons.length > 0) {
-      try {
-        await sendEmail({
-          to: ALERT_RECIPIENT,
-          subject: `IPOBharosa ingestion alert: ${reasons.length} issue(s)`,
-          html: `<p>This ingestion run flagged:</p><ul>${reasons.map((r) => `<li>${r}</li>`).join("")}</ul><pre>${JSON.stringify(summary, null, 2)}</pre>`,
-        });
-      } catch (e) {
-        // An alert-email failure must never mask the run's own result.
-        console.error("Failed to send ingestion alert email:", (e as Error).message);
-      }
-    }
-  }
-  return summary;
+export function initialCheckpoint(): IngestionCheckpoint {
+  return { version: 1, stage: "prepare", cursor: 0, attempts: 0, lastError: null, summary: structuredClone(EMPTY_SUMMARY) };
 }
 
-async function runIngestionCycleInner(): Promise<IngestionSummary> {
+export function readCheckpoint(value: unknown): IngestionCheckpoint {
+  if (!value || typeof value !== "object") return initialCheckpoint();
+  const candidate = value as Partial<IngestionCheckpoint>;
+  if (candidate.version !== 1 || !candidate.stage || !candidate.summary) return initialCheckpoint();
+  return {
+    version: 1,
+    stage: candidate.stage,
+    cursor: Number.isInteger(candidate.cursor) ? candidate.cursor ?? 0 : 0,
+    attempts: Number.isInteger(candidate.attempts) ? candidate.attempts ?? 0 : 0,
+    lastError: typeof candidate.lastError === "string" ? candidate.lastError : null,
+    summary: candidate.summary,
+  };
+}
+
+function nextStage(checkpoint: IngestionCheckpoint, stage: IngestionStage): IngestionCheckpoint {
+  return { ...checkpoint, stage, cursor: 0, lastError: null };
+}
+
+async function persistCheckpoint(runId: string, checkpoint: IngestionCheckpoint, complete = false) {
+  await prisma.ingestionRun.update({
+    where: { id: runId },
+    data: {
+      summary: checkpoint,
+      error: checkpoint.lastError,
+      ok: complete,
+      finishedAt: complete ? new Date() : null,
+    },
+  });
+}
+
+async function getOrCreateRun() {
+  const active = await prisma.ingestionRun.findFirst({
+    where: { finishedAt: null, skippedDueToLock: false },
+    orderBy: { startedAt: "desc" },
+  });
+  if (active) return active;
+  return prisma.ingestionRun.create({ data: { ok: false, summary: initialCheckpoint() } });
+}
+
+/** Executes one bounded, resumable unit of work. The caller repeats until complete. */
+export async function runIngestionStep(startedBy = "cron"): Promise<IngestionStepResult> {
+  const acquired = await acquireIngestionLock(startedBy);
+  if (!acquired) {
+    return { runId: null, complete: false, checkpoint: { ...initialCheckpoint(), summary: { ...EMPTY_SUMMARY, skippedDueToLock: true } } };
+  }
+
+  let runId: string | null = null;
+  let checkpoint = initialCheckpoint();
+  try {
+    const run = await getOrCreateRun();
+    runId = run.id;
+    checkpoint = readCheckpoint(run.summary);
+    checkpoint = { ...checkpoint, attempts: checkpoint.attempts + 1, lastError: null };
+
+    if (checkpoint.stage === "prepare") checkpoint = await runPrepare(checkpoint);
+    else if (checkpoint.stage === "gmp") checkpoint = await runGmpBatch(run.id, run.startedAt, checkpoint);
+    else if (checkpoint.stage === "subscription") checkpoint = await runSubscriptionBatch(run.id, run.startedAt, checkpoint);
+    else if (checkpoint.stage === "finalize") checkpoint = nextStage(checkpoint, "complete");
+
+    const complete = checkpoint.stage === "complete";
+    await persistCheckpoint(run.id, checkpoint, complete);
+    if (complete) await sendRunAlerts(checkpoint.summary);
+    return { runId: run.id, complete, checkpoint };
+  } catch (error) {
+    checkpoint = { ...checkpoint, lastError: error instanceof Error ? error.message : String(error) };
+    if (runId) await persistCheckpoint(runId, checkpoint);
+    throw error;
+  } finally {
+    await releaseIngestionLock();
+  }
+}
+
+async function runPrepare(checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
   const transitions = await syncIpoStatuses();
   const reminders = await notifyWatchersOfTransitions(transitions);
-
-  // New-IPO discovery is independent of everything else in this cycle —
-  // a failure here (e.g. the source's page layout changed) shouldn't
-  // block GMP/subscription ingestion or reminders from still running.
   let discovery: IngestionSummary["discovery"];
   try {
     discovery = await runDiscovery();
-  } catch (e) {
-    discovery = { error: (e as Error).message };
+  } catch (error) {
+    discovery = { error: error instanceof Error ? error.message : String(error) };
   }
+  const ipoCount = await prisma.ipo.count({ where: { status: { in: [...GMP_ELIGIBLE_STATUSES] } } });
+  return nextStage({
+    ...checkpoint,
+    summary: {
+      ...checkpoint.summary,
+      ipoCount,
+      statusTransitions: transitions.length,
+      reminders,
+      discovery,
+      perSource: Object.fromEntries(GMP_ADAPTERS.map((adapter) => [adapter.key, { success: 0, failure: 0 }])),
+    },
+  }, "gmp");
+}
 
-  const sourceRows = await Promise.all(
-    GMP_ADAPTERS.map((adapter) =>
-      prisma.gmpSource.upsert({
-        where: { adapterKey: adapter.key },
-        update: { name: adapter.name, active: true },
-        create: { name: adapter.name, baseUrl: "n/a", adapterKey: adapter.key, active: true },
-      }),
-    ),
-  );
-  const sourceIdByKey = new Map(sourceRows.map((s) => [s.adapterKey, s.id]));
+async function ensureSources() {
+  const rows = await Promise.all(GMP_ADAPTERS.map((adapter) => prisma.gmpSource.upsert({
+    where: { adapterKey: adapter.key },
+    update: { name: adapter.name, active: true },
+    create: { name: adapter.name, baseUrl: "n/a", adapterKey: adapter.key, active: true },
+  })));
+  return new Map(rows.map((row) => [row.adapterKey, row.id]));
+}
 
+async function runGmpBatch(runId: string, capturedAt: Date, checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
   const ipos = await prisma.ipo.findMany({
     where: { status: { in: [...GMP_ELIGIBLE_STATUSES] } },
     include: { company: true },
+    orderBy: { id: "asc" },
+    skip: checkpoint.cursor,
+    take: BATCH_SIZE,
   });
-
-  const summary: IngestionSummary = {
-    ipoCount: ipos.length,
-    gmp: { snapshotsWritten: 0, ipoWithNoData: 0 },
-    subscription: { snapshotsWritten: 0, failed: 0 },
-    perSource: Object.fromEntries(GMP_ADAPTERS.map((a) => [a.key, { success: 0, failure: 0 }])),
-    statusTransitions: transitions.length,
-    reminders,
-    discovery,
-  };
-
+  if (ipos.length === 0) return nextStage(checkpoint, "subscription");
+  const sourceIds = await ensureSources();
+  let next = checkpoint;
   for (const ipo of ipos) {
     const observations = await collectObservations(ipo.company.name, GMP_ADAPTERS);
-    const capturedAt = new Date();
-
-    await Promise.all(
-      observations.map(async (obs) => {
-        const sourceId = sourceIdByKey.get(obs.sourceKey);
-        if (!sourceId) return;
-
-        summary.perSource[obs.sourceKey][obs.success ? "success" : "failure"]++;
-
-        await prisma.gmpObservation.create({
-          data: {
-            ipoId: ipo.id,
-            sourceId,
-            value: obs.success ? obs.value : null,
-            success: obs.success,
-            errorMessage: obs.success ? null : obs.error,
-            capturedAt,
-          },
-        });
-
-        await prisma.sourceHealth.upsert({
-          where: { sourceId },
-          update: obs.success
-            ? { lastSuccessAt: capturedAt, lastError: null, consecutiveFailures: 0, degraded: false }
-            : {
-                lastError: obs.error,
-                consecutiveFailures: { increment: 1 },
-              },
-          create: obs.success
-            ? { sourceId, lastSuccessAt: capturedAt, consecutiveFailures: 0, degraded: false }
-            : { sourceId, lastError: obs.error, consecutiveFailures: 1 },
-        });
-      }),
-    );
-
-    // A source that's failed several cycles in a row is marked degraded —
-    // still retried every cycle (nothing here excludes it above), just
-    // flagged for observability.
-    const health = await prisma.sourceHealth.findMany({
-      where: { sourceId: { in: [...sourceIdByKey.values()] } },
-    });
-    await Promise.all(
-      health
-        .filter((h) => h.consecutiveFailures >= 3 && !h.degraded)
-        .map((h) => prisma.sourceHealth.update({ where: { id: h.id }, data: { degraded: true } })),
-    );
-
     const values = successfulValues(observations);
     const snapshot = computeGmpSnapshot(values);
-    if (snapshot) {
-      await prisma.gmpSnapshot.create({
-        data: {
-          ipoId: ipo.id,
-          medianValue: snapshot.medianValue,
-          sourceCount: snapshot.sourceCount,
-          maxDeviation: snapshot.maxDeviation,
-          confidence: snapshot.confidence,
-          capturedAt,
-        },
-      });
-      summary.gmp.snapshotsWritten++;
-    } else {
-      // All sources failed this cycle — deliberately not writing a
-      // snapshot, so the API keeps serving the last real one instead of
-      // inventing a value.
-      summary.gmp.ipoWithNoData++;
-    }
+    const summary = structuredClone(next.summary);
+    for (const observation of observations) summary.perSource[observation.sourceKey][observation.success ? "success" : "failure"]++;
+    if (snapshot) summary.gmp.snapshotsWritten++;
+    else summary.gmp.ipoWithNoData++;
+    const advanced = { ...next, cursor: next.cursor + 1, summary };
 
-    if ((SUBSCRIPTION_ELIGIBLE_STATUSES as readonly string[]).includes(ipo.status)) {
-      try {
-        const sub = await sahiSubscriptionAdapter.fetchSubscription(ipo.company.name);
-        await prisma.subscriptionSnapshot.create({
-          data: {
-            ipoId: ipo.id,
-            qibX: sub.qibX,
-            niiX: sub.niiX,
-            retailX: sub.retailX,
-            employeeX: sub.employeeX,
-            sourceExchange: sub.sourceExchange,
-            capturedAt,
-          },
-        });
-        summary.subscription.snapshotsWritten++;
-      } catch {
-        summary.subscription.failed++;
+    await prisma.$transaction(async (tx) => {
+      const alreadyDone = await tx.gmpObservation.count({ where: { ipoId: ipo.id, capturedAt } });
+      if (alreadyDone === 0) {
+        for (const observation of observations) {
+          const sourceId = sourceIds.get(observation.sourceKey);
+          if (!sourceId) continue;
+          await tx.gmpObservation.create({ data: {
+            ipoId: ipo.id, sourceId, capturedAt,
+            value: observation.success ? observation.value : null,
+            success: observation.success,
+            errorMessage: observation.success ? null : observation.error,
+          } });
+          await tx.sourceHealth.upsert({
+            where: { sourceId },
+            update: observation.success
+              ? { lastSuccessAt: capturedAt, lastError: null, consecutiveFailures: 0, degraded: false }
+              : { lastError: observation.error, consecutiveFailures: { increment: 1 } },
+            create: observation.success
+              ? { sourceId, lastSuccessAt: capturedAt, consecutiveFailures: 0, degraded: false }
+              : { sourceId, lastError: observation.error, consecutiveFailures: 1 },
+          });
+        }
+        if (snapshot) await tx.gmpSnapshot.create({ data: { ipoId: ipo.id, ...snapshot, capturedAt } });
       }
-    }
+      await tx.ingestionRun.update({ where: { id: runId }, data: { summary: advanced } });
+    });
+    next = advanced;
   }
+  return next;
+}
 
-  return summary;
+async function runSubscriptionBatch(runId: string, capturedAt: Date, checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
+  const ipos = await prisma.ipo.findMany({
+    where: { status: { in: [...SUBSCRIPTION_ELIGIBLE_STATUSES] } },
+    include: { company: true },
+    orderBy: { id: "asc" },
+    skip: checkpoint.cursor,
+    take: BATCH_SIZE,
+  });
+  if (ipos.length === 0) return nextStage(checkpoint, "finalize");
+  let next = checkpoint;
+  for (const ipo of ipos) {
+    let result: Awaited<ReturnType<typeof sahiSubscriptionAdapter.fetchSubscription>> | null = null;
+    let failed = false;
+    try { result = await sahiSubscriptionAdapter.fetchSubscription(ipo.company.name); }
+    catch { failed = true; }
+    const summary = structuredClone(next.summary);
+    if (failed) summary.subscription.failed++;
+    else summary.subscription.snapshotsWritten++;
+    const advanced = { ...next, cursor: next.cursor + 1, summary };
+    await prisma.$transaction(async (tx) => {
+      const alreadyDone = await tx.subscriptionSnapshot.count({ where: { ipoId: ipo.id, capturedAt } });
+      if (result && alreadyDone === 0) await tx.subscriptionSnapshot.create({ data: { ipoId: ipo.id, ...result, capturedAt } });
+      await tx.ingestionRun.update({ where: { id: runId }, data: { summary: advanced } });
+    });
+    next = advanced;
+  }
+  return next;
+}
+
+async function sendRunAlerts(summary: IngestionSummary) {
+  const reasons = computeAlertReasons(summary);
+  if (reasons.length === 0) return;
+  try {
+    await sendEmail({
+      to: ALERT_RECIPIENT,
+      subject: `IPOBharosa ingestion alert: ${reasons.length} issue(s)`,
+      html: `<p>This ingestion run flagged:</p><ul>${reasons.map((reason) => `<li>${reason}</li>`).join("")}</ul><pre>${JSON.stringify(summary, null, 2)}</pre>`,
+    });
+  } catch (error) {
+    console.error("Failed to send ingestion alert email:", error instanceof Error ? error.message : String(error));
+  }
 }

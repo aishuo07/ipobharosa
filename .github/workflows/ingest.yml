@@ -14,12 +14,20 @@ jobs:
     steps:
       - name: Trigger ingestion cycle
         run: |
-          status=$(curl -s -o /tmp/response.json -w "%{http_code}" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            https://ipobharosa.vercel.app/api/cron/ingest)
-          echo "HTTP status: $status"
-          cat /tmp/response.json
-          if [ "$status" -ne 200 ]; then
-            echo "Ingestion request failed"
-            exit 1
-          fi
+          for attempt in $(seq 1 50); do
+            status=$(curl --max-time 55 -s -o /tmp/response.json -w "%{http_code}" \
+              -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+              https://ipobharosa.vercel.app/api/cron/ingest)
+            echo "Step $attempt — HTTP $status"
+            cat /tmp/response.json
+            if [ "$status" -ne 200 ]; then
+              echo "Ingestion step failed; the persisted cursor will resume safely on retry"
+              exit 1
+            fi
+            if jq -e '.complete == true' /tmp/response.json >/dev/null; then
+              echo "Ingestion cycle complete"
+              exit 0
+            fi
+          done
+          echo "Ingestion did not complete within 50 bounded steps"
+          exit 1
