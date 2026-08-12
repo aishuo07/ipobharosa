@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runIngestionCycle } from "@/lib/ingestion/run-cycle";
+import { runIngestionStep } from "@/lib/ingestion/run-cycle";
 
 export const maxDuration = 60;
 
@@ -13,8 +13,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const summary = await runIngestionCycle();
-    return NextResponse.json({ ok: true, summary });
+    const result = await runIngestionStep();
+    return NextResponse.json({ ok: true, ...result });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }
