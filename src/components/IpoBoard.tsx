@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { BoardIpo } from "@/lib/board-data";
+import { SegmentedTabs, StatePanel, TabButton, TextInput } from "@/components/ui";
 import {
   badgeText,
   confidenceLabel,
@@ -172,43 +173,55 @@ export default function IpoBoard({
         </div>
       </div>
 
+      <section className="board-intro" aria-labelledby="board-title">
+        <div>
+          <p className="board-kicker">Indian IPO intelligence</p>
+          <h1 id="board-title">Decide with evidence, not noise.</h1>
+          <p>Dates, demand and grey-market signals—clearly sourced, honestly labelled.</p>
+        </div>
+        <div className="board-proof" aria-label="IPOBharosa data principles">
+          <span><b>{ipos.length}</b> tracked IPOs</span>
+          <span><b>3</b> GMP sources</span>
+          <span><b>0</b> paid rankings</span>
+        </div>
+      </section>
+
       <div className="controls">
-        <div className="tabs" role="tablist" aria-label="View">
-          <button
+        <SegmentedTabs label="View">
+          <TabButton
             type="button"
-            className={"tab" + (view === "board" ? " active" : "")}
+            active={view === "board"}
             onClick={() => setView("board")}
           >
             Board
-          </button>
-          <button
+          </TabButton>
+          <TabButton
             type="button"
-            className={"tab" + (view === "calendar" ? " active" : "")}
+            active={view === "calendar"}
             onClick={() => setView("calendar")}
           >
             Calendar
-          </button>
-        </div>
+          </TabButton>
+        </SegmentedTabs>
         {view === "board" && (
           <>
-            <div className="tabs" role="tablist" aria-label="IPO status">
+            <SegmentedTabs label="IPO status">
               {TAB_DEFS.map((t) => {
                 const count = ipos.filter((i) => i.status === t.key).length;
                 return (
-                  <button
+                  <TabButton
                     key={t.key}
                     type="button"
-                    role="tab"
-                    className={"tab" + (tab === t.key ? " active" : "")}
+                    active={tab === t.key}
                     onClick={() => changeTab(t.key)}
                   >
                     {t.label} <span className="n">{count}</span>
-                  </button>
+                  </TabButton>
                 );
               })}
-            </div>
+            </SegmentedTabs>
             <div className="search-wrap">
-              <input
+              <TextInput
                 type="search"
                 className="search-box"
                 placeholder="Search by company or sector"
@@ -256,9 +269,9 @@ export default function IpoBoard({
               />
             ))}
             {list.length === 0 && (
-              <p style={{ color: "var(--ink-muted)", fontSize: 14 }}>
-                {query ? `No IPOs match "${query.trim()}".` : "No IPOs in this category right now."}
-              </p>
+              <StatePanel title={query ? `No results for “${query.trim()}”` : "No IPOs here right now"}>
+                {query ? "Try a shorter company name or sector." : "New verified listings will appear here automatically."}
+              </StatePanel>
             )}
           </div>
 
