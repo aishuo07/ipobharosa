@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { BoardIpo } from "@/lib/board-data";
 import { SegmentedTabs, StatePanel, TabButton, TextInput } from "@/components/ui";
+import { googleCalendarSubscriptionUrl } from "@/lib/calendar";
 import {
   badgeText,
   confidenceLabel,
@@ -1274,6 +1275,10 @@ function CalendarView({
         <span className="cal-legend-item"><span className="cal-dot cal-opens" /> Opens</span>
         <span className="cal-legend-item"><span className="cal-dot cal-closes" /> Closes</span>
         <span className="cal-legend-item"><span className="cal-dot cal-lists" /> Lists</span>
+      </div>
+      <div className="calendar-actions">
+        <a className="ui-button ui-button-primary" href={googleCalendarSubscriptionUrl()} target="_blank" rel="noopener noreferrer">Subscribe in Google Calendar ↗</a>
+        <a className="ui-button ui-button-secondary" href="/api/calendar">Download all dates (.ics)</a>
       </div>
       <div className="calendar-grid calendar-dow">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
