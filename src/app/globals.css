@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap');
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --ink: #17211B;
   --ink-muted: #59665E;
   --ink-faint: #78827C;
@@ -48,33 +48,8 @@
   --content-max: 1180px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ink: #EDEBDF;
-    --ink-muted: #A9AEC2;
-    --ink-faint: #9297B5;
-    --paper: #0F1220;
-    --surface: #171B2E;
-    --surface-2: #1C2036;
-    --border: rgba(237,235,223,0.14);
-    --border-strong: rgba(237,235,223,0.26);
-    --accent: #E0A93E;
-    --accent-strong: #F0C167;
-    --accent-tint: rgba(224,169,62,0.16);
-    --good: #45C08D;
-    --good-tint: rgba(63,189,135,0.16);
-    --critical: #E2665A;
-    --critical-tint: rgba(226,102,90,0.16);
-    --warning: #E08A44;
-    --warning-tint: rgba(224,138,68,0.18);
-    --cat-qib: #6F93E0;
-    --cat-nii: #149C8F;
-    --cat-retail: #C08A1A;
-    --cat-employee: #C9639C;
-    --shadow-card: 0 1px 2px rgba(0,0,0,0.35);
-  }
-}
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --ink: #EDEBDF; --ink-muted: #A9AEC2; --ink-faint: #9297B5;
   --paper: #0F1220; --surface: #171B2E; --surface-2: #1C2036;
   --border: rgba(237,235,223,0.14); --border-strong: rgba(237,235,223,0.26);
@@ -86,6 +61,7 @@
   --shadow-card: 0 1px 2px rgba(0,0,0,0.35);
 }
 :root[data-theme="light"] {
+  color-scheme: light;
   --ink: #17211B; --ink-muted: #59665E; --ink-faint: #78827C;
   --paper: #F7F8F4; --surface: #FFFFFF; --surface-2: #F1F3EF;
   --border: #DFE4DC; --border-strong: #B6C1B9;
