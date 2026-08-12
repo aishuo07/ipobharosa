@@ -12,6 +12,8 @@ import { acquireIngestionLock, releaseIngestionLock } from "@/lib/ingestion/lock
 import { computeAlertReasons } from "@/lib/ingestion/alert";
 import { sendEmail } from "@/lib/email/resend";
 import type { GmpAdapter } from "@/lib/gmp/types";
+import { captureFilingEvidence } from "@/lib/financials/filing-evidence";
+import { filingEvidenceClass } from "@/lib/document-evidence";
 
 const ALERT_RECIPIENT = "aish.iiitb@gmail.com";
 const BATCH_SIZE = 3;
@@ -19,7 +21,7 @@ const GMP_ADAPTERS: GmpAdapter[] = [ipoWatchAdapter, sahiAdapter, ipojiAdapter];
 const GMP_ELIGIBLE_STATUSES = ["UPCOMING", "OPEN", "CLOSED"] as const;
 const SUBSCRIPTION_ELIGIBLE_STATUSES = ["OPEN", "CLOSED"] as const;
 
-export type IngestionStage = "prepare" | "gmp" | "subscription" | "finalize" | "complete";
+export type IngestionStage = "prepare" | "filings" | "gmp" | "subscription" | "finalize" | "complete";
 
 export type IngestionSummary = {
   ipoCount: number;
@@ -29,6 +31,7 @@ export type IngestionSummary = {
   statusTransitions: number;
   reminders: { sent: number; failed: number; skipped: number };
   discovery: DiscoverySummary | { error: string };
+  filings: { captured: number; skipped: number; failed: { ipoName: string; error: string }[] };
   skippedDueToLock?: boolean;
 };
 
@@ -55,6 +58,7 @@ export const EMPTY_SUMMARY: IngestionSummary = {
   statusTransitions: 0,
   reminders: { sent: 0, failed: 0, skipped: 0 },
   discovery: { candidatesSeen: 0, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, fetchFailed: [], dbErrors: [], queueCapped: false, deferredCandidates: 0 },
+  filings: { captured: 0, skipped: 0, failed: [] },
 };
 
 export function initialCheckpoint(): IngestionCheckpoint {
@@ -71,7 +75,7 @@ export function readCheckpoint(value: unknown): IngestionCheckpoint {
     cursor: Number.isInteger(candidate.cursor) ? candidate.cursor ?? 0 : 0,
     attempts: Number.isInteger(candidate.attempts) ? candidate.attempts ?? 0 : 0,
     lastError: typeof candidate.lastError === "string" ? candidate.lastError : null,
-    summary: candidate.summary,
+    summary: { ...candidate.summary, filings: candidate.summary.filings ?? structuredClone(EMPTY_SUMMARY.filings) },
   };
 }
 
@@ -116,6 +120,7 @@ export async function runIngestionStep(startedBy = "cron"): Promise<IngestionSte
     checkpoint = { ...checkpoint, attempts: checkpoint.attempts + 1, lastError: null };
 
     if (checkpoint.stage === "prepare") checkpoint = await runPrepare(checkpoint);
+    else if (checkpoint.stage === "filings") checkpoint = await runFilingBatch(checkpoint);
     else if (checkpoint.stage === "gmp") checkpoint = await runGmpBatch(run.id, run.startedAt, checkpoint);
     else if (checkpoint.stage === "subscription") checkpoint = await runSubscriptionBatch(run.id, run.startedAt, checkpoint);
     else if (checkpoint.stage === "finalize") checkpoint = nextStage(checkpoint, "complete");
@@ -153,7 +158,43 @@ async function runPrepare(checkpoint: IngestionCheckpoint): Promise<IngestionChe
       discovery,
       perSource: Object.fromEntries(GMP_ADAPTERS.map((adapter) => [adapter.key, { success: 0, failure: 0 }])),
     },
-  }, "gmp");
+  }, "filings");
+}
+
+async function runFilingBatch(checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
+  const ipos = await prisma.ipo.findMany({
+    where: { publicationState: "PUBLISHED", OR: [{ rhpUrl: { not: null } }, { drhpUrl: { not: null } }] },
+    include: { company: true },
+    orderBy: { id: "asc" },
+    skip: checkpoint.cursor,
+    take: 1,
+  });
+  if (ipos.length === 0) return nextStage(checkpoint, "gmp");
+  const ipo = ipos[0];
+  const candidates = [
+    ipo.rhpUrl ? { type: "RHP" as const, url: ipo.rhpUrl } : null,
+    ipo.drhpUrl ? { type: "DRHP" as const, url: ipo.drhpUrl } : null,
+  ].filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null)
+    .filter((candidate) => filingEvidenceClass(candidate.url) !== "THIRD_PARTY");
+  const summary = structuredClone(checkpoint.summary);
+  const candidate = candidates[0];
+  if (!candidate) {
+    summary.filings.skipped++;
+  } else {
+    const exists = await prisma.financialDocument.findFirst({
+      where: { ipoId: ipo.id, documentType: candidate.type, sourceUrl: candidate.url },
+    });
+    if (exists) summary.filings.skipped++;
+    else {
+      try {
+        await captureFilingEvidence(ipo.id, candidate.type, candidate.url);
+        summary.filings.captured++;
+      } catch (error) {
+        summary.filings.failed.push({ ipoName: ipo.company.name, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+  }
+  return { ...checkpoint, cursor: checkpoint.cursor + 1, summary };
 }
 
 async function ensureSources() {

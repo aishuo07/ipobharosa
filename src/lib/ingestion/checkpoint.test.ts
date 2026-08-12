@@ -14,4 +14,11 @@ describe("ingestion checkpoint", () => {
   it("rejects incompatible checkpoint shapes safely", () => {
     expect(readCheckpoint({ version: 99, stage: "gmp" })).toEqual(initialCheckpoint());
   });
+
+  it("adds filing evidence counters when restoring a pre-filings checkpoint", () => {
+    const saved = initialCheckpoint();
+    const summary = { ...saved.summary } as typeof saved.summary & { filings?: never };
+    delete (summary as unknown as Record<string, unknown>).filings;
+    expect(readCheckpoint({ ...saved, summary }).summary.filings).toEqual({ captured: 0, skipped: 0, failed: [] });
+  });
 });

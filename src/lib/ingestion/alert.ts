@@ -18,6 +18,9 @@ export function computeAlertReasons(summary: IngestionSummary): string[] {
       reasons.push("Draft/quarantine review queue is at capacity — new candidates are being skipped");
     }
   }
+  if (summary.filings.failed.length > 0) {
+    reasons.push(`${summary.filings.failed.length} filing evidence capture failure(s)`);
+  }
 
   const sourceEntries = Object.entries(summary.perSource);
   const allSourcesDown = sourceEntries.length > 0 && sourceEntries.every(([, s]) => s.success === 0 && s.failure > 0);

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { toIpoSlug } from "@/lib/ipo-slug";
+import { filingEvidenceLabel, filingSourceHost } from "@/lib/document-evidence";
 
 export type BoardIpo = {
   id: string;
@@ -37,7 +38,7 @@ export type BoardIpo = {
     capturedAt: string;
   } | null;
   gmpHistory: { value: number; capturedAt: string }[];
-  documents: { label: string; url: string; docType: string }[];
+  documents: { label: string; url: string; docType: string; evidenceLabel: string; sourceHost: string }[];
   financials: {
     fiscalYear: string;
     revenueCr: number | null;
@@ -142,7 +143,13 @@ function shapeIpo(ipo: IpoWithRelations): BoardIpo {
       value: toNum(s.medianValue),
       capturedAt: s.capturedAt.toISOString(),
     })),
-    documents: ipo.documents.map((d) => ({ label: d.label, url: d.url, docType: d.docType })),
+    documents: ipo.documents.map((d) => ({
+      label: d.label,
+      url: d.url,
+      docType: d.docType,
+      evidenceLabel: filingEvidenceLabel(d.url),
+      sourceHost: filingSourceHost(d.url),
+    })),
     financials: ipo.financialSnapshots.map((f) => ({
       fiscalYear: f.fiscalYear,
       revenueCr: toNumOrNull(f.revenueCr),
