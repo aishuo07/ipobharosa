@@ -56,7 +56,7 @@ describe("Financial Extraction", () => {
   describe("normalize", () => {
     it("normalizes RHP-style revenue figure", () => {
       const raw: RawExtraction = {
-        metric: "REVENUE",
+        metric: "REVENUE" as const,
         originalLabel: "Revenue from Operations (Net)",
         rawValue: "₹3,449.96",
         fiscalYear: "31 Mar 2026",
@@ -76,7 +76,7 @@ describe("Financial Extraction", () => {
 
     it("normalizes from millions", () => {
       const raw: RawExtraction = {
-        metric: "REVENUE",
+        metric: "REVENUE" as const,
         originalLabel: "Revenue from Operations",
         rawValue: "₹3,449.96 million",
         fiscalYear: "31 Mar 2026",
@@ -96,7 +96,7 @@ describe("Financial Extraction", () => {
   describe("validate", () => {
     it("passes high-confidence extraction", () => {
       const norm = {
-        metric: "REVENUE",
+        metric: "REVENUE" as const,
         originalLabel: "Revenue",
         rawValue: "₹3,449.96",
         normalizedValue: 3449.96,
@@ -119,7 +119,7 @@ describe("Financial Extraction", () => {
 
     it("flags low extraction confidence", () => {
       const norm = {
-        metric: "REVENUE",
+        metric: "REVENUE" as const,
         originalLabel: "Revenue",
         rawValue: "₹3,449.96",
         normalizedValue: 3449.96,
@@ -142,7 +142,7 @@ describe("Financial Extraction", () => {
 
     it("flags extreme values", () => {
       const norm = {
-        metric: "REVENUE",
+        metric: "REVENUE" as const,
         originalLabel: "Revenue",
         rawValue: "999,999,999",
         normalizedValue: 999_999_999,
@@ -164,7 +164,7 @@ describe("Financial Extraction", () => {
 
     it("flags invalid fiscal year", () => {
       const norm = {
-        metric: "REVENUE",
+        metric: "REVENUE" as const,
         originalLabel: "Revenue",
         rawValue: "₹3,449.96",
         normalizedValue: 3449.96,
