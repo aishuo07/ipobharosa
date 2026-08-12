@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdminEmail } from "@/lib/admin";
+import { validateApprovalInput, validateRejectionInput } from "@/lib/admin-review";
 
 async function requireAdmin(): Promise<string> {
   const session = await auth();
@@ -15,8 +16,11 @@ async function requireAdmin(): Promise<string> {
 export async function approveIpo(formData: FormData) {
   const performedBy = await requireAdmin();
   const id = formData.get("id") as string;
-  const sector = (formData.get("sector") as string | null)?.trim();
-  if (!sector) throw new Error("Sector is required to approve");
+  const sector = validateApprovalInput({
+    sector: formData.get("sector") as string | null,
+    factsChecked: formData.get("factsChecked") === "on",
+    evidenceChecked: formData.get("evidenceChecked") === "on",
+  });
 
   const ipo = await prisma.ipo.findUniqueOrThrow({ where: { id } });
   await prisma.$transaction([
@@ -37,8 +41,10 @@ export async function approveIpo(formData: FormData) {
 export async function rejectIpo(formData: FormData) {
   const performedBy = await requireAdmin();
   const id = formData.get("id") as string;
-  const reason = (formData.get("reason") as string | null)?.trim();
-  if (!reason) throw new Error("A reason is required to reject");
+  const reason = validateRejectionInput({
+    reason: formData.get("reason") as string | null,
+    notes: formData.get("notes") as string | null,
+  });
 
   await prisma.$transaction([
     prisma.ipo.update({
