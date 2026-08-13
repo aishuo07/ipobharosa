@@ -23,3 +23,7 @@
 - Added correct `Official Prospectus` provenance for archived final documents instead of presenting them as RHPs.
 - Public-name coverage improved from 1 current NSE SME issue to 9 of the 37 diagnosed names with complete NSE evidence; no Production records were changed.
 - Verified the completed extension with 191 tests, zero-warning lint, a clean production build, and Prisma schema validation.
+- Started a follow-up after merge because discovery intentionally skips already-tracked drafts: the scheduled ingestion cycle must revalidate a bounded slice of the existing queue for the new archive coverage to take effect automatically.
+- Added a resumable `revalidation` ingestion stage that checks up to eight oldest Draft/Quarantined IPOs per scheduled run and rotates every outcome fairly.
+- Kept auto-publication behind the existing Production feature flag; eligible-held, retry, conflict, incomplete-record, document provenance, and audit behavior are explicit.
+- Verified the follow-up with 195 tests, zero-warning lint, a clean production build, TypeScript, and Prisma schema validation.
