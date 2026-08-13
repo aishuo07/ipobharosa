@@ -1,3 +1,3 @@
-phase=implementation
+phase=verification
 feature=mainboard-sme-calendar-sync
 approved=true

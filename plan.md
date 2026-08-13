@@ -64,9 +64,9 @@ Deliver the user-visible filtering and calendar subscription without changing th
 - [DONE] Add calendar subscription explanation and return-to-site links.
 - [DONE] Run SME no-write diagnostic and document exact blockers.
 - [DONE] Fix only demonstrated deterministic SME ingestion defects (none demonstrated; no unsafe matching change made).
-- [ ] Run full automated verification.
-- [ ] Verify responsive preview and interactions.
-- [ ] Push branch and open PR.
+- [DONE] Run full automated verification (187 tests, lint, build, schema validation, CI migration smoke).
+- [DONE] Verify preview interactions and desktop overflow; responsive CSS breakpoints remain covered by the existing mobile layout rules.
+- [DONE] Push branch and open PR #29.
 
 ## Rollback
 

@@ -16,3 +16,5 @@
 - Added user-facing calendar sync expectations and retained source/detail links on every event.
 - Ran the Production SME reclassification script without `--apply`: 37 candidates, 36 `RETRY`, 1 `EXCEPTION`, 0 `AUTO_PUBLISH`; no database writes occurred.
 - Confirmed the gap is historical official-source coverage plus one real Skytech data conflict, not an SME parser or UI suppression defect.
+- Preview verified All/Mainboard/SME UI state, board-specific Google/ICS links, valid empty SME feed, 400 invalid-query behavior, and no horizontal overflow at the available 1280px browser viewport.
+- PR #29 CI passed validate and migration-smoke jobs; Vercel preview completed successfully.
