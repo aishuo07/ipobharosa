@@ -27,3 +27,8 @@
 - Added a resumable `revalidation` ingestion stage that checks up to eight oldest Draft/Quarantined IPOs per scheduled run and rotates every outcome fairly.
 - Kept auto-publication behind the existing Production feature flag; eligible-held, retry, conflict, incomplete-record, document provenance, and audit behavior are explicit.
 - Verified the follow-up with 195 tests, zero-warning lint, a clean production build, TypeScript, and Prisma schema validation.
+- Applied the two explicitly approved additive Production migrations and verified all five migrations are up to date.
+- Resumed the interrupted persisted ingestion run: 8 candidates settled as 5 retries and 3 conflicts; the cycle then completed successfully.
+- Verified the next clean cycle writes the filing catalogue (100 stored, 29 linked) and revalidates another bounded batch without schema errors.
+- Diagnosed the apparent conflicts as two deterministic semantic defects: dates were compared as UTC instead of Indian calendar dates, and NSE's one-lot SME bid quantity was compared with the app's two-lot minimum application quantity.
+- Added India-calendar comparison and SME minimum-application normalization with regression tests; full verification now passes 196 tests, lint, and production build.

@@ -50,6 +50,20 @@ describe("authoritative publication consensus", () => {
     expect(result.comparisons.every((comparison) => comparison.status === "MATCH")).toBe(true);
   });
 
+  it("compares IPO lifecycle dates as Indian calendar dates", () => {
+    const istMidnightCandidate = {
+      ...candidate,
+      openDate: new Date("2026-08-11T18:30:00.000Z"),
+      closeDate: new Date("2026-08-13T18:30:00.000Z"),
+    };
+
+    const result = decidePublication(istMidnightCandidate, { status: "FOUND", evidence });
+
+    expect(result.decision).toBe("AUTO_PUBLISH");
+    expect(result.comparisons.find((comparison) => comparison.field === "openDate")?.status).toBe("MATCH");
+    expect(result.comparisons.find((comparison) => comparison.field === "closeDate")?.status).toBe("MATCH");
+  });
+
   it("accepts a unique official issuer qualifier omitted by the discovery source", () => {
     const result = decidePublication(
       { ...candidate, companyName: "Teja Engineering" },

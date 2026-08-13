@@ -4,7 +4,14 @@ import { MATERIAL_OFFICIAL_FIELDS } from "./types";
 import type { FieldComparison, MaterialOfficialField, OfficialEvidenceResult, PublicationDecision } from "./types";
 
 function dateKey(value: Date): string {
-  return value.toISOString().slice(0, 10);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
 function normalizedManagers(values: string[]): string[] {
