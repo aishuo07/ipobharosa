@@ -1,6 +1,6 @@
 # Implementation Plan: Mainboard + SME board and calendar sync
 
-Status: approved by the product owner on 2026-08-13; implementation in progress.
+Status: approved by the product owner on 2026-08-13; historical NSE coverage extension explicitly requested and in progress.
 
 ## Approach
 
@@ -48,7 +48,18 @@ Deliver the user-visible filtering and calendar subscription without changing th
 - Do not bulk publish weak/unverified candidates and do not weaken official-source requirements.
 - If valid SMEs become `AUTO_PUBLISH`, keep the write behind the existing publication flag and separately report the exact candidates before any Production write.
 
-### 5. Verification and delivery
+### 5. Official NSE historical coverage extension
+
+**Files:** `src/lib/discovery/official/nse.ts`, normalization/consensus modules, focused adapter tests
+
+- Fetch and cache NSE's public past-issues catalogue only after current/upcoming lookup misses.
+- Match exact normalized issuer names first; permit only one unambiguous multi-token prefix match for shortened source names.
+- Request the archived issue through NSE's official detail endpoint using its symbol, series and `type=Past`.
+- Normalize historical `Lot Size` and final `Prospectus` labels into the existing material evidence contract.
+- Keep the same field-level consensus; archive coverage changes evidence availability, not publication safety.
+- Re-run the 37-SME no-write diagnostic and report exact results before any write.
+
+### 6. Verification and delivery
 
 - Run lint, unit/integration tests, build, and migration smoke.
 - Verify 390px, 768px, and desktop layouts without overflow.
@@ -64,7 +75,9 @@ Deliver the user-visible filtering and calendar subscription without changing th
 - [DONE] Add calendar subscription explanation and return-to-site links.
 - [DONE] Run SME no-write diagnostic and document exact blockers.
 - [DONE] Fix only demonstrated deterministic SME ingestion defects (none demonstrated; no unsafe matching change made).
-- [DONE] Run full automated verification (187 tests, lint, build, schema validation, CI migration smoke).
+- [DONE] Add official NSE historical catalogue fallback and focused tests.
+- [DONE] Run a public-name coverage check for all previously diagnosed SME candidates; 9/37 now have complete official NSE evidence. A full decision rerun still requires the candidate facts stored in Production and remains no-write.
+- [DONE] Run full automated verification after the coverage extension (191 tests, lint, build, schema validation; existing CI migration smoke remains green).
 - [DONE] Verify preview interactions and desktop overflow; responsive CSS breakpoints remain covered by the existing mobile layout rules.
 - [DONE] Push branch and open PR #29.
 

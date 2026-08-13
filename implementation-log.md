@@ -18,3 +18,8 @@
 - Confirmed the gap is historical official-source coverage plus one real Skytech data conflict, not an SME parser or UI suppression defect.
 - Preview verified All/Mainboard/SME UI state, board-specific Google/ICS links, valid empty SME feed, 400 invalid-query behavior, and no horizontal overflow at the available 1280px browser viewport.
 - PR #29 CI passed validate and migration-smoke jobs; Vercel preview completed successfully.
+- Added a cached fallback to NSE's official past-issues catalogue and archived issue-detail endpoint after the current catalogue misses.
+- Added exact-first, unique-prefix issuer matching for shortened historical names; all material fields must still match before publication.
+- Added correct `Official Prospectus` provenance for archived final documents instead of presenting them as RHPs.
+- Public-name coverage improved from 1 current NSE SME issue to 9 of the 37 diagnosed names with complete NSE evidence; no Production records were changed.
+- Verified the completed extension with 191 tests, zero-warning lint, a clean production build, and Prisma schema validation.

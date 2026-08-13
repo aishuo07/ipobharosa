@@ -50,6 +50,14 @@ describe("authoritative publication consensus", () => {
     expect(result.comparisons.every((comparison) => comparison.status === "MATCH")).toBe(true);
   });
 
+  it("accepts a unique official issuer qualifier omitted by the discovery source", () => {
+    const result = decidePublication(
+      { ...candidate, companyName: "Teja Engineering" },
+      { status: "FOUND", evidence: { ...evidence, facts: { ...evidence.facts, companyName: "Teja Engineering Industries Limited" } } },
+    );
+    expect(result.comparisons.find((comparison) => comparison.field === "companyName")?.status).toBe("MATCH");
+  });
+
   it("routes a real material conflict to the exception queue", () => {
     const result = decidePublication({ ...candidate, lotSize: 130 }, { status: "FOUND", evidence });
     expect(result.decision).toBe("EXCEPTION");
@@ -76,4 +84,3 @@ describe("authoritative publication consensus", () => {
     expect(decidePublication(candidate, { status: "FOUND", evidence }).decision).toBe("AUTO_PUBLISH");
   });
 });
-
