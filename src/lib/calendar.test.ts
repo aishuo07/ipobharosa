@@ -26,9 +26,13 @@ describe("IPO calendar export", () => {
     expect(result).toContain("UID:ipo-1-opens@ipobharosa");
     expect(result).toContain("URL:https://ipobharosa.vercel.app/ipo/test-ipo");
     expect(result.match(/BEGIN:VEVENT/g)).toHaveLength(4);
+    expect(result).toContain("X-WR-CALNAME:IPOBharosa — All IPOs");
   });
 
-  it("builds a Google Calendar subscription link to the live feed", () => {
+  it("builds Google Calendar subscription links for all and board-specific feeds", () => {
     expect(decodeURIComponent(googleCalendarSubscriptionUrl())).toContain("https://ipobharosa.vercel.app/api/calendar");
+    expect(decodeURIComponent(googleCalendarSubscriptionUrl("MAINBOARD"))).toContain("/api/calendar?board=MAINBOARD");
+    expect(decodeURIComponent(googleCalendarSubscriptionUrl("SME"))).toContain("/api/calendar?board=SME");
+    expect(buildIcs([ipo], "SME")).toContain("X-WR-CALNAME:IPOBharosa — SME");
   });
 });

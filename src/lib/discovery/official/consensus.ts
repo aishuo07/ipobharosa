@@ -1,5 +1,5 @@
 import type { IpoFacts } from "../types";
-import { normalizeComparableText } from "./normalization";
+import { issuerNamesMatch, normalizeComparableText } from "./normalization";
 import { MATERIAL_OFFICIAL_FIELDS } from "./types";
 import type { FieldComparison, MaterialOfficialField, OfficialEvidenceResult, PublicationDecision } from "./types";
 
@@ -21,7 +21,8 @@ function isMissing(value: unknown): boolean {
 }
 
 function matches(field: MaterialOfficialField, candidate: unknown, official: unknown): boolean {
-  if (field === "companyName" || field === "registrar") {
+  if (field === "companyName") return issuerNamesMatch(String(candidate), String(official));
+  if (field === "registrar") {
     return normalizeComparableText(String(candidate)) === normalizeComparableText(String(official));
   }
   if (field === "leadManagers") {
@@ -77,4 +78,3 @@ export function decidePublication(candidate: IpoFacts, officialResult: OfficialE
   }
   return { decision: "AUTO_PUBLISH", reasons: [], comparisons, evidence };
 }
-

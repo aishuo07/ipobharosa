@@ -47,6 +47,10 @@ function asFacts(draft: {
 
 async function main() {
   const apply = process.argv.includes("--apply");
+  const boardArg = process.argv.find((arg) => arg.startsWith("--board="))?.slice("--board=".length);
+  if (boardArg && boardArg !== "MAINBOARD" && boardArg !== "SME") {
+    throw new Error("--board must be MAINBOARD or SME");
+  }
   const { prisma } = await import("../src/lib/prisma");
   const { fetchOfficialIpoEvidence } = await import("../src/lib/discovery/official");
   const { decidePublication } = await import("../src/lib/discovery/official/consensus");
@@ -54,7 +58,10 @@ async function main() {
 
   console.error("[dry-run] loading unpublished candidates");
   const drafts = await prisma.ipo.findMany({
-    where: { publicationState: { in: ["DRAFT", "QUARANTINED"] } },
+    where: {
+      publicationState: { in: ["DRAFT", "QUARANTINED"] },
+      ...(boardArg ? { board: boardArg as "MAINBOARD" | "SME" } : {}),
+    },
     select: {
       id: true,
       board: true,

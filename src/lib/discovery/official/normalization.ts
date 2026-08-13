@@ -22,6 +22,15 @@ export function normalizeIssuerName(value: string): string {
   return words.join(" ");
 }
 
+export function issuerNamesMatch(left: string, right: string): boolean {
+  const a = normalizeIssuerName(left);
+  const b = normalizeIssuerName(right);
+  if (a === b) return true;
+  const shorter = a.length <= b.length ? a : b;
+  const longer = a.length <= b.length ? b : a;
+  return shorter.split(" ").length >= 2 && longer.startsWith(`${shorter} `);
+}
+
 export function normalizeComparableText(value: string): string {
   return normalizeIssuerName(value).replace(/\s+/g, " ");
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { NseOfficialSource, parseNseDetail, selectNseIssue } from "./nse";
+import { NseOfficialSource, parseNseDetail, selectHistoricalNseIssue, selectNseIssue } from "./nse";
 
 const catalogue = [
   {
@@ -27,6 +27,29 @@ const detail = {
   },
 };
 
+const historicalCatalogue = [{
+  company: "Teja Engineering Industries Limited",
+  ipoStartDate: "30-JUN-2026",
+  ipoEndDate: "02-JUL-2026",
+  issuePrice: "220",
+  priceRange: "Rs.220",
+  securityType: "SME",
+  symbol: "TEJA",
+}];
+
+const historicalDetail = {
+  issueInfo: {
+    dataList: [
+      { title: "Issue Period", value: "30-Jun-2026 to 02-Jul-2026" },
+      { title: "Price Range", value: "Rs. 220 per equity share" },
+      { title: "Lot Size", value: "600 Equity Shares" },
+      { title: "Book Running Lead Managers", value: "Interactive Financial Services Limited" },
+      { title: "Name of the Registrar", value: "Kfin Technologies Limited" },
+      { title: "Prospectus", value: "https://nsearchives.nseindia.com/content/ipo/PROSPECTUS_TEJA.zip" },
+    ],
+  },
+};
+
 describe("NSE official adapter parsing", () => {
   it("matches an issuer despite harmless legal-suffix differences", () => {
     expect(selectNseIssue(catalogue, "Shiprocket Ltd")?.symbol).toBe("SHIPROCKET");
@@ -49,6 +72,47 @@ describe("NSE official adapter parsing", () => {
     expect(evidence.fieldSources.priceBandLow).toBe(evidence.sourceUrl);
   });
 
+  it("matches one unambiguous shortened issuer name in the historical catalogue", () => {
+    expect(selectHistoricalNseIssue(historicalCatalogue, "Teja Engineering")?.symbol).toBe("TEJA");
+    expect(selectHistoricalNseIssue([
+      ...historicalCatalogue,
+      { ...historicalCatalogue[0], company: "Teja Engineering Projects Limited", symbol: "OTHER" },
+    ], "Teja Engineering")).toBeNull();
+  });
+
+  it("falls back to the official historical catalogue and parses SME detail labels", async () => {
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      const body = url.includes("public-past-issues")
+        ? historicalCatalogue
+        : url.includes("ipo-detail")
+          ? historicalDetail
+          : catalogue;
+      return new Response(JSON.stringify(body), { status: 200 });
+    }) as unknown as typeof fetch;
+    const source = new NseOfficialSource(fetchImpl);
+
+    const result = await source.findEvidence("Teja Engineering");
+
+    expect(result.status).toBe("FOUND");
+    if (result.status !== "FOUND") return;
+    expect(result.evidence.facts).toMatchObject({
+      companyName: "Teja Engineering Industries Limited",
+      board: "SME",
+      priceBandLow: 220,
+      priceBandHigh: 220,
+      lotSize: 600,
+      registrar: "Kfin Technologies Limited",
+      rhpUrl: "https://nsearchives.nseindia.com/content/ipo/PROSPECTUS_TEJA.zip",
+    });
+    expect(result.evidence.sourceUrl).toContain("type=Past");
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.stringContaining("type=Past"),
+      expect.any(Object),
+    );
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
   it("downloads the catalogue once when checking several candidates", async () => {
     const fetchImpl = async (input: string | URL | Request) => {
       const url = String(input);
@@ -60,6 +124,6 @@ describe("NSE official adapter parsing", () => {
     await source.findEvidence("Shiprocket Limited");
     await source.findEvidence("Missing Limited");
 
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
   });
 });

@@ -1,7 +1,8 @@
-import { normalizeIssuerName, parseIndianDate, parseInteger, parsePriceBand, splitManagers } from "./normalization";
+import { issuerNamesMatch, normalizeIssuerName, parseIndianDate, parseInteger, parsePriceBand, splitManagers } from "./normalization";
 import type { OfficialEvidenceResult, OfficialIpoEvidence, OfficialIpoSource } from "./types";
 
 const CATALOGUE_URL = "https://www.nseindia.com/api/all-upcoming-issues?category=ipo";
+const HISTORICAL_CATALOGUE_URL = "https://www.nseindia.com/api/public-past-issues";
 const FETCH_TIMEOUT_MS = 15_000;
 const HEADERS = {
   Accept: "application/json,text/plain,*/*",
@@ -21,6 +22,17 @@ export type NseCatalogueIssue = {
   lotSize?: string | number;
   series?: string;
   status?: string;
+  symbol?: string;
+};
+
+export type NseHistoricalIssue = {
+  company?: string;
+  companyName?: string;
+  ipoStartDate?: string;
+  ipoEndDate?: string;
+  issuePrice?: string | null;
+  priceRange?: string | null;
+  securityType?: string;
   symbol?: string;
 };
 
@@ -48,6 +60,29 @@ export function selectNseIssue(rows: NseCatalogueIssue[], companyName: string): 
   return rows.find((row) => row.companyName && normalizeIssuerName(row.companyName) === target) ?? null;
 }
 
+export function selectHistoricalNseIssue(rows: NseHistoricalIssue[], companyName: string): NseHistoricalIssue | null {
+  const named = rows.filter((row) => row.company || row.companyName);
+  const target = normalizeIssuerName(companyName);
+  const exact = named.filter((row) => normalizeIssuerName(row.company ?? row.companyName!) === target);
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) return null;
+  const compatible = named.filter((row) => issuerNamesMatch(row.company ?? row.companyName!, companyName));
+  return compatible.length === 1 ? compatible[0] : null;
+}
+
+function historicalAsCatalogueIssue(issue: NseHistoricalIssue): NseCatalogueIssue {
+  return {
+    companyName: issue.company ?? issue.companyName,
+    issueStartDate: issue.ipoStartDate,
+    issueEndDate: issue.ipoEndDate,
+    issuePrice: issue.issuePrice ?? undefined,
+    priceBand: issue.priceRange ?? undefined,
+    series: issue.securityType === "SME" ? "SME" : issue.securityType === "EQ" ? "EQ" : undefined,
+    status: "Past",
+    symbol: issue.symbol,
+  };
+}
+
 export function parseNseDetail(issue: NseCatalogueIssue, detail: NseDetail, capturedAt = new Date()): OfficialIpoEvidence {
   const values = detailMap(detail);
   const period = values.get("issue period")?.split(/\s+to\s+/i) ?? [];
@@ -56,14 +91,14 @@ export function parseNseDetail(issue: NseCatalogueIssue, detail: NseDetail, capt
   const companyName = cleanValue(issue.companyName) ?? cleanValue(detail.issueInfo?.dataList?.[0]?.title);
   const openDateText = period[0] ?? issue.issueStartDate;
   const closeDateText = period[1] ?? issue.issueEndDate;
-  const rhpUrl = cleanValue(values.get("red herring prospectus"));
+  const rhpUrl = cleanValue(values.get("red herring prospectus") ?? values.get("prospectus"));
 
   const facts = {
     companyName,
     board: issue.series === "SME" ? "SME" as const : issue.series === "EQ" ? "MAINBOARD" as const : null,
     priceBandLow: price?.low ?? null,
     priceBandHigh: price?.high ?? null,
-    lotSize: parseInteger(values.get("bid lot") ?? issue.lotSize),
+    lotSize: parseInteger(values.get("bid lot") ?? values.get("lot size") ?? issue.lotSize),
     openDate: openDateText ? parseIndianDate(openDateText) : null,
     closeDate: closeDateText ? parseIndianDate(closeDateText) : null,
     registrar: cleanValue(values.get("name of the registrar")),
@@ -87,6 +122,8 @@ export class NseOfficialSource implements OfficialIpoSource {
   readonly source = "NSE" as const;
   private cataloguePromise: Promise<NseCatalogueIssue[]> | null = null;
   private catalogueExpiresAt = 0;
+  private historicalCataloguePromise: Promise<NseHistoricalIssue[]> | null = null;
+  private historicalCatalogueExpiresAt = 0;
 
   constructor(private readonly fetchImpl: typeof fetch = fetch) {}
 
@@ -96,6 +133,14 @@ export class NseOfficialSource implements OfficialIpoSource {
       this.catalogueExpiresAt = Date.now() + 60_000;
     }
     return this.cataloguePromise;
+  }
+
+  private getHistoricalCatalogue(): Promise<NseHistoricalIssue[]> {
+    if (!this.historicalCataloguePromise || Date.now() >= this.historicalCatalogueExpiresAt) {
+      this.historicalCataloguePromise = getJson<NseHistoricalIssue[]>(HISTORICAL_CATALOGUE_URL, this.fetchImpl);
+      this.historicalCatalogueExpiresAt = Date.now() + 60_000;
+    }
+    return this.historicalCataloguePromise;
   }
 
   async findEvidence(companyName: string): Promise<OfficialEvidenceResult> {
@@ -108,11 +153,21 @@ export class NseOfficialSource implements OfficialIpoSource {
       // same doomed request once per candidate.
       return { status: "UNAVAILABLE", reason: (error as Error).message };
     }
-    const issue = selectNseIssue(catalogue, companyName);
-    if (!issue?.symbol || !issue.series) return { status: "NOT_FOUND", reason: `${companyName} is not present in the current NSE IPO catalogue` };
+    let issue = selectNseIssue(catalogue, companyName);
+    if (!issue) {
+      let historicalCatalogue: NseHistoricalIssue[];
+      try {
+        historicalCatalogue = await this.getHistoricalCatalogue();
+      } catch (error) {
+        return { status: "UNAVAILABLE", reason: `NSE historical catalogue unavailable: ${(error as Error).message}` };
+      }
+      const historicalIssue = selectHistoricalNseIssue(historicalCatalogue, companyName);
+      if (historicalIssue) issue = historicalAsCatalogueIssue(historicalIssue);
+    }
+    if (!issue?.symbol || !issue.series) return { status: "NOT_FOUND", reason: `${companyName} is not present in NSE's current or historical IPO catalogues` };
     try {
       const detail = await getJson<NseDetail>(
-        `https://www.nseindia.com/api/ipo-detail?symbol=${encodeURIComponent(issue.symbol)}&series=${encodeURIComponent(issue.series)}`,
+        `https://www.nseindia.com/api/ipo-detail?symbol=${encodeURIComponent(issue.symbol)}&series=${encodeURIComponent(issue.series)}&type=${encodeURIComponent(issue.status ?? "")}`,
         this.fetchImpl,
       );
       return { status: "FOUND", evidence: parseNseDetail(issue, detail) };

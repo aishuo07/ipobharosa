@@ -161,7 +161,14 @@ async function processCandidate(candidate: IpoListingCandidate): Promise<Candida
       });
       const filingDocuments = [
         facts.drhpUrl ? { ipoId: ipo.id, label: "Draft Red Herring Prospectus (DRHP)", url: facts.drhpUrl, docType: "drhp" } : null,
-        officialFacts.rhpUrl ? { ipoId: ipo.id, label: "Red Herring Prospectus (RHP)", url: officialFacts.rhpUrl, docType: "rhp" } : null,
+        officialFacts.rhpUrl ? {
+          ipoId: ipo.id,
+          label: /(?:^|[/_])prospectus(?:[_.]|$)/i.test(officialFacts.rhpUrl)
+            ? "Official Prospectus"
+            : "Red Herring Prospectus (RHP)",
+          url: officialFacts.rhpUrl,
+          docType: "rhp",
+        } : null,
       ].filter((document): document is NonNullable<typeof document> => document !== null);
       if (filingDocuments.length > 0) await tx.document.createMany({ data: filingDocuments });
       await persistOfficialDecision(tx, ipo.id, decision);

@@ -227,6 +227,23 @@ describe("runDiscovery", () => {
     expect(createdLogs).toHaveLength(0);
   });
 
+  it("labels an archived final offer document as a Prospectus rather than an RHP", async () => {
+    listingResult = [{ companyName: "Teja Engineering", detailUrl: "https://ipowatch.in/teja-engineering-ipo/", board: "SME" }];
+    factsImpl = async () => validFacts("Teja Engineering", { board: "SME" });
+    officialImpl = async (name) => {
+      const result = matchingOfficialEvidence(validFacts(name, { board: "SME" }));
+      result.evidence.facts.rhpUrl = "https://nsearchives.nseindia.com/content/ipo/PROSPECTUS_TEJA.zip";
+      return result;
+    };
+
+    const summary = await runDiscovery();
+
+    expect(summary.autoPublished).toBe(1);
+    expect(createdDocuments).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: "Official Prospectus", url: "https://nsearchives.nseindia.com/content/ipo/PROSPECTUS_TEJA.zip" }),
+    ]));
+  });
+
   it("retries when the official source omits a material document link", async () => {
     listingResult = [{ companyName: "No Doc Co", detailUrl: "https://ipowatch.in/no-doc-co-ipo/", board: "MAINBOARD" }];
     factsImpl = async () => validFacts("No Doc Co", { drhpUrl: null, rhpUrl: null });

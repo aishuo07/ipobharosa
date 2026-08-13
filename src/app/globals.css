@@ -361,6 +361,10 @@ a, button { font-family: inherit; }
 
 /* ---------- calendar ---------- */
 .calendar { margin-top: 4px; }
+.calendar-sync-note {
+  max-width: 720px; margin: 10px auto 18px; color: var(--ink-muted);
+  font-size: 12.5px; line-height: 1.55; text-align: center;
+}
 
 /* ---------- official filing pipeline ---------- */
 .filing-pipeline { margin-top: 4px; }
