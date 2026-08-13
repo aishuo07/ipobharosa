@@ -2,6 +2,7 @@ import { getBoardIpos } from "@/lib/board-data";
 import IpoBoard from "@/components/IpoBoard";
 import { auth, signOut } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { getFilingRadarEntries } from "@/lib/discovery/filing-catalogue";
 
 export const revalidate = 0;
 
@@ -11,7 +12,7 @@ async function handleSignOut() {
 }
 
 export default async function Home() {
-  const [ipos, session] = await Promise.all([getBoardIpos(), auth()]);
+  const [ipos, filings, session] = await Promise.all([getBoardIpos(), getFilingRadarEntries(), auth()]);
 
   let watchlistedIds: string[] = [];
   if (session?.user?.id) {
@@ -25,6 +26,7 @@ export default async function Home() {
   return (
     <IpoBoard
       ipos={ipos}
+      filings={filings}
       user={session?.user ? { email: session.user.email ?? null, name: session.user.name ?? null } : null}
       watchlistedIds={watchlistedIds}
       onSignOut={handleSignOut}

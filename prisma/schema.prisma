@@ -65,6 +65,11 @@ enum OfficialFieldStatus {
   MISSING_OFFICIAL
 }
 
+enum IpoFilingStage {
+  DRHP_FILED
+  RHP_FILED
+}
+
 // ---------- core IPO data ----------
 
 model Company {
@@ -150,9 +155,36 @@ model Ipo {
   alertSubscriptions AlertSubscription[]
   reminderDeliveries ReminderDelivery[]
   officialEvidence   OfficialEvidenceCapture[]
+  filingCatalogue    IpoFilingCatalogue[]
 
   @@index([status])
   @@index([publicationState])
+}
+
+// Official filing coverage is intentionally separate from `Ipo`. A DRHP is
+// proof that an issue exists, but it often has no final dates, price band, lot
+// size, or even an exchange board yet. Keeping it here lets the public product
+// show the full pipeline without inventing application-ready terms.
+model IpoFilingCatalogue {
+  id           String         @id @default(uuid())
+  issuerKey    String
+  companyName  String
+  stage        IpoFilingStage
+  filingDate   DateTime
+  source       String
+  sourceUrl    String         @unique
+  documentUrl  String?
+  raw          Json
+  ipo          Ipo?           @relation(fields: [ipoId], references: [id], onDelete: SetNull)
+  ipoId        String?
+  firstSeenAt  DateTime       @default(now())
+  lastSeenAt   DateTime       @default(now())
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([issuerKey, filingDate])
+  @@index([stage, filingDate])
+  @@index([ipoId])
 }
 
 // Append-only capture of the official payload and the exact decision it

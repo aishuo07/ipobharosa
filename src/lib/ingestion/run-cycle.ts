@@ -14,6 +14,7 @@ import { sendEmail } from "@/lib/email/resend";
 import type { GmpAdapter } from "@/lib/gmp/types";
 import { captureFilingEvidence } from "@/lib/financials/filing-evidence";
 import { filingEvidenceClass } from "@/lib/document-evidence";
+import { syncOfficialFilingCatalogue, type FilingCatalogueSync } from "@/lib/discovery/filing-catalogue";
 
 const ALERT_RECIPIENT = "aish.iiitb@gmail.com";
 const BATCH_SIZE = 3;
@@ -31,6 +32,7 @@ export type IngestionSummary = {
   statusTransitions: number;
   reminders: { sent: number; failed: number; skipped: number };
   discovery: DiscoverySummary | { error: string };
+  catalogue: FilingCatalogueSync;
   filings: { captured: number; skipped: number; failed: { ipoName: string; error: string }[] };
   skippedDueToLock?: boolean;
 };
@@ -58,6 +60,7 @@ export const EMPTY_SUMMARY: IngestionSummary = {
   statusTransitions: 0,
   reminders: { sent: 0, failed: 0, skipped: 0 },
   discovery: { candidatesSeen: 0, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, fetchFailed: [], dbErrors: [], queueCapped: false, deferredCandidates: 0 },
+  catalogue: { seen: 0, stored: 0, linked: 0 },
   filings: { captured: 0, skipped: 0, failed: [] },
 };
 
@@ -75,7 +78,11 @@ export function readCheckpoint(value: unknown): IngestionCheckpoint {
     cursor: Number.isInteger(candidate.cursor) ? candidate.cursor ?? 0 : 0,
     attempts: Number.isInteger(candidate.attempts) ? candidate.attempts ?? 0 : 0,
     lastError: typeof candidate.lastError === "string" ? candidate.lastError : null,
-    summary: { ...candidate.summary, filings: candidate.summary.filings ?? structuredClone(EMPTY_SUMMARY.filings) },
+    summary: {
+      ...candidate.summary,
+      catalogue: candidate.summary.catalogue ?? structuredClone(EMPTY_SUMMARY.catalogue),
+      filings: candidate.summary.filings ?? structuredClone(EMPTY_SUMMARY.filings),
+    },
   };
 }
 
@@ -141,6 +148,7 @@ export async function runIngestionStep(startedBy = "cron"): Promise<IngestionSte
 async function runPrepare(checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
   const transitions = await syncIpoStatuses();
   const reminders = await notifyWatchersOfTransitions(transitions);
+  const catalogue = await syncOfficialFilingCatalogue();
   let discovery: IngestionSummary["discovery"];
   try {
     discovery = await runDiscovery();
@@ -155,6 +163,7 @@ async function runPrepare(checkpoint: IngestionCheckpoint): Promise<IngestionChe
       ipoCount,
       statusTransitions: transitions.length,
       reminders,
+      catalogue,
       discovery,
       perSource: Object.fromEntries(GMP_ADAPTERS.map((adapter) => [adapter.key, { success: 0, failure: 0 }])),
     },

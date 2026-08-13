@@ -21,6 +21,9 @@ export function computeAlertReasons(summary: IngestionSummary): string[] {
   if (summary.filings.failed.length > 0) {
     reasons.push(`${summary.filings.failed.length} filing evidence capture failure(s)`);
   }
+  if (summary.catalogue.error) {
+    reasons.push(`Official filing catalogue refresh failed: ${summary.catalogue.error}`);
+  }
 
   const sourceEntries = Object.entries(summary.perSource);
   const allSourcesDown = sourceEntries.length > 0 && sourceEntries.every(([, s]) => s.success === 0 && s.failure > 0);
