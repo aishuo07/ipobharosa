@@ -53,6 +53,23 @@ enum PublicationState {
   QUARANTINED
 }
 
+enum OfficialVerificationDecision {
+  AUTO_PUBLISH
+  RETRY
+  EXCEPTION
+}
+
+enum OfficialFieldStatus {
+  MATCH
+  CONFLICT
+  MISSING_OFFICIAL
+}
+
+enum IpoFilingStage {
+  DRHP_FILED
+  RHP_FILED
+}
+
 // ---------- core IPO data ----------
 
 model Company {
@@ -109,12 +126,12 @@ model Ipo {
   // full publish/reject/auto-publish audit trail. QUARANTINED candidates
   // failed validation or source agreement and are kept (not silently
   // discarded) so a human can see exactly why.
-  publicationState PublicationState @default(DRAFT)
-  discoveredFrom   String[]         @default([]) // e.g. ["ipowatch", "sahi"] — which sources found this candidate
+  publicationState PublicationState              @default(DRAFT)
+  discoveredFrom   String[]                      @default([]) // e.g. ["ipowatch", "sahi"] — which sources found this candidate
   discoveredAt     DateTime?
   reviewedBy       String?
   reviewedAt       DateTime?
-  autoPublished    Boolean   @default(false)
+  autoPublished    Boolean                       @default(false)
   quarantineReason String? // why validation/confidence checks failed
   drhpUrl          String?
   rhpUrl           String?
@@ -128,18 +145,80 @@ model Ipo {
   subscriptionSnapshots SubscriptionSnapshot[]
 
   // New production financial pipeline
-  financialDocuments    FinancialDocument[] @relation("FinancialDocuments")
-  publishedFinancials   FinancialPublished[] @relation("PublishedFinancials")
+  financialDocuments  FinancialDocument[]  @relation("FinancialDocuments")
+  publishedFinancials FinancialPublished[] @relation("PublishedFinancials")
 
   // Legacy (to be deprecated after migration)
-  financialSnapshots    FinancialSnapshot[]
+  financialSnapshots FinancialSnapshot[]
 
-  watchlistItems        WatchlistItem[]
-  alertSubscriptions    AlertSubscription[]
-  reminderDeliveries    ReminderDelivery[]
+  watchlistItems     WatchlistItem[]
+  alertSubscriptions AlertSubscription[]
+  reminderDeliveries ReminderDelivery[]
+  officialEvidence   OfficialEvidenceCapture[]
+  filingCatalogue    IpoFilingCatalogue[]
 
   @@index([status])
   @@index([publicationState])
+}
+
+// Official filing coverage is intentionally separate from `Ipo`. A DRHP is
+// proof that an issue exists, but it often has no final dates, price band, lot
+// size, or even an exchange board yet. Keeping it here lets the public product
+// show the full pipeline without inventing application-ready terms.
+model IpoFilingCatalogue {
+  id           String         @id @default(uuid())
+  issuerKey    String
+  companyName  String
+  stage        IpoFilingStage
+  filingDate   DateTime
+  source       String
+  sourceUrl    String         @unique
+  documentUrl  String?
+  raw          Json
+  ipo          Ipo?           @relation(fields: [ipoId], references: [id], onDelete: SetNull)
+  ipoId        String?
+  firstSeenAt  DateTime       @default(now())
+  lastSeenAt   DateTime       @default(now())
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([issuerKey, filingDate])
+  @@index([stage, filingDate])
+  @@index([ipoId])
+}
+
+// Append-only capture of the official payload and the exact decision it
+// produced. Rechecks insert another capture rather than rewriting history.
+model OfficialEvidenceCapture {
+  id         String                       @id @default(uuid())
+  ipo        Ipo                          @relation(fields: [ipoId], references: [id], onDelete: Cascade)
+  ipoId      String
+  source     String
+  sourceUrl  String
+  capturedAt DateTime
+  decision   OfficialVerificationDecision
+  reasons    String[]
+  raw        Json
+  createdAt  DateTime                     @default(now())
+
+  comparisons OfficialFieldComparison[]
+
+  @@index([ipoId, capturedAt])
+  @@index([decision, capturedAt])
+}
+
+model OfficialFieldComparison {
+  id             String                  @id @default(uuid())
+  capture        OfficialEvidenceCapture @relation(fields: [captureId], references: [id], onDelete: Cascade)
+  captureId      String
+  field          String
+  status         OfficialFieldStatus
+  candidateValue String?
+  officialValue  String?
+  sourceUrl      String?
+  createdAt      DateTime                @default(now())
+
+  @@index([captureId, field])
 }
 
 model Document {
@@ -239,15 +318,15 @@ enum ExtractionStatus {
 }
 
 enum FinancialRevisionState {
-  EXTRACTED           // raw extraction done
-  NORMALIZED          // units/scope normalized
-  VALIDATED           // deterministic rules passed or identified issues
-  AUTO_VERIFIED       // high-confidence, no human intervention needed
-  REVIEW_REQUIRED     // extraction issues, ambiguity, or mismatch detected
-  APPROVED            // human approved
-  PUBLISHED           // in production, immutable
-  SUPERSEDED          // newer document/revision published
-  REVOKED             // found to be incorrect
+  EXTRACTED // raw extraction done
+  NORMALIZED // units/scope normalized
+  VALIDATED // deterministic rules passed or identified issues
+  AUTO_VERIFIED // high-confidence, no human intervention needed
+  REVIEW_REQUIRED // extraction issues, ambiguity, or mismatch detected
+  APPROVED // human approved
+  PUBLISHED // in production, immutable
+  SUPERSEDED // newer document/revision published
+  REVOKED // found to be incorrect
 }
 
 enum FinancialMetric {
@@ -261,51 +340,51 @@ enum FinancialMetric {
 }
 
 model FinancialDocument {
-  id                 String                 @id @default(uuid())
-  ipo                Ipo                    @relation("FinancialDocuments", fields: [ipoId], references: [id], onDelete: Cascade)
-  ipoId              String
-  documentType       FinancialDocumentType
-  sourceUrl          String                 // official SEBI/NSE/BSE link
-  sourceHost         String                 // sebi.gov.in | nseindia.com | bseindia.com
-  fetchedAt          DateTime
-  sha256             String                 // immutable checksum for audit
-  pageCount          Int?
-  ocrRequired        Boolean  @default(false)
-  ocrModel           String? // which OCR version was used
-  publicationDate    DateTime? // document publication date (not fetch date)
-  isLatestForType    Boolean  @default(true) // helps select precedence when multiple RHPs exist
+  id              String                @id @default(uuid())
+  ipo             Ipo                   @relation("FinancialDocuments", fields: [ipoId], references: [id], onDelete: Cascade)
+  ipoId           String
+  documentType    FinancialDocumentType
+  sourceUrl       String // official SEBI/NSE/BSE link
+  sourceHost      String // sebi.gov.in | nseindia.com | bseindia.com
+  fetchedAt       DateTime
+  sha256          String // immutable checksum for audit
+  pageCount       Int?
+  ocrRequired     Boolean               @default(false)
+  ocrModel        String? // which OCR version was used
+  publicationDate DateTime? // document publication date (not fetch date)
+  isLatestForType Boolean               @default(true) // helps select precedence when multiple RHPs exist
 
   extractions FinancialExtraction[]
   createdAt   DateTime              @default(now())
 
+  @@unique([sha256])
   @@index([ipoId, documentType])
   @@index([sourceUrl])
-  @@unique([sha256])
 }
 
 model FinancialExtraction {
-  id                String             @id @default(uuid())
-  document          FinancialDocument  @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  documentId        String
-  metric            FinancialMetric
-  originalLabel     String             // exact text as printed in source
-  rawValue          String             // before normalization
-  normalizedValue   Decimal?           // parsed, unit-converted
-  currency          String @default("INR")
-  unit              String @default("Cr") // Cr | Mn | actual number
-  fiscalYear        String             // e.g. "31 Mar 2026"
-  fiscalYearStart   DateTime?
-  fiscalYearEnd     DateTime?
-  scope             String @default("Consolidated") // Consolidated | Standalone
-  auditStatus       String @default("Audited") // Audited | Restated | Provisional
-  pageNumber        Int?
-  tableReference    String? // "Table 5.2" or similar
-  extractionStatus  ExtractionStatus   @default(EXTRACTED)
-  extractionConfidence Float            // 0.0 to 1.0
-  ocrUsed           Boolean            @default(false)
-  ocrConfidence     Float? // non-null only if ocrUsed
-  validationIssues  String[]           // array of flagged problems
-  createdAt         DateTime           @default(now())
+  id                   String            @id @default(uuid())
+  document             FinancialDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId           String
+  metric               FinancialMetric
+  originalLabel        String // exact text as printed in source
+  rawValue             String // before normalization
+  normalizedValue      Decimal? // parsed, unit-converted
+  currency             String            @default("INR")
+  unit                 String            @default("Cr") // Cr | Mn | actual number
+  fiscalYear           String // e.g. "31 Mar 2026"
+  fiscalYearStart      DateTime?
+  fiscalYearEnd        DateTime?
+  scope                String            @default("Consolidated") // Consolidated | Standalone
+  auditStatus          String            @default("Audited") // Audited | Restated | Provisional
+  pageNumber           Int?
+  tableReference       String? // "Table 5.2" or similar
+  extractionStatus     ExtractionStatus  @default(EXTRACTED)
+  extractionConfidence Float // 0.0 to 1.0
+  ocrUsed              Boolean           @default(false)
+  ocrConfidence        Float? // non-null only if ocrUsed
+  validationIssues     String[] // array of flagged problems
+  createdAt            DateTime          @default(now())
 
   revisions FinancialRevision[] @relation("ExtractionRevisions")
 
@@ -314,10 +393,10 @@ model FinancialExtraction {
 }
 
 model FinancialRevision {
-  id              String                @id @default(uuid())
-  extraction      FinancialExtraction   @relation("ExtractionRevisions", fields: [extractionId], references: [id], onDelete: Cascade)
-  extractionId    String
-  state           FinancialRevisionState @default(EXTRACTED)
+  id           String                 @id @default(uuid())
+  extraction   FinancialExtraction    @relation("ExtractionRevisions", fields: [extractionId], references: [id], onDelete: Cascade)
+  extractionId String
+  state        FinancialRevisionState @default(EXTRACTED)
 
   // Comparison to existing snapshot (if any)
   existingValue   Decimal?
@@ -329,55 +408,55 @@ model FinancialRevision {
   validationNotes String?
 
   // Review decision
-  reviewedBy      String?
-  reviewedAt      DateTime?
-  reviewDecision  String? // "approved" | "rejected_reason"
-  reviewNotes     String?
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  reviewDecision String? // "approved" | "rejected_reason"
+  reviewNotes    String?
 
   // Published reference (if applicable)
-  publishedId     String?
-  published       FinancialPublished? @relation(fields: [publishedId], references: [id])
+  publishedId String?
+  published   FinancialPublished? @relation(fields: [publishedId], references: [id])
 
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([state, extractionId])
 }
 
 model FinancialPublished {
-  id              String              @id @default(uuid())
-  ipo             Ipo                 @relation("PublishedFinancials", fields: [ipoId], references: [id], onDelete: Cascade)
-  ipoId           String
-  metric          FinancialMetric
-  value           Decimal
-  fiscalYear      String
+  id         String          @id @default(uuid())
+  ipo        Ipo             @relation("PublishedFinancials", fields: [ipoId], references: [id], onDelete: Cascade)
+  ipoId      String
+  metric     FinancialMetric
+  value      Decimal
+  fiscalYear String
 
   // Source audit trail
-  sourceDocument  String              // DRHP | RHP | PROSPECTUS (type)
-  sourceUrl       String
-  pageNumber      Int?
-  extractionDate  DateTime
+  sourceDocument   String // DRHP | RHP | PROSPECTUS (type)
+  sourceUrl        String
+  pageNumber       Int?
+  extractionDate   DateTime
   verificationDate DateTime
-  approvedBy      String?
+  approvedBy       String?
 
   // Versioning
-  revisionNumber  Int @default(1)
-  supersededBy    String? // ID of newer published record if this is outdated
-  revokedReason   String?
+  revisionNumber Int     @default(1)
+  supersededBy   String? // ID of newer published record if this is outdated
+  revokedReason  String?
 
   // Immutable record
-  publishedAt     DateTime            @default(now())
+  publishedAt DateTime @default(now())
 
-  revisions       FinancialRevision[]
+  revisions FinancialRevision[]
 
-  @@index([ipoId, metric])
   @@unique([ipoId, metric, fiscalYear, revisionNumber])
+  @@index([ipoId, metric])
 }
 
 // Legacy: deprecated in favour of FinancialPublished, kept for transition
 model FinancialSnapshot {
-  id         String   @id @default(uuid())
-  ipo        Ipo      @relation(fields: [ipoId], references: [id], onDelete: Cascade)
+  id         String    @id @default(uuid())
+  ipo        Ipo       @relation(fields: [ipoId], references: [id], onDelete: Cascade)
   ipoId      String
   fiscalYear String
   revenueCr  Decimal?
@@ -387,10 +466,10 @@ model FinancialSnapshot {
   debtEquity Decimal?
   eps        Decimal?
   source     String?
-  verified   Boolean  @default(false)
+  verified   Boolean   @default(false)
   verifiedBy String?
   verifiedAt DateTime?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
 
   @@index([ipoId])
 }
@@ -398,16 +477,16 @@ model FinancialSnapshot {
 // ---------- correction audit trail ----------
 
 model CorrectionLog {
-  id         String   @id @default(uuid())
-  entityType String // e.g. "FinancialSnapshot"
-  entityId   String
-  action     String // e.g. "verify", "correct"
-  fieldName  String? // which field, if a single-field correction
-  oldValue   String?
-  newValue   String?
+  id          String   @id @default(uuid())
+  entityType  String // e.g. "FinancialSnapshot"
+  entityId    String
+  action      String // e.g. "verify", "correct"
+  fieldName   String? // which field, if a single-field correction
+  oldValue    String?
+  newValue    String?
   performedBy String
-  note       String?
-  createdAt  DateTime @default(now())
+  note        String?
+  createdAt   DateTime @default(now())
 
   @@index([entityType, entityId])
 }
@@ -528,13 +607,13 @@ model IngestionLock {
 }
 
 model IngestionRun {
-  id                 String   @id @default(uuid())
-  startedAt          DateTime @default(now())
-  finishedAt         DateTime?
-  ok                 Boolean
-  skippedDueToLock   Boolean  @default(false)
-  summary            Json?
-  error              String?
+  id               String    @id @default(uuid())
+  startedAt        DateTime  @default(now())
+  finishedAt       DateTime?
+  ok               Boolean
+  skippedDueToLock Boolean   @default(false)
+  summary          Json?
+  error            String?
 
   @@index([startedAt])
 }

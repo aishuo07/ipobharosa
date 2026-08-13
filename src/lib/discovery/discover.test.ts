@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { IpoListingCandidate } from "./types";
+import type { OfficialEvidenceResult } from "./official/types";
 
 let listingResult: IpoListingCandidate[] = [];
 let existingCompanyNames: string[] = [];
@@ -11,6 +12,8 @@ let unreviewedCount = 0;
 let ipoCreateShouldThrow = false;
 let discoveryAttempts: Array<{ sourceUrl: string; companyName: string; attempts: number; lastAttemptAt: Date; nextAttemptAt: Date; lastError: string }> = [];
 let factsImpl: (url: string, name: string, board: "MAINBOARD" | "SME") => Promise<unknown>;
+let officialImpl: (name: string) => Promise<unknown>;
+let autoPublishEnabled = true;
 
 vi.mock("./ipowatch-list", () => ({
   fetchIpoListing: async () => listingResult,
@@ -18,6 +21,15 @@ vi.mock("./ipowatch-list", () => ({
 
 vi.mock("./ipowatch-facts", () => ({
   fetchIpoFacts: (...args: [string, string, "MAINBOARD" | "SME"]) => factsImpl(...args),
+}));
+
+vi.mock("./official", () => ({
+  fetchOfficialIpoEvidence: (name: string) => officialImpl(name),
+}));
+
+vi.mock("./official/persistence", () => ({
+  officialAutoPublishEnabled: () => autoPublishEnabled,
+  persistOfficialDecision: async () => undefined,
 }));
 
 function makeTx() {
@@ -48,6 +60,7 @@ function makeTx() {
         return { count: data.length };
       },
     },
+    officialEvidenceCapture: { create: async () => undefined },
   };
 }
 
@@ -105,6 +118,32 @@ function validFacts(
   };
 }
 
+function matchingOfficialEvidence(facts: ReturnType<typeof validFacts>): Extract<OfficialEvidenceResult, { status: "FOUND" }> {
+  const sourceUrl = "https://www.nseindia.com/market-data/issue-information?series=EQ&symbol=TEST&type=Active";
+  return {
+    status: "FOUND",
+    evidence: {
+      source: "NSE",
+      sourceUrl,
+      capturedAt: new Date("2026-08-12T12:00:00Z"),
+      raw: {},
+      facts: {
+        companyName: facts.companyName,
+        board: facts.board,
+        priceBandLow: facts.priceBandLow,
+        priceBandHigh: facts.priceBandHigh,
+        lotSize: facts.lotSize,
+        openDate: facts.openDate,
+        closeDate: facts.closeDate,
+        registrar: facts.registrar,
+        leadManagers: facts.leadManagers,
+        rhpUrl: "https://nsearchives.nseindia.com/content/ipo/RHP_TEST.zip",
+      },
+      fieldSources: {},
+    },
+  };
+}
+
 describe("runDiscovery", () => {
   beforeEach(() => {
     listingResult = [];
@@ -116,7 +155,8 @@ describe("runDiscovery", () => {
     unreviewedCount = 0;
     ipoCreateShouldThrow = false;
     discoveryAttempts = [];
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
+    autoPublishEnabled = true;
+    officialImpl = async (name) => matchingOfficialEvidence(validFacts(name));
   });
 
   afterEach(() => {
@@ -157,10 +197,9 @@ describe("runDiscovery", () => {
     expect(summary.draftsCreated + summary.autoPublished).toBe(1);
   });
 
-  it("auto-publishes a candidate that is valid, cross-verified, and has an official document link", async () => {
+  it("auto-publishes a candidate only after all material NSE fields agree", async () => {
     listingResult = [{ companyName: "High Confidence Co", detailUrl: "https://ipowatch.in/high-confidence-co-ipo/", board: "MAINBOARD" }];
     factsImpl = async () => validFacts("High Confidence Co");
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true })); // cross-verified on Sahi
 
     const summary = await runDiscovery();
 
@@ -171,13 +210,14 @@ describe("runDiscovery", () => {
     expect(createdLogs[0]).toMatchObject({ action: "auto-publish" });
     expect(createdDocuments).toEqual([
       expect.objectContaining({ docType: "drhp", url: "https://www.bseindia.com/corporates/drhp.pdf" }),
+      expect.objectContaining({ docType: "rhp", url: "https://nsearchives.nseindia.com/content/ipo/RHP_TEST.zip" }),
     ]);
   });
 
-  it("holds a valid but not-cross-verified candidate as a draft, not auto-published", async () => {
-    listingResult = [{ companyName: "Solo Source Co", detailUrl: "https://ipowatch.in/solo-source-co-ipo/", board: "MAINBOARD" }];
-    factsImpl = async () => validFacts("Solo Source Co");
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false })); // not on Sahi
+  it("holds an eligible matching candidate when the production feature flag is disabled", async () => {
+    listingResult = [{ companyName: "Flagged Co", detailUrl: "https://ipowatch.in/flagged-co-ipo/", board: "MAINBOARD" }];
+    factsImpl = async () => validFacts("Flagged Co");
+    autoPublishEnabled = false;
 
     const summary = await runDiscovery();
 
@@ -187,29 +227,35 @@ describe("runDiscovery", () => {
     expect(createdLogs).toHaveLength(0);
   });
 
-  it("holds a cross-verified candidate with no official document link as a draft, not auto-published", async () => {
+  it("retries when the official source omits a material document link", async () => {
     listingResult = [{ companyName: "No Doc Co", detailUrl: "https://ipowatch.in/no-doc-co-ipo/", board: "MAINBOARD" }];
     factsImpl = async () => validFacts("No Doc Co", { drhpUrl: null, rhpUrl: null });
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+    officialImpl = async (name) => {
+      const result = matchingOfficialEvidence(validFacts(name));
+      result.evidence.facts.rhpUrl = null;
+      return result;
+    };
 
     const summary = await runDiscovery();
 
-    expect(summary.draftsCreated).toBe(1);
+    expect(summary.fetchFailed).toHaveLength(1);
     expect(summary.autoPublished).toBe(0);
   });
 
-  it("stores but does not treat a third-party hosted RHP copy as official evidence", async () => {
+  it("routes a material NSE conflict to quarantine", async () => {
     listingResult = [{ companyName: "Copied Filing Co", detailUrl: "https://ipowatch.in/copied-filing-co-ipo/", board: "MAINBOARD" }];
     factsImpl = async () => validFacts("Copied Filing Co", { drhpUrl: null, rhpUrl: "https://ipowatch.in/wp-content/rhp.pdf" });
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+    officialImpl = async (name) => {
+      const result = matchingOfficialEvidence(validFacts(name));
+      result.evidence.facts.lotSize = 999;
+      return result;
+    };
 
     const summary = await runDiscovery();
 
-    expect(summary.draftsCreated).toBe(1);
+    expect(summary.quarantined).toBe(1);
     expect(summary.autoPublished).toBe(0);
-    expect(createdDocuments).toEqual([
-      expect.objectContaining({ docType: "rhp", url: "https://ipowatch.in/wp-content/rhp.pdf" }),
-    ]);
+    expect(createdIpos[0].quarantineReason).toContain("lotSize differs");
   });
 
   it("quarantines a candidate with inconsistent data instead of discarding it silently", async () => {

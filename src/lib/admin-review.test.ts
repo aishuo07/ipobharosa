@@ -11,6 +11,10 @@ describe("validateApprovalInput", () => {
     expect(() => validateApprovalInput({ sector: "Engineering", factsChecked: true }))
       .toThrow("Confirm both review checks");
   });
+
+  it("does not block publication when optional sector enrichment is unavailable", () => {
+    expect(validateApprovalInput({ factsChecked: true, evidenceChecked: true })).toBe("");
+  });
 });
 
 describe("validateRejectionInput", () => {

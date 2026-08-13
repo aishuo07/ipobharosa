@@ -15,6 +15,7 @@ function makeSummary(overrides: Partial<IngestionSummary> = {}): IngestionSummar
     statusTransitions: 0,
     reminders: { sent: 0, failed: 0, skipped: 0 },
     discovery: { candidatesSeen: 0, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, fetchFailed: [], dbErrors: [], queueCapped: false, deferredCandidates: 0 },
+    catalogue: { seen: 0, stored: 0, linked: 0 },
     filings: { captured: 0, skipped: 0, failed: [] },
     ...overrides,
   };
@@ -66,6 +67,13 @@ describe("computeAlertReasons", () => {
       filings: { captured: 0, skipped: 0, failed: [{ ipoName: "X", error: "not a PDF" }] },
     }));
     expect(reasons.some((reason) => reason.includes("filing evidence"))).toBe(true);
+  });
+
+  it("flags an official catalogue refresh failure", () => {
+    const reasons = computeAlertReasons(makeSummary({
+      catalogue: { seen: 0, stored: 0, linked: 0, error: "SEBI HTTP 503" },
+    }));
+    expect(reasons.some((reason) => reason.includes("catalogue refresh"))).toBe(true);
   });
 
   it("does not flag a source with zero attempts as down", () => {

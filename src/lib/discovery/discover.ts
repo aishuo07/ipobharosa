@@ -3,13 +3,11 @@ import { toIpoSlug } from "@/lib/ipo-slug";
 import { fetchIpoListing } from "./ipowatch-list";
 import { fetchIpoFacts } from "./ipowatch-facts";
 import { validateIpoFacts } from "./validate";
-import { classifyCandidate } from "./classify";
 import type { IpoFacts, IpoListingCandidate } from "./types";
-import { filingEvidenceClass } from "@/lib/document-evidence";
+import { fetchOfficialIpoEvidence } from "./official";
+import { decidePublication } from "./official/consensus";
+import { officialAutoPublishEnabled, persistOfficialDecision } from "./official/persistence";
 
-const USER_AGENT =
-  "Mozilla/5.0 (compatible; IPOBharosaBot/1.0; +https://ipobharosa.vercel.app)";
-const FETCH_TIMEOUT_MS = 15000;
 // Processing candidates a few at a time, rather than either fully
 // sequential (slow — this can be dozens of network round-trips on the
 // first run against months of backlog) or fully parallel (impolite to
@@ -34,27 +32,6 @@ function deriveInitialStatus(facts: IpoFacts, now: Date): "UPCOMING" | "OPEN" | 
   if (now < facts.openDate) return "UPCOMING";
   if (now <= facts.closeDate) return "OPEN";
   return "CLOSED";
-}
-
-/**
- * A second, independent source agreeing the company is actually doing an
- * IPO right now raises confidence in the candidate — same trust
- * philosophy as the GMP median, applied to discovery instead of pricing.
- * A HEAD request against Sahi's known per-IPO slug convention is enough;
- * we don't need Sahi's own facts since ipowatch's are already structured.
- */
-async function existsOnSahi(companyName: string): Promise<boolean> {
-  const slug = toIpoSlug(companyName);
-  try {
-    const res = await fetch(`https://www.sahi.com/blogs/${slug}-ipo-gmp-today`, {
-      method: "HEAD",
-      headers: { "User-Agent": USER_AGENT },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
 }
 
 async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
@@ -98,13 +75,57 @@ async function processCandidate(candidate: IpoListingCandidate): Promise<Candida
   }
 
   const problems = validateIpoFacts(facts);
-  const crossVerified = await existsOnSahi(candidate.companyName);
-  const filingUrls = [facts.drhpUrl, facts.rhpUrl].filter((url): url is string => Boolean(url));
-  const hasOfficialDocument = filingUrls.some((url) => filingEvidenceClass(url) === "OFFICIAL");
-  const confidence = classifyCandidate({ validationProblems: problems, crossVerified, hasOfficialDocument });
+  if (problems.length > 0) {
+    // Invalid secondary facts are an actual data exception. They are kept
+    // visible to operators, not retried forever or published.
+    const now = new Date();
+    try {
+      await prisma.$transaction(async (tx) => {
+        const company = await tx.company.create({ data: { name: facts.companyName } });
+        await tx.ipo.create({
+          data: {
+            companyId: company.id,
+            status: deriveInitialStatus(facts, now),
+            board: facts.board,
+            priceBandLow: facts.priceBandLow,
+            priceBandHigh: facts.priceBandHigh,
+            lotSize: facts.lotSize,
+            issueSizeCr: facts.issueSizeCr,
+            freshIssueCr: facts.freshIssueCr,
+            ofsCr: facts.ofsCr,
+            openDate: facts.openDate,
+            closeDate: facts.closeDate,
+            allotmentDate: facts.allotmentDate,
+            refundDate: facts.refundDate,
+            listingDate: facts.listingDate,
+            registrar: facts.registrar,
+            leadManagers: facts.leadManagers,
+            drhpUrl: facts.drhpUrl,
+            rhpUrl: facts.rhpUrl,
+            sourceUrl: candidate.detailUrl,
+            publicationState: "QUARANTINED",
+            quarantineReason: problems.join("; "),
+            discoveredFrom: ["ipowatch"],
+            discoveredAt: now,
+          },
+        });
+      });
+      return { kind: "quarantined" };
+    } catch (e) {
+      return { kind: "dbError", companyName: candidate.companyName, error: (e as Error).message };
+    }
+  }
+
+  const officialResult = await fetchOfficialIpoEvidence(facts.companyName);
+  const decision = decidePublication(facts, officialResult);
+  if (decision.decision === "RETRY") {
+    return { kind: "fetchFailed", companyName: candidate.companyName, error: decision.reasons.join("; ") };
+  }
 
   const now = new Date();
-  const publicationState = confidence === "HIGH" ? "PUBLISHED" : confidence === "MEDIUM" ? "DRAFT" : "QUARANTINED";
+  const shouldPublish = decision.decision === "AUTO_PUBLISH" && officialAutoPublishEnabled();
+  const publicationState = decision.decision === "EXCEPTION" ? "QUARANTINED" : shouldPublish ? "PUBLISHED" : "DRAFT";
+  const officialFacts = decision.evidence!.facts;
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -113,44 +134,45 @@ async function processCandidate(candidate: IpoListingCandidate): Promise<Candida
         data: {
           companyId: company.id,
           status: deriveInitialStatus(facts, now),
-          board: facts.board,
-          priceBandLow: facts.priceBandLow,
-          priceBandHigh: facts.priceBandHigh,
-          lotSize: facts.lotSize,
+          board: officialFacts.board!,
+          priceBandLow: officialFacts.priceBandLow!,
+          priceBandHigh: officialFacts.priceBandHigh!,
+          lotSize: officialFacts.lotSize!,
           issueSizeCr: facts.issueSizeCr,
           freshIssueCr: facts.freshIssueCr,
           ofsCr: facts.ofsCr,
-          openDate: facts.openDate,
-          closeDate: facts.closeDate,
+          openDate: officialFacts.openDate!,
+          closeDate: officialFacts.closeDate!,
           allotmentDate: facts.allotmentDate,
           refundDate: facts.refundDate,
           listingDate: facts.listingDate,
-          registrar: facts.registrar,
-          leadManagers: facts.leadManagers,
+          registrar: officialFacts.registrar!,
+          leadManagers: officialFacts.leadManagers,
           drhpUrl: facts.drhpUrl,
-          rhpUrl: facts.rhpUrl,
+          rhpUrl: officialFacts.rhpUrl!,
           sourceUrl: candidate.detailUrl,
           publicationState,
-          autoPublished: confidence === "HIGH",
-          quarantineReason: confidence === "QUARANTINE" ? problems.join("; ") : null,
-          discoveredFrom: crossVerified ? ["ipowatch", "sahi"] : ["ipowatch"],
+          autoPublished: shouldPublish,
+          quarantineReason: decision.decision === "EXCEPTION" ? decision.reasons.join("; ") : null,
+          discoveredFrom: ["ipowatch", decision.evidence!.source.toLowerCase()],
           discoveredAt: now,
-          reviewedAt: confidence === "HIGH" ? now : null,
+          reviewedAt: shouldPublish ? now : null,
         },
       });
       const filingDocuments = [
         facts.drhpUrl ? { ipoId: ipo.id, label: "Draft Red Herring Prospectus (DRHP)", url: facts.drhpUrl, docType: "drhp" } : null,
-        facts.rhpUrl ? { ipoId: ipo.id, label: "Red Herring Prospectus (RHP)", url: facts.rhpUrl, docType: "rhp" } : null,
+        officialFacts.rhpUrl ? { ipoId: ipo.id, label: "Red Herring Prospectus (RHP)", url: officialFacts.rhpUrl, docType: "rhp" } : null,
       ].filter((document): document is NonNullable<typeof document> => document !== null);
       if (filingDocuments.length > 0) await tx.document.createMany({ data: filingDocuments });
-      if (confidence === "HIGH") {
+      await persistOfficialDecision(tx, ipo.id, decision);
+      if (shouldPublish) {
         await tx.correctionLog.create({
           data: {
             entityType: "Ipo",
             entityId: ipo.id,
             action: "auto-publish",
             performedBy: "discovery-pipeline",
-            note: "cross-verified by a second source and an official DRHP/RHP link was present",
+            note: "all material IPO fields matched the captured NSE evidence",
           },
         });
       }
@@ -159,16 +181,15 @@ async function processCandidate(candidate: IpoListingCandidate): Promise<Candida
     return { kind: "dbError", companyName: candidate.companyName, error: (e as Error).message };
   }
 
-  return confidence === "HIGH" ? { kind: "autoPublished" } : confidence === "MEDIUM" ? { kind: "draftCreated" } : { kind: "quarantined" };
+  return shouldPublish ? { kind: "autoPublished" } : publicationState === "DRAFT" ? { kind: "draftCreated" } : { kind: "quarantined" };
 }
 
 /**
  * Finds IPOs on ipowatch.in's listing that we aren't tracking yet, pulls
  * full facts from each one's detail page, and routes each candidate by
- * confidence: internally-inconsistent data is quarantined (kept, not
- * discarded, with the reason recorded); consistent data with a second
- * source's agreement and an official filing link auto-publishes;
- * everything else becomes a draft for a human. See
+ * evidence: internally-inconsistent or conflicting data is quarantined;
+ * temporary official-source gaps retry; complete field-level agreement
+ * can auto-publish when the production safety flag is enabled. See
  * scripts/list-draft-ipos.ts and scripts/review-draft-ipo.ts for the
  * human review step.
  */

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { BoardIpo } from "@/lib/board-data";
+import type { FilingRadarEntry } from "@/lib/discovery/filing-catalogue";
 import { SegmentedTabs, StatePanel, TabButton, TextInput } from "@/components/ui";
 import { googleCalendarSubscriptionUrl } from "@/lib/calendar";
 import {
@@ -45,11 +46,13 @@ type BoardUser = { email: string | null; name: string | null } | null;
 
 export default function IpoBoard({
   ipos,
+  filings = [],
   user = null,
   watchlistedIds = [],
   onSignOut,
 }: {
   ipos: BoardIpo[];
+  filings?: FilingRadarEntry[];
   user?: BoardUser;
   watchlistedIds?: string[];
   onSignOut?: () => Promise<void>;
@@ -64,7 +67,7 @@ export default function IpoBoard({
   const [query, setQuery] = useState("");
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [showCompare, setShowCompare] = useState(false);
-  const [view, setView] = useState<"board" | "calendar">("board");
+  const [view, setView] = useState<"board" | "pipeline" | "calendar">("board");
   const [calMonth, setCalMonth] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -130,6 +133,10 @@ export default function IpoBoard({
   }, [ipos, tab, query]);
 
   const selected = ipos.find((i) => i.id === selectedId) ?? null;
+  const filingList = useMemo(() => {
+    const trimmed = query.trim().toLowerCase();
+    return trimmed ? filings.filter((entry) => entry.companyName.toLowerCase().includes(trimmed)) : filings;
+  }, [filings, query]);
 
   function selectCard(id: string) {
     const opening = selectedId !== id;
@@ -140,6 +147,12 @@ export default function IpoBoard({
   function changeTab(key: BoardIpo["status"]) {
     setTab(key);
     setSelectedId(null);
+  }
+
+  function changeView(next: "board" | "pipeline" | "calendar") {
+    setView(next);
+    setSelectedId(null);
+    setQuery("");
   }
 
   return (
@@ -181,7 +194,8 @@ export default function IpoBoard({
           <p>Dates, demand and grey-market signals—clearly sourced, honestly labelled.</p>
         </div>
         <div className="board-proof" aria-label="IPOBharosa data principles">
-          <span><b>{ipos.length}</b> tracked IPOs</span>
+          <span><b>{ipos.length + filings.length}</b> tracked IPOs</span>
+          <span><b>{filings.length}</b> official filings</span>
           <span><b>3</b> GMP sources</span>
           <span><b>0</b> paid rankings</span>
         </div>
@@ -192,40 +206,51 @@ export default function IpoBoard({
           <TabButton
             type="button"
             active={view === "board"}
-            onClick={() => setView("board")}
+            onClick={() => changeView("board")}
           >
             Board
           </TabButton>
+          {filings.length > 0 && (
+            <TabButton
+              type="button"
+              active={view === "pipeline"}
+              onClick={() => changeView("pipeline")}
+            >
+              IPO Pipeline <span className="n">{filings.length}</span>
+            </TabButton>
+          )}
           <TabButton
             type="button"
             active={view === "calendar"}
-            onClick={() => setView("calendar")}
+            onClick={() => changeView("calendar")}
           >
             Calendar
           </TabButton>
         </SegmentedTabs>
-        {view === "board" && (
+        {(view === "board" || view === "pipeline") && (
           <>
-            <SegmentedTabs label="IPO status">
-              {TAB_DEFS.map((t) => {
-                const count = ipos.filter((i) => i.status === t.key).length;
-                return (
-                  <TabButton
-                    key={t.key}
-                    type="button"
-                    active={tab === t.key}
-                    onClick={() => changeTab(t.key)}
-                  >
-                    {t.label} <span className="n">{count}</span>
-                  </TabButton>
-                );
-              })}
-            </SegmentedTabs>
+            {view === "board" && (
+              <SegmentedTabs label="IPO status">
+                {TAB_DEFS.map((t) => {
+                  const count = ipos.filter((i) => i.status === t.key).length;
+                  return (
+                    <TabButton
+                      key={t.key}
+                      type="button"
+                      active={tab === t.key}
+                      onClick={() => changeTab(t.key)}
+                    >
+                      {t.label} <span className="n">{count}</span>
+                    </TabButton>
+                  );
+                })}
+              </SegmentedTabs>
+            )}
             <div className="search-wrap">
               <TextInput
                 type="search"
                 className="search-box"
-                placeholder="Search by company or sector"
+                placeholder={view === "pipeline" ? "Search official filings" : "Search by company or sector"}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 aria-label="Search IPOs by company or sector"
@@ -242,7 +267,9 @@ export default function IpoBoard({
               )}
             </div>
             <div className="sort-note">
-              {query
+              {view === "pipeline"
+                ? `${filingList.length} official filing${filingList.length !== 1 ? "s" : ""}`
+                : query
                 ? `${list.length} result${list.length !== 1 ? "s" : ""} for "${query.trim()}"`
                 : tab === "OPEN"
                   ? "Sorted by closing soonest"
@@ -306,6 +333,8 @@ export default function IpoBoard({
             </div>
           )}
         </>
+      ) : view === "pipeline" ? (
+        <FilingPipeline entries={filingList} />
       ) : (
         <CalendarView
           ipos={ipos}
@@ -342,6 +371,52 @@ export default function IpoBoard({
         </div>
       </footer>
     </div>
+  );
+}
+
+function FilingPipeline({ entries }: { entries: FilingRadarEntry[] }) {
+  return (
+    <section className="filing-pipeline" aria-labelledby="filing-pipeline-title">
+      <div className="pipeline-explainer">
+        <div>
+          <p className="board-kicker">Official market pipeline</p>
+          <h2 id="filing-pipeline-title">Filed with SEBI, before applications open.</h2>
+        </div>
+        <p>
+          These companies have an official DRHP or RHP filing. Final price, lot size and dates appear
+          on the main board only after exchange verification—missing terms are never shown as zero.
+        </p>
+      </div>
+      <div className="filing-grid">
+        {entries.map((entry) => (
+          <article className="filing-card" key={entry.id}>
+            <div className="filing-card-top">
+              <span className={`badge ${entry.stage === "RHP_FILED" ? "badge-open" : "badge-upcoming"}`}>
+                {entry.stage === "RHP_FILED" ? "RHP filed" : "DRHP filed"}
+              </span>
+              <span className="board-tag">SEBI official</span>
+            </div>
+            <h3>{entry.companyName}</h3>
+            <p className="filing-date">
+              Filed {new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(entry.filingDate))}
+            </p>
+            <div className="filing-awaiting">
+              <span>Application terms</span>
+              <strong>Awaiting exchange announcement</strong>
+            </div>
+            <div className="filing-links">
+              <a href={entry.sourceUrl} target="_blank" rel="noopener noreferrer">View SEBI filing ↗</a>
+              {entry.documentUrl && <a href={entry.documentUrl} target="_blank" rel="noopener noreferrer">Open document ↗</a>}
+            </div>
+          </article>
+        ))}
+      </div>
+      {entries.length === 0 && (
+        <StatePanel title="Official filing feed is temporarily unavailable">
+          The application-ready board remains available. The next ingestion run will retry SEBI automatically.
+        </StatePanel>
+      )}
+    </section>
   );
 }
 

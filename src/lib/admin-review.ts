@@ -11,8 +11,7 @@ export function validateApprovalInput(input: {
   factsChecked?: boolean;
   evidenceChecked?: boolean;
 }): string {
-  const sector = input.sector?.trim();
-  if (!sector) throw new Error("Choose a verified sector before publishing");
+  const sector = input.sector?.trim() ?? "";
   if (!input.factsChecked || !input.evidenceChecked) {
     throw new Error("Confirm both review checks before publishing");
   }
