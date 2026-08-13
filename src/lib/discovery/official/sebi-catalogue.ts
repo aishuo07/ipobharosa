@@ -36,15 +36,17 @@ const FETCH_TIMEOUT_MS = 10_000;
 function cleanIssuer(title: string): string {
   const issuer = title
     .split(/<br\s*\/?\s*>/i)[0]
-    .replace(/\s*[–—-]\s*(?:addendum|corrigendum)\s+to\s+(?:u?drhp|rhp).*$/i, "")
+    .replace(/\s*[–—-]\s*(?:addendum|corrigendum)(?:\s+cum\s+(?:addendum|corrigendum))?(?:\s+to\s+(?:u?drhp|rhp))?.*$/i, "")
     .replace(/\s*[–—-]\s*(?:u?drhp|rhp|draft red herring prospectus|red herring prospectus).*$/i, "")
     .replace(/\s+u?drhp(?:[-\s]?[a-z0-9]+)?$/i, "")
     .replace(/\s+/g, " ")
     .trim();
   if (issuer !== issuer.toUpperCase()) return issuer;
-  return issuer.toLowerCase().replace(/\b[a-z]+\b/g, (word) =>
-    word.length <= 4 ? word.toUpperCase() : word[0].toUpperCase() + word.slice(1),
-  );
+  const acronyms = new Set(["cx", "gni", "ifl", "j", "m", "mim", "mv", "nse", "pan", "sbi"]);
+  return issuer.toLowerCase().replace(/\b[a-z]+\b/g, (word) => {
+    if (word === "and") return word;
+    return acronyms.has(word) ? word.toUpperCase() : word[0].toUpperCase() + word.slice(1);
+  });
 }
 
 export function parseSebiFilingPage(html: string, stage: FilingStage): OfficialFilingEntry[] {
@@ -57,6 +59,8 @@ export function parseSebiFilingPage(html: string, stage: FilingStage): OfficialF
     const sourceUrl = link.attr("href")?.trim();
     const title = link.attr("title")?.trim() || link.clone().children().remove().end().text().trim();
     const companyName = cleanIssuer(title);
+    const primaryTitle = title.split(/<br\s*\/?\s*>/i)[0];
+    const resolvedStage = /(?:^|\s|[-–—])RHP(?:\s|$|[-–—])/i.test(primaryTitle) ? "RHP_FILED" : stage;
     const filingDate = new Date(`${filingDateText} 00:00:00 UTC`);
     if (!sourceUrl?.startsWith("https://www.sebi.gov.in/") || !companyName || Number.isNaN(filingDate.getTime())) return;
     const titleHtml = link.attr("title") ?? "";
@@ -64,7 +68,7 @@ export function parseSebiFilingPage(html: string, stage: FilingStage): OfficialF
     entries.push({
       issuerKey: normalizeIssuerName(companyName),
       companyName,
-      stage,
+      stage: resolvedStage,
       filingDate,
       source: "SEBI",
       sourceUrl,

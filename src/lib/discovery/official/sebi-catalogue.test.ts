@@ -42,4 +42,14 @@ describe("SEBI official filing catalogue", () => {
       issuerKey: "oravel stays",
     });
   });
+
+  it("uses the document title when SEBI places an RHP on the DRHP category page", () => {
+    const misplaced = `<table id="sample_1"><tbody><tr><td>Aug 3, 2026</td><td><a class="points" href="https://www.sebi.gov.in/filings/public-issues/veritas.html" title="Veritas Finance Limited - RHP">Veritas</a></td></tr></tbody></table>`;
+    expect(parseSebiFilingPage(misplaced, "DRHP_FILED")[0].stage).toBe("RHP_FILED");
+  });
+
+  it("does not leak addendum or corrigendum labels into the company name", () => {
+    const addendum = `<table id="sample_1"><tbody><tr><td>Aug 7, 2026</td><td><a class="points" href="https://www.sebi.gov.in/filings/public-issues/leap.html" title="LEAP INDIA LIMITED - Addendum cum Corrigendum">LEAP</a></td></tr></tbody></table>`;
+    expect(parseSebiFilingPage(addendum, "RHP_FILED")[0].companyName).toBe("Leap India Limited");
+  });
 });
