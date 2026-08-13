@@ -15,14 +15,16 @@ import type { GmpAdapter } from "@/lib/gmp/types";
 import { captureFilingEvidence } from "@/lib/financials/filing-evidence";
 import { filingEvidenceClass } from "@/lib/document-evidence";
 import { syncOfficialFilingCatalogue, type FilingCatalogueSync } from "@/lib/discovery/filing-catalogue";
+import { countRevalidationCandidates, revalidateOldestCandidate } from "@/lib/discovery/revalidate";
 
 const ALERT_RECIPIENT = "aish.iiitb@gmail.com";
 const BATCH_SIZE = 3;
 const GMP_ADAPTERS: GmpAdapter[] = [ipoWatchAdapter, sahiAdapter, ipojiAdapter];
 const GMP_ELIGIBLE_STATUSES = ["UPCOMING", "OPEN", "CLOSED"] as const;
 const SUBSCRIPTION_ELIGIBLE_STATUSES = ["OPEN", "CLOSED"] as const;
+const REVALIDATION_PER_RUN = 8;
 
-export type IngestionStage = "prepare" | "filings" | "gmp" | "subscription" | "finalize" | "complete";
+export type IngestionStage = "prepare" | "revalidation" | "filings" | "gmp" | "subscription" | "finalize" | "complete";
 
 export type IngestionSummary = {
   ipoCount: number;
@@ -33,6 +35,7 @@ export type IngestionSummary = {
   reminders: { sent: number; failed: number; skipped: number };
   discovery: DiscoverySummary | { error: string };
   catalogue: FilingCatalogueSync;
+  revalidation: { target: number; checked: number; published: number; eligibleHeld: number; retries: number; exceptions: number; invalid: number };
   filings: { captured: number; skipped: number; failed: { ipoName: string; error: string }[] };
   skippedDueToLock?: boolean;
 };
@@ -61,6 +64,7 @@ export const EMPTY_SUMMARY: IngestionSummary = {
   reminders: { sent: 0, failed: 0, skipped: 0 },
   discovery: { candidatesSeen: 0, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, fetchFailed: [], dbErrors: [], queueCapped: false, deferredCandidates: 0 },
   catalogue: { seen: 0, stored: 0, linked: 0 },
+  revalidation: { target: 0, checked: 0, published: 0, eligibleHeld: 0, retries: 0, exceptions: 0, invalid: 0 },
   filings: { captured: 0, skipped: 0, failed: [] },
 };
 
@@ -81,6 +85,7 @@ export function readCheckpoint(value: unknown): IngestionCheckpoint {
     summary: {
       ...candidate.summary,
       catalogue: candidate.summary.catalogue ?? structuredClone(EMPTY_SUMMARY.catalogue),
+      revalidation: candidate.summary.revalidation ?? structuredClone(EMPTY_SUMMARY.revalidation),
       filings: candidate.summary.filings ?? structuredClone(EMPTY_SUMMARY.filings),
     },
   };
@@ -127,6 +132,7 @@ export async function runIngestionStep(startedBy = "cron"): Promise<IngestionSte
     checkpoint = { ...checkpoint, attempts: checkpoint.attempts + 1, lastError: null };
 
     if (checkpoint.stage === "prepare") checkpoint = await runPrepare(checkpoint);
+    else if (checkpoint.stage === "revalidation") checkpoint = await runRevalidationBatch(checkpoint);
     else if (checkpoint.stage === "filings") checkpoint = await runFilingBatch(checkpoint);
     else if (checkpoint.stage === "gmp") checkpoint = await runGmpBatch(run.id, run.startedAt, checkpoint);
     else if (checkpoint.stage === "subscription") checkpoint = await runSubscriptionBatch(run.id, run.startedAt, checkpoint);
@@ -156,6 +162,7 @@ async function runPrepare(checkpoint: IngestionCheckpoint): Promise<IngestionChe
     discovery = { error: error instanceof Error ? error.message : String(error) };
   }
   const ipoCount = await prisma.ipo.count({ where: { status: { in: [...GMP_ELIGIBLE_STATUSES] } } });
+  const revalidationTarget = Math.min(await countRevalidationCandidates(), REVALIDATION_PER_RUN);
   return nextStage({
     ...checkpoint,
     summary: {
@@ -165,9 +172,26 @@ async function runPrepare(checkpoint: IngestionCheckpoint): Promise<IngestionChe
       reminders,
       catalogue,
       discovery,
+      revalidation: { ...checkpoint.summary.revalidation, target: revalidationTarget },
       perSource: Object.fromEntries(GMP_ADAPTERS.map((adapter) => [adapter.key, { success: 0, failure: 0 }])),
     },
-  }, "filings");
+  }, "revalidation");
+}
+
+async function runRevalidationBatch(checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
+  if (checkpoint.summary.revalidation.checked >= checkpoint.summary.revalidation.target) {
+    return nextStage(checkpoint, "filings");
+  }
+  const result = await revalidateOldestCandidate();
+  if (result.outcome === "EMPTY") return nextStage(checkpoint, "filings");
+  const summary = structuredClone(checkpoint.summary);
+  summary.revalidation.checked++;
+  if (result.outcome === "PUBLISHED") summary.revalidation.published++;
+  else if (result.outcome === "ELIGIBLE_HELD") summary.revalidation.eligibleHeld++;
+  else if (result.outcome === "RETRY") summary.revalidation.retries++;
+  else if (result.outcome === "EXCEPTION") summary.revalidation.exceptions++;
+  else if (result.outcome === "INVALID") summary.revalidation.invalid++;
+  return { ...checkpoint, cursor: checkpoint.cursor + 1, summary };
 }
 
 async function runFilingBatch(checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {

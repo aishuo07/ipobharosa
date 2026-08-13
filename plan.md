@@ -66,6 +66,13 @@ Deliver the user-visible filtering and calendar subscription without changing th
 - Verify All/Mainboard/SME filters and Google Calendar URLs in the preview.
 - Create a PR and deploy the reviewed build; do not apply the pending Production Prisma migrations in this change.
 
+### 7. Existing-draft automatic revalidation
+
+- Add a bounded ingestion stage that rechecks up to eight oldest Draft/Quarantined candidates per run.
+- Rotate every checked row by `updatedAt` so the queue progresses without a manual ID list or unbounded request.
+- Keep publication behind `OFFICIAL_IPO_AUTO_PUBLISH_ENABLED`; conflicts remain quarantined and missing evidence remains unpublished.
+- Persist every available official comparison and create the correct official document/audit entry only when publication succeeds.
+
 ## Todo
 
 - [DONE] Add and test shared board-filter contract.
@@ -80,6 +87,7 @@ Deliver the user-visible filtering and calendar subscription without changing th
 - [DONE] Run full automated verification after the coverage extension (191 tests, lint, build, schema validation; existing CI migration smoke remains green).
 - [DONE] Verify preview interactions and desktop overflow; responsive CSS breakpoints remain covered by the existing mobile layout rules.
 - [DONE] Push branch and open PR #29.
+- [DONE] Add and test bounded automatic revalidation for already-tracked drafts.
 
 ## Rollback
 

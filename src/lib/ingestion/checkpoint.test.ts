@@ -21,4 +21,19 @@ describe("ingestion checkpoint", () => {
     delete (summary as unknown as Record<string, unknown>).filings;
     expect(readCheckpoint({ ...saved, summary }).summary.filings).toEqual({ captured: 0, skipped: 0, failed: [] });
   });
+
+  it("adds revalidation counters when restoring an older checkpoint", () => {
+    const saved = initialCheckpoint();
+    const summary = { ...saved.summary } as typeof saved.summary & { revalidation?: never };
+    delete (summary as unknown as Record<string, unknown>).revalidation;
+    expect(readCheckpoint({ ...saved, summary }).summary.revalidation).toEqual({
+      target: 0,
+      checked: 0,
+      published: 0,
+      eligibleHeld: 0,
+      retries: 0,
+      exceptions: 0,
+      invalid: 0,
+    });
+  });
 });

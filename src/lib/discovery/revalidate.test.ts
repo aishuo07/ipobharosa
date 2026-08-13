@@ -1,0 +1,132 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  findFirst: vi.fn(),
+  update: vi.fn(),
+  documentFindFirst: vi.fn(),
+  documentCreate: vi.fn(),
+  correctionCreate: vi.fn(),
+  persistDecision: vi.fn(),
+  fetchEvidence: vi.fn(),
+  autoPublish: false,
+}));
+
+const tx = vi.hoisted(() => ({
+  ipo: { update: mocks.update },
+  document: { findFirst: mocks.documentFindFirst, create: mocks.documentCreate },
+  correctionLog: { create: mocks.correctionCreate },
+}));
+
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    ipo: { findFirst: mocks.findFirst, update: mocks.update, count: vi.fn() },
+    $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+  },
+}));
+vi.mock("./official", () => ({ fetchOfficialIpoEvidence: mocks.fetchEvidence }));
+vi.mock("./official/persistence", () => ({
+  officialAutoPublishEnabled: () => mocks.autoPublish,
+  persistOfficialDecision: mocks.persistDecision,
+}));
+
+import { revalidateOldestCandidate } from "./revalidate";
+
+function decimal(value: number) {
+  return { toNumber: () => value };
+}
+
+function candidate() {
+  return {
+    id: "ipo-1",
+    publicationState: "DRAFT" as const,
+    board: "SME" as const,
+    priceBandLow: decimal(220),
+    priceBandHigh: decimal(220),
+    lotSize: 600,
+    issueSizeCr: decimal(37.36),
+    freshIssueCr: decimal(37.36),
+    ofsCr: null,
+    openDate: new Date("2026-06-30T00:00:00Z"),
+    closeDate: new Date("2026-07-02T00:00:00Z"),
+    allotmentDate: new Date("2026-07-03T00:00:00Z"),
+    refundDate: new Date("2026-07-06T00:00:00Z"),
+    listingDate: new Date("2026-07-07T00:00:00Z"),
+    registrar: "Kfin Technologies Limited",
+    leadManagers: ["Interactive Financial Services Limited"],
+    drhpUrl: null,
+    rhpUrl: null,
+    reviewedAt: null,
+    quarantineReason: null,
+    company: { name: "Teja Engineering" },
+  };
+}
+
+function matchingEvidence() {
+  return {
+    status: "FOUND" as const,
+    evidence: {
+      source: "NSE" as const,
+      sourceUrl: "https://www.nseindia.com/market-data/issue-information?series=SME&symbol=TEJA&type=Past",
+      capturedAt: new Date("2026-08-13T00:00:00Z"),
+      facts: {
+        companyName: "Teja Engineering Industries Limited",
+        board: "SME" as const,
+        priceBandLow: 220,
+        priceBandHigh: 220,
+        lotSize: 600,
+        openDate: new Date("2026-06-30T00:00:00Z"),
+        closeDate: new Date("2026-07-02T00:00:00Z"),
+        registrar: "Kfin Technologies Limited",
+        leadManagers: ["Interactive Financial Services Limited"],
+        rhpUrl: "https://nsearchives.nseindia.com/content/ipo/PROSPECTUS_TEJA.zip",
+      },
+      fieldSources: {},
+      raw: {},
+    },
+  };
+}
+
+describe("automatic official revalidation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.autoPublish = false;
+    mocks.findFirst.mockResolvedValue(candidate());
+    mocks.fetchEvidence.mockResolvedValue(matchingEvidence());
+    mocks.documentFindFirst.mockResolvedValue(null);
+  });
+
+  it("records eligibility but keeps the draft unpublished when the feature flag is off", async () => {
+    const result = await revalidateOldestCandidate();
+
+    expect(result.outcome).toBe("ELIGIBLE_HELD");
+    expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ publicationState: "DRAFT", autoPublished: false }),
+    }));
+    expect(mocks.persistDecision).toHaveBeenCalledOnce();
+    expect(mocks.documentCreate).not.toHaveBeenCalled();
+    expect(mocks.correctionCreate).not.toHaveBeenCalled();
+  });
+
+  it("publishes, cites and audits a fully matching archived SME when the flag is on", async () => {
+    mocks.autoPublish = true;
+
+    const result = await revalidateOldestCandidate();
+
+    expect(result.outcome).toBe("PUBLISHED");
+    expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ publicationState: "PUBLISHED", autoPublished: true, rhpUrl: expect.stringContaining("PROSPECTUS_TEJA") }),
+    }));
+    expect(mocks.documentCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ label: "Official Prospectus" }) });
+    expect(mocks.correctionCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ performedBy: "official-revalidation" }) });
+  });
+
+  it("moves an incomplete stored candidate to the exception queue without calling NSE", async () => {
+    mocks.findFirst.mockResolvedValue({ ...candidate(), registrar: null });
+
+    const result = await revalidateOldestCandidate();
+
+    expect(result.outcome).toBe("INVALID");
+    expect(mocks.fetchEvidence).not.toHaveBeenCalled();
+    expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ publicationState: "QUARANTINED" }) }));
+  });
+});
