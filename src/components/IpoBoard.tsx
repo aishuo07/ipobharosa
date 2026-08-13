@@ -4,6 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { BoardIpo } from "@/lib/board-data";
 import type { FilingRadarEntry } from "@/lib/discovery/filing-catalogue";
+import {
+  boardFilterLabel,
+  boardFilterQuery,
+  filterIposByBoard,
+  type BoardFilter,
+} from "@/lib/board-filter";
 import { SegmentedTabs, StatePanel, TabButton, TextInput } from "@/components/ui";
 import { googleCalendarSubscriptionUrl } from "@/lib/calendar";
 import {
@@ -68,6 +74,7 @@ export default function IpoBoard({
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [showCompare, setShowCompare] = useState(false);
   const [view, setView] = useState<"board" | "pipeline" | "calendar">("board");
+  const [boardFilter, setBoardFilter] = useState<BoardFilter>("ALL");
   const [calMonth, setCalMonth] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -99,9 +106,15 @@ export default function IpoBoard({
     });
   }
 
+  const boardIpos = useMemo(() => filterIposByBoard(ipos, boardFilter), [ipos, boardFilter]);
+  const boardCounts = useMemo(() => ({
+    ALL: ipos.length,
+    MAINBOARD: ipos.filter((ipo) => ipo.board === "MAINBOARD").length,
+    SME: ipos.filter((ipo) => ipo.board === "SME").length,
+  }), [ipos]);
   const compareList = useMemo(
-    () => compareIds.map((id) => ipos.find((i) => i.id === id)).filter((i): i is BoardIpo => !!i),
-    [compareIds, ipos],
+    () => compareIds.map((id) => boardIpos.find((i) => i.id === id)).filter((i): i is BoardIpo => !!i),
+    [compareIds, boardIpos],
   );
 
   useEffect(() => {
@@ -116,23 +129,23 @@ export default function IpoBoard({
     // to be selected.
     const trimmed = query.trim().toLowerCase();
     if (trimmed) {
-      return ipos
+      return boardIpos
         .filter(
           (i) => i.companyName.toLowerCase().includes(trimmed) || i.sector.toLowerCase().includes(trimmed),
         )
         .sort((a, b) => a.companyName.localeCompare(b.companyName));
     }
 
-    const filtered = ipos.filter((i) => i.status === tab);
+    const filtered = boardIpos.filter((i) => i.status === tab);
     if (tab === "OPEN") {
       return [...filtered].sort(
         (a, b) => new Date(a.closeDate).getTime() - new Date(b.closeDate).getTime(),
       );
     }
     return filtered;
-  }, [ipos, tab, query]);
+  }, [boardIpos, tab, query]);
 
-  const selected = ipos.find((i) => i.id === selectedId) ?? null;
+  const selected = boardIpos.find((i) => i.id === selectedId) ?? null;
   const filingList = useMemo(() => {
     const trimmed = query.trim().toLowerCase();
     return trimmed ? filings.filter((entry) => entry.companyName.toLowerCase().includes(trimmed)) : filings;
@@ -153,6 +166,13 @@ export default function IpoBoard({
     setView(next);
     setSelectedId(null);
     setQuery("");
+  }
+
+  function changeBoard(next: BoardFilter) {
+    setBoardFilter(next);
+    setSelectedId(null);
+    setCompareIds([]);
+    setShowCompare(false);
   }
 
   return (
@@ -227,12 +247,26 @@ export default function IpoBoard({
             Calendar
           </TabButton>
         </SegmentedTabs>
+        {(view === "board" || view === "calendar") && (
+          <SegmentedTabs label="IPO type">
+            {(["ALL", "MAINBOARD", "SME"] as const).map((filter) => (
+              <TabButton
+                key={filter}
+                type="button"
+                active={boardFilter === filter}
+                onClick={() => changeBoard(filter)}
+              >
+                {boardFilterLabel(filter)} <span className="n">{boardCounts[filter]}</span>
+              </TabButton>
+            ))}
+          </SegmentedTabs>
+        )}
         {(view === "board" || view === "pipeline") && (
           <>
             {view === "board" && (
               <SegmentedTabs label="IPO status">
                 {TAB_DEFS.map((t) => {
-                  const count = ipos.filter((i) => i.status === t.key).length;
+                  const count = boardIpos.filter((i) => i.status === t.key).length;
                   return (
                     <TabButton
                       key={t.key}
@@ -298,7 +332,11 @@ export default function IpoBoard({
             ))}
             {list.length === 0 && (
               <StatePanel title={query ? `No results for “${query.trim()}”` : "No IPOs here right now"}>
-                {query ? "Try a shorter company name or sector." : "New verified listings will appear here automatically."}
+                {query
+                  ? "Try a shorter company name or sector."
+                  : boardFilter === "SME" && boardCounts.SME === 0
+                    ? "No SME IPO has cleared official verification yet. Verified SME issues will appear automatically."
+                    : "New verified listings will appear here automatically."}
               </StatePanel>
             )}
           </div>
@@ -337,7 +375,8 @@ export default function IpoBoard({
         <FilingPipeline entries={filingList} />
       ) : (
         <CalendarView
-          ipos={ipos}
+          ipos={boardIpos}
+          boardFilter={boardFilter}
           now={now}
           month={calMonth}
           onPrevMonth={() => setCalMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
@@ -1289,12 +1328,14 @@ function localDayKey(iso: string): string {
 
 function CalendarView({
   ipos,
+  boardFilter,
   now,
   month,
   onPrevMonth,
   onNextMonth,
 }: {
   ipos: BoardIpo[];
+  boardFilter: BoardFilter;
   now: number;
   month: Date;
   onPrevMonth: () => void;
@@ -1346,9 +1387,17 @@ function CalendarView({
         <span className="cal-legend-item"><span className="cal-dot cal-lists" /> Lists</span>
       </div>
       <div className="calendar-actions">
-        <a className="ui-button ui-button-primary" href={googleCalendarSubscriptionUrl()} target="_blank" rel="noopener noreferrer">Subscribe in Google Calendar ↗</a>
-        <a className="ui-button ui-button-secondary" href="/api/calendar">Download all dates (.ics)</a>
+        <a className="ui-button ui-button-primary" href={googleCalendarSubscriptionUrl(boardFilter)} target="_blank" rel="noopener noreferrer">
+          Sync {boardFilterLabel(boardFilter)} to Google Calendar ↗
+        </a>
+        <a className="ui-button ui-button-secondary" href={`/api/calendar${boardFilterQuery(boardFilter)}`}>
+          Download {boardFilterLabel(boardFilter)} dates (.ics)
+        </a>
       </div>
+      <p className="calendar-sync-note">
+        This is a live calendar subscription. New and changed dates update automatically on Google&apos;s refresh schedule.
+        Every event links back here for current details and sources.
+      </p>
       <div className="calendar-grid calendar-dow">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
           <div key={d}>{d}</div>

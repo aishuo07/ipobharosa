@@ -1,3 +1,3 @@
-phase=verification
-feature=authoritative-ipo-auto-publication
+phase=implementation
+feature=mainboard-sme-calendar-sync
 approved=true

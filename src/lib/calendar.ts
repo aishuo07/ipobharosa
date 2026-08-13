@@ -1,4 +1,5 @@
 import type { BoardIpo } from "@/lib/board-data";
+import { boardFilterLabel, boardFilterQuery, type BoardFilter } from "@/lib/board-filter";
 
 const SITE_URL = "https://ipobharosa.vercel.app";
 
@@ -42,7 +43,7 @@ export function ipoCalendarEvents(ipo: BoardIpo): CalendarEvent[] {
   }] : []);
 }
 
-export function buildIcs(ipos: BoardIpo[]): string {
+export function buildIcs(ipos: BoardIpo[], board: BoardFilter = "ALL"): string {
   const events = ipos.flatMap(ipoCalendarEvents).map((event) => [
     "BEGIN:VEVENT",
     `UID:${escapeIcs(event.uid)}`,
@@ -60,13 +61,15 @@ export function buildIcs(ipos: BoardIpo[]): string {
     "PRODID:-//IPOBharosa//IPO Calendar//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
-    "X-WR-CALNAME:IPOBharosa IPO dates",
+    `X-WR-CALNAME:${escapeIcs(`IPOBharosa — ${boardFilterLabel(board)}`)}`,
+    "X-WR-CALDESC:Live IPO dates with source-backed details at IPOBharosa",
     ...events,
     "END:VCALENDAR",
     "",
   ].join("\r\n");
 }
 
-export function googleCalendarSubscriptionUrl(): string {
-  return `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(`${SITE_URL}/api/calendar`)}`;
+export function googleCalendarSubscriptionUrl(board: BoardFilter = "ALL"): string {
+  const feedUrl = `${SITE_URL}/api/calendar${boardFilterQuery(board)}`;
+  return `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(feedUrl)}`;
 }

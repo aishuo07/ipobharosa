@@ -1,0 +1,24 @@
+import type { BoardIpo } from "@/lib/board-data";
+
+export const BOARD_FILTERS = ["ALL", "MAINBOARD", "SME"] as const;
+
+export type BoardFilter = (typeof BOARD_FILTERS)[number];
+
+export function parseBoardFilter(value: string | null): BoardFilter | null {
+  if (value === null || value === "") return "ALL";
+  return BOARD_FILTERS.includes(value as BoardFilter) ? value as BoardFilter : null;
+}
+
+export function filterIposByBoard(ipos: BoardIpo[], board: BoardFilter): BoardIpo[] {
+  return board === "ALL" ? ipos : ipos.filter((ipo) => ipo.board === board);
+}
+
+export function boardFilterLabel(board: BoardFilter): string {
+  if (board === "MAINBOARD") return "Mainboard";
+  if (board === "SME") return "SME";
+  return "All IPOs";
+}
+
+export function boardFilterQuery(board: BoardFilter): string {
+  return board === "ALL" ? "" : `?board=${board}`;
+}
