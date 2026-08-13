@@ -88,6 +88,10 @@ Deliver the user-visible filtering and calendar subscription without changing th
 - [DONE] Verify preview interactions and desktop overflow; responsive CSS breakpoints remain covered by the existing mobile layout rules.
 - [DONE] Push branch and open PR #29.
 - [DONE] Add and test bounded automatic revalidation for already-tracked drafts.
+- [DONE] Apply the two explicitly approved Production migrations and verify migration status.
+- [DONE] Resume and complete the persisted ingestion cycle; capture exact publication outcomes.
+- [DONE] Verify a fresh cycle persists the official filing catalogue (100 stored, 29 linked).
+- [DONE] Fix the demonstrated IST date and SME minimum-application normalization defects with regression coverage.
 
 ## Rollback
 

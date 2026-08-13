@@ -101,7 +101,7 @@ describe("NSE official adapter parsing", () => {
       board: "SME",
       priceBandLow: 220,
       priceBandHigh: 220,
-      lotSize: 600,
+      lotSize: 1200,
       registrar: "Kfin Technologies Limited",
       rhpUrl: "https://nsearchives.nseindia.com/content/ipo/PROSPECTUS_TEJA.zip",
     });

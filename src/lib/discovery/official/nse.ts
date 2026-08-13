@@ -92,13 +92,20 @@ export function parseNseDetail(issue: NseCatalogueIssue, detail: NseDetail, capt
   const openDateText = period[0] ?? issue.issueStartDate;
   const closeDateText = period[1] ?? issue.issueEndDate;
   const rhpUrl = cleanValue(values.get("red herring prospectus") ?? values.get("prospectus"));
+  const bidLot = parseInteger(values.get("bid lot") ?? values.get("lot size") ?? issue.lotSize);
+
+  // `Ipo.lotSize` is the minimum application quantity used by the UI to
+  // calculate minimum investment. NSE exposes one exchange bid lot; SME
+  // individual applications require two lots, so retain the user-facing
+  // minimum-quantity meaning instead of understating the required amount.
+  const minimumApplicationQuantity = bidLot && issue.series === "SME" ? bidLot * 2 : bidLot;
 
   const facts = {
     companyName,
     board: issue.series === "SME" ? "SME" as const : issue.series === "EQ" ? "MAINBOARD" as const : null,
     priceBandLow: price?.low ?? null,
     priceBandHigh: price?.high ?? null,
-    lotSize: parseInteger(values.get("bid lot") ?? values.get("lot size") ?? issue.lotSize),
+    lotSize: minimumApplicationQuantity,
     openDate: openDateText ? parseIndianDate(openDateText) : null,
     closeDate: closeDateText ? parseIndianDate(closeDateText) : null,
     registrar: cleanValue(values.get("name of the registrar")),
