@@ -1,185 +1,267 @@
-# Implementation Plan: Production retry control and verification operations
+# Implementation Plan: launch readiness and date-wise IPO experience
 
-Status: approved by product owner on 2026-08-15; implementation complete and release validation in progress.
+Status: approved by the product owner on 15 August 2026; PR 1 implementation in progress.
 
-## Approach
+## Outcome
 
-Ship one small, reversible operational PR that adds a safe targeted revalidation service, an authenticated admin **Retry now** action, a 24-hour conflict cooldown, and clearer reuse of the evidence already stored in Production.
+Before a wider public launch, IPOBharosa will have:
 
-Do not rebuild features already on `main`: source-health tables, published drift detection/email, public verification labels and official source links already work. Financial extraction, domain/email configuration and beta validation remain separate follow-ups because they have different trust and external-dependency boundaries.
+- a clear date-wise **All IPOs** view with major issue details;
+- a calendar that exposes detailed events without overcrowding its month grid;
+- a two-hour ingestion cycle that is not blocked by slow filing PDFs;
+- honest, visible boundaries between complete IPOs, early filings and verification exceptions;
+- environment-driven canonical links and a testable email/domain readiness path;
+- Preview evidence and one real-user beta checklist before Production launch.
 
-## Changes required
+No IPO or financial value will be invented to make the catalogue look fuller.
 
-### 1. Extract one shared candidate revalidation implementation
+## Release strategy
 
-**File:** `src/lib/discovery/revalidate.ts`
+Use small pull requests against `main`. Each PR gets CI, isolated Vercel Preview, responsive/browser verification and explicit review before merge.
 
-Refactor the existing body so queue and targeted retries use identical logic:
-
-```ts
-async function revalidateCandidate(candidate: RevalidationCandidate): Promise<RevalidationResult> {
-  // existing fetch -> health -> consensus -> transaction -> audit flow
-}
-
-export async function revalidateCandidateById(id: string): Promise<RevalidationResult> {
-  const candidate = await prisma.ipo.findFirst({
-    where: { id, publicationState: { in: ["DRAFT", "QUARANTINED"] } },
-    select: candidateSelect,
-  });
-  return candidate ? revalidateCandidate(candidate) : { company: null, outcome: "EMPTY", reasons: [] };
-}
+```text
+PR 1  Date-wise All IPOs + calendar agenda
+PR 2  Ingestion critical-path repair
+PR 3  Domain/email/canonical readiness
+Task  Real-user beta proof + launch checklist
+Track Financial document/extraction coverage
 ```
 
-`revalidateOldestCandidate` keeps the current due/oldest selector and delegates to the same implementation. No schema change and no artificial `updatedAt` manipulation.
+## PR 1 — Date-wise All IPOs catalogue and calendar agenda
 
-### 2. Add conflict and invalid-record cooldown
+### 1. Extract reusable chronology helpers
 
-**File:** `src/lib/discovery/revalidate.ts`
+**New file:** `src/lib/ipo-chronology.ts`
 
-Add a deterministic 24-hour cooldown:
+Add pure functions for:
 
-```ts
-export function nextOfficialConflictCheckAt(now = new Date()): Date {
-  return new Date(now.getTime() + 24 * 60 * 60 * 1_000);
-}
-```
+- deterministic local-day keys;
+- lifecycle events for open, close, allotment and listing;
+- next meaningful lifecycle event;
+- chronological sorting and month/date grouping;
+- status/verification/board filter composition.
 
-- `RETRY`: keep exponential 2h/4h/8h/16h/24h backoff.
-- `EXCEPTION`: retain `QUARANTINED`, keep the open incident, schedule a 24-hour recheck.
-- `INVALID`: retain `QUARANTINED`, schedule a 24-hour recheck.
-- Manual **Retry now** bypasses the wait by targeting the record directly; its result writes the normal next schedule.
+Do not duplicate date logic inside React components.
 
-### 3. Add an authenticated, locked admin retry action
+### 2. Add the All IPOs view
 
-**Files:** `src/app/admin/actions.ts`, new `src/lib/discovery/retry-operation.ts`
+**File:** `src/components/IpoBoard.tsx`
 
-Keep orchestration outside the page action so it is unit-testable:
+Extend the top-level view contract to:
 
 ```ts
-export async function retryOfficialVerificationNow(ipoId: string, actor: string) {
-  const acquired = await acquireIngestionLock(`admin-retry:${actor}`);
-  if (!acquired) return { status: "BUSY" as const };
-  try {
-    const result = await revalidateCandidateById(ipoId);
-    await recordRetryAudit(ipoId, actor, result);
-    return { status: "COMPLETED" as const, result };
-  } finally {
-    await releaseIngestionLock();
-  }
-}
+type PublicView = "board" | "catalogue" | "pipeline" | "calendar";
 ```
 
-The server action:
+The new **All IPOs** view will:
 
-- calls existing `requireAdmin()`;
-- validates a non-empty IPO ID;
-- calls the locked service;
-- revalidates `/admin`, `/`, `/ipo/[slug]` and `/api/calendar` data paths as applicable;
-- never accepts source values or publication decisions from the browser.
+- show complete public IPO records only;
+- default to upcoming/current lifecycle dates first;
+- allow newest/oldest opening-date sorting;
+- reuse Mainboard/SME, lifecycle, verification and search filters;
+- show exact filtered result counts;
+- render a dense table-like layout on desktop and stacked summary cards on mobile;
+- link every row to the existing full detail page;
+- support watchlist and single-IPO calendar actions.
 
-### 4. Improve admin retry/source visibility without a new dashboard
+Major fields:
 
-**File:** `src/app/admin/page.tsx`
+```text
+Company + sector        Board + status + verification
+Open -> close           Allotment + listing
+Price band              Lot + minimum investment
+Issue size              GMP + freshness/agreement
+Subscription summary    Evidence/detail/calendar actions
+```
 
-- Include recent `officialAttempts` for retry/conflict cards.
-- Display `last checked`, `next retry`, provider status/reason and official link.
-- Add **Retry official sources now** to draft/quarantined cards.
-- Keep conflict resolution actions separate from retry; retry never accepts data.
-- Add a compact excluded issue-types section for `REJECTED` rows whose `officialIssueType` is not `IPO`.
-- Keep the existing source-health and recent-run tables; surface a compact count summary above them instead of creating another page.
+Add a short boundary note: “All IPOs contains issues with complete public terms; early DRHP/RHP filings remain in IPO Pipeline.”
 
-### 5. Tests
+### 3. Upgrade Calendar without overloading cells
 
-**Files:** `src/lib/discovery/revalidate.test.ts`, new `src/lib/discovery/retry-operation.test.ts`, targeted admin/view-model tests where practical.
+**Files:** `src/components/IpoBoard.tsx`, `src/app/globals.css`
 
-Test cases:
+- Add allotment to the visual legend and grid events.
+- Make dates selectable with button semantics and visible focus state.
+- Add a detailed agenda below the grid for the selected day; when no date is selected, show the month’s next events.
+- Agenda cards reuse the catalogue’s major-detail summary.
+- Preserve Google live subscription and ICS download.
+- Keep Mainboard/SME filter behaviour consistent across grid, agenda and calendar links.
+- On small screens, keep the grid scannable and put all details in the agenda, never inside tiny cells.
 
-1. Queue retry and ID retry delegate to identical publication behavior.
-2. ID retry cannot target `PUBLISHED` or `REJECTED` rows.
-3. `EXCEPTION` schedules 24 hours and keeps the incident open.
-4. `INVALID` schedules 24 hours.
-5. `RETRY` retains exponential backoff.
-6. Admin retry acquires/releases the ingestion lock in success and error cases.
-7. Busy lock causes no evidence/publication mutation.
-8. Audit log records actor, IPO and outcome.
-9. Admin view shows provider attempt reasons and unsupported issue types.
+### 4. Clarify public counts
+
+**File:** `src/components/IpoBoard.tsx`
+
+Explain the three inventory levels in plain language:
+
+- tracked issuers;
+- official filings;
+- complete IPO pages.
+
+Do not present 105 tracked issuers as 105 ready-to-apply IPOs.
+
+### 5. Styling and accessibility
+
+**File:** `src/app/globals.css`
+
+- Use the existing IPOBharosa design tokens and primitives.
+- Preserve the clean white/orange professional visual system.
+- Add restrained 120–180 ms hover/focus transitions and respect `prefers-reduced-motion`.
+- Use semantic headings, tables/lists, buttons and `aria-current`/`aria-selected` where appropriate.
+- Ensure touch targets are at least 44 px for primary mobile actions.
+- No horizontal overflow at 360, 390, 768, 1024 or 1440 CSS pixels.
+
+### 6. Tests and Preview acceptance
+
+**New/updated files:** `src/lib/ipo-chronology.test.ts`, component/static-render tests where practical, calendar tests and smoke script.
+
+Required cases:
+
+1. local-date grouping is timezone-safe;
+2. open/close/allotment/listing events are ordered deterministically;
+3. Mainboard/SME, status and verification filters compose correctly;
+4. missing GMP/subscription produces explicit pending text, not zero or fabricated data;
+5. verified/pending/needs-review rows retain their labels and source links;
+6. calendar agenda and ICS use the same event contract;
+7. keyboard and mobile layouts work;
+8. existing Board, Compare, Pipeline and Detail remain unchanged.
 
 Run:
 
 ```bash
-npm test
 npm run lint
+npm test
 npx tsc --noEmit
 npm run build
 npx prisma validate
 ```
 
-### 6. Preview and Production release
+Preview verification:
 
-1. Push the `codex/production-ops-reliability` branch and create a PR.
-2. Deploy preview; verify unauthenticated `/admin` redirects to login and public pages still render.
-3. Verify the admin retry button with a non-publishing retry fixture or preview database.
-4. Merge only with green CI.
-5. Deploy Production; no migration is required.
-6. Use the new targeted service under the ingestion lock to revalidate the 12 BSE-matched Production drafts immediately.
-7. Confirm exact results, evidence captures, correction logs, published count delta, source links, board/detail/calendar visibility and zero unresolved unexpected conflicts.
+- 360, 390, 768, 1024 and 1440 px;
+- All/Mainboard/SME;
+- verified/pending/needs-review;
+- search and empty results;
+- calendar month navigation, date selection, Google subscription and ICS;
+- at least one full detail/source-link journey.
 
-## Follow-up PR sequence
+## PR 2 — Ingestion critical-path repair
 
-### PR 2: Financial evidence automation
+### 1. Remove filing downloads from the two-hour cycle
 
-- Official RHP/Prospectus fetch + checksum/versioning.
-- Deterministic table/page/fiscal-year/unit/scope/audit-status extraction.
-- Cross-statement consistency checks.
-- Auto-propose high-confidence figures; auto-publish only after a separately approved policy with regression fixtures.
-- Exception queue for OCR, ambiguous headers, scope conflicts and material revisions.
+**Files:** `src/lib/ingestion/run-cycle.ts`, `.github/workflows/ingest.yml`
 
-### PR 3: Remaining coverage
+The two-hour cycle will finish after:
 
-- Retry/not-found classification metrics by exchange and issue type.
-- SEBI filing-to-exchange linking improvements.
-- Alias additions only from reviewed fixtures.
-- Coverage acceptance report for Mainboard and SME.
+```text
+prepare -> candidate verification -> published drift -> GMP -> subscription -> finalize
+```
 
-### Release task: Domain and email
+It may enqueue missing filing documents, but it will not synchronously download every PDF.
 
-- Purchase/connect the final domain.
-- Verify it in Resend and add DNS records.
-- Configure `RESEND_API_KEY`, `AUTH_EMAIL_FROM`, alert recipients and canonical site URL.
-- Redeploy and send test auth, reminder and drift-alert emails.
+### 2. Use the daily filing workflow as a bounded queue worker
 
-### Beta task: one real user
+**Files:** `.github/workflows/financial-extraction.yml`, `pdf-extractor/worker.py`, financial document queue/service files.
 
-- Google sign-in.
-- Mainboard/SME discovery and official-source link inspection.
-- Watchlist add/remove.
-- Google Calendar subscription/add-to-calendar.
-- Real reminder delivery and unsubscribe verification.
+- Process a bounded number of documents per run.
+- Persist attempt count, last error and next retry.
+- Exponential backoff for timeouts/5xx.
+- Long cooldown for deterministic 403/406 until the source URL changes or an admin retries.
+- Never block GMP/subscription refresh.
+- Report `documents queued/downloaded/failed`, `candidates proposed` and `figures published`; a green job with zero candidates remains visible as zero output.
+
+### 3. Acceptance
+
+- Three consecutive scheduled two-hour cycles complete successfully.
+- One bad/slow filing host cannot fail the market-data cycle.
+- A failed document stays retryable and visible in admin.
+- GMP/subscription timestamps advance even when documents fail.
+- No duplicate documents, observations or published financials.
+
+## PR 3 — Domain, email and canonical readiness
+
+### Code work
+
+- Introduce one validated `SITE_URL`/`NEXT_PUBLIC_SITE_URL` contract.
+- Replace hard-coded Vercel URLs in calendar, reminders, alerts, robots and sitemap.
+- Add an email feature flag/readiness check that requires Resend key, verified sender configuration and site URL before exposing email sign-in/reminder claims.
+- Keep Google sign-in available.
+- Add a safe admin health summary showing configuration presence, never secret values.
+- Add Terms, Privacy, Disclaimer and Corrections/Support links/pages before broad launch.
+
+### Owner actions
+
+- Buy/select the custom domain.
+- Connect the domain in Vercel.
+- add and verify Resend DNS records;
+- provide the final sender address;
+- approve legal/disclaimer copy.
+
+### Acceptance
+
+- custom domain serves the reviewed Production commit;
+- canonical/sitemap/robots/calendar/email links use the custom domain;
+- Google login succeeds;
+- one real email reaches a consented inbox;
+- one watchlist reminder reaches the same user and duplicate delivery is prevented;
+- unsubscribe/remove-watchlist path works;
+- Vercel alias remains a redirect or safe fallback.
+
+## Financial-data track
+
+Financials remain visible only when backed by immutable approved records. The current workflow’s zero-candidate result is not launch-complete.
+
+Next measurable steps:
+
+1. improve official document acquisition and checksums;
+2. identify the exact financial statement pages/table headers;
+3. extract value, unit, fiscal year, scope and audit/restatement status;
+4. route ambiguous/OCR cases to review;
+5. publish only accepted immutable revisions with source URL and page number;
+6. expose coverage metrics: documents available, extraction attempted, candidates, approved figures and unsupported cases.
+
+Financial coverage can continue after private beta, but unverified figures must stay explicitly unavailable.
+
+## Final launch checklist
+
+### Required before public beta
+
+- [ ] PR 1 merged and Production-smoked.
+- [ ] PR 2 merged and three scheduled cycles green.
+- [ ] Admin queue has no unexplained critical drift/conflict.
+- [ ] Terms, Privacy, Disclaimer and correction contact are public.
+- [ ] Google auth and one real watchlist/calendar journey pass.
+- [ ] Backup/restore procedure is rehearsed.
+
+### Required before marketing/wider launch
+
+- [ ] Custom domain active.
+- [ ] Resend domain verified and real reminder E2E passed.
+- [ ] Error/availability monitoring and alert ownership confirmed.
+- [ ] One external beta user completes the full journey without help.
+- [ ] Public inventory counts and verification-state explanations are understandable.
+- [ ] Financial coverage is reported honestly; no guessed values are exposed.
 
 ## Rollback
 
-- Revert the PR; it has no schema migration.
-- Existing queue backoff and ingestion behavior remains intact.
-- Conflict incidents/evidence are append-only and are not deleted.
-- Disable the admin button at the UI level if an operational issue is found; scheduled ingestion continues independently.
+- PR 1 has no migration; revert it if navigation or rendering regresses.
+- PR 2 preserves the document queue and removes slow work from the hot path; revert the workflow change without deleting evidence rows.
+- PR 3 keeps the Vercel URL as fallback; domain cutover can be reversed through DNS/alias configuration.
+- All database changes must be additive, backed up and Preview-tested. No destructive migration belongs in these releases.
 
 ## Todo
 
-- [x] [DONE] Refactor shared candidate revalidation.
-- [x] [DONE] Add targeted ID retry.
-- [x] [DONE] Add 24-hour conflict/invalid cooldown.
-- [x] [DONE] Add locked retry operation and audit log.
-- [x] [DONE] Add authenticated admin server action.
-- [x] [DONE] Add retry button and provider-attempt details.
-- [x] [DONE] Add unsupported issue-type admin summary.
-- [x] [DONE] Add/extend unit tests.
-- [x] [DONE] Run full local quality gates.
-- [x] [DONE] Deploy and smoke-test preview.
-- [ ] Push and create PR.
-- [ ] Merge and deploy Production after review.
-- [ ] Immediately revalidate the 12 matched Production IPOs.
-- [ ] Verify public evidence and exact Production counts.
+- [x] Audit live UI and data boundaries.
+- [x] Audit recent ingestion and financial workflow evidence.
+- [x] Audit configured environment names and domain presence.
+- [x] Write this implementation plan.
+- [x] Obtain explicit approval for this plan.
+- [x] Implement PR 1 on a fresh branch from current `main`.
+- [ ] Validate PR 1 in Preview and merge after review.
+- [ ] Implement and prove PR 2.
+- [ ] Implement PR 3 code work and complete owner DNS/domain actions.
+- [ ] Run the real-user beta checklist and record evidence.
 
-## Open questions
+## Approval checkpoint
 
-None. Safety defaults are fixed: admin authentication required, ingestion lock required, no timestamp-ordering hacks, no browser-supplied official values, no auto-resolution of conflicts, and no financial publication-policy change in this PR.
+Implementation starts only after the product owner explicitly approves this written plan. Approval covers PR 1 and PR 2 code work. Domain purchase, DNS changes, public email enablement and legal publication remain separate explicit owner actions because they affect external systems and public commitments.
