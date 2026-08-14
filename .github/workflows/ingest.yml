@@ -22,10 +22,13 @@ jobs:
           # preparation/finalization. Keep enough headroom for fleet growth and
           # source retries while the job timeout remains the hard upper bound.
           for attempt in $(seq 1 120); do
-            if ! status=$(curl --max-time 55 --retry 3 --retry-all-errors --retry-delay 2 -s -o /tmp/response.json -w "%{http_code}" \
+            if ! status=$(curl --max-time 55 -s -o /tmp/response.json -w "%{http_code}" \
                 -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
                 https://ipobharosa.vercel.app/api/cron/ingest); then
-              echo "Step $attempt — transport failure after bounded retries; persisted cursor is unchanged"
+              echo "Step $attempt — transport failure; persisted cursor is unchanged"
+              # Do not let curl launch a duplicate while a timed-out serverless
+              # invocation may still be finishing and holding the DB mutex.
+              sleep 5
               continue
             fi
             echo "Step $attempt — HTTP $status"
@@ -38,6 +41,11 @@ jobs:
             if [ "$status" -ne 200 ]; then
               echo "Permanent HTTP failure; stopping without advancing the persisted cursor"
               exit 1
+            fi
+            if jq -e '.checkpoint.summary.skippedDueToLock == true' /tmp/response.json >/dev/null; then
+              echo "Another invocation still owns the ingestion lock; waiting before retry"
+              sleep 5
+              continue
             fi
             if jq -e '.complete == true' /tmp/response.json >/dev/null; then
               echo "Ingestion cycle complete"
