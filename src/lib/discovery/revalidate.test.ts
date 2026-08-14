@@ -38,7 +38,7 @@ vi.mock("@/lib/ingestion/source-operation", () => ({
   recordSourceFailure: mocks.sourceFailure,
 }));
 
-import { revalidateOldestCandidate } from "./revalidate";
+import { nextOfficialConflictCheckAt, revalidateCandidateById, revalidateOldestCandidate } from "./revalidate";
 
 function decimal(value: number) {
   return { toNumber: () => value };
@@ -138,7 +138,48 @@ describe("automatic official revalidation", () => {
 
     expect(result.outcome).toBe("INVALID");
     expect(mocks.fetchEvidence).not.toHaveBeenCalled();
-    expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ publicationState: "QUARANTINED" }) }));
+    expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      publicationState: "QUARANTINED",
+      officialLastAttemptAt: expect.any(Date),
+      officialNextAttemptAt: expect.any(Date),
+    }) }));
+  });
+
+  it("schedules a conflict cooldown instead of retrying the same exception every cycle", async () => {
+    const evidence = matchingEvidence();
+    mocks.fetchEvidence.mockResolvedValue({
+      ...evidence,
+      evidence: { ...evidence.evidence, facts: { ...evidence.evidence.facts, lotSize: 1200 } },
+    });
+
+    const before = Date.now();
+    const result = await revalidateOldestCandidate();
+
+    expect(result.outcome).toBe("EXCEPTION");
+    const update = mocks.update.mock.calls[0][0].data;
+    expect(update.publicationState).toBe("QUARANTINED");
+    expect(update.officialNextAttemptAt.getTime()).toBeGreaterThanOrEqual(before + 24 * 60 * 60 * 1_000);
+    expect(mocks.persistIncident).toHaveBeenCalledOnce();
+  });
+
+  it("revalidates a specific retryable IPO without changing queue timestamps first", async () => {
+    const result = await revalidateCandidateById("ipo-1");
+
+    expect(result.outcome).toBe("ELIGIBLE_HELD");
+    expect(mocks.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "ipo-1", publicationState: { in: ["DRAFT", "QUARANTINED"] } },
+    }));
+    expect(mocks.update).toHaveBeenCalledOnce();
+  });
+
+  it("does not retry an IPO outside the unpublished retry states", async () => {
+    mocks.findFirst.mockResolvedValue(null);
+
+    const result = await revalidateCandidateById("published-ipo");
+
+    expect(result.outcome).toBe("EMPTY");
+    expect(mocks.fetchEvidence).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
   });
 
   it("removes an officially classified FPO from the IPO queue", async () => {
@@ -153,5 +194,9 @@ describe("automatic official revalidation", () => {
     expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ publicationState: "REJECTED", officialIssueType: "FPO" }),
     }));
+  });
+
+  it("calculates the conflict retry window deterministically", () => {
+    expect(nextOfficialConflictCheckAt(new Date("2026-08-15T00:00:00Z"))).toEqual(new Date("2026-08-16T00:00:00Z"));
   });
 });

@@ -1,175 +1,185 @@
-# Implementation Plan: multi-source official verification and richer IPO evidence
+# Implementation Plan: Production retry control and verification operations
 
-Status: approved by product owner; implementation in progress.
+Status: approved by product owner on 2026-08-15; implementation complete and release validation in progress.
 
 ## Approach
 
-Add BSE as a first-class official exchange source beside NSE, keep SEBI as authoritative filing/document evidence, and replace the single generic “pending” explanation with a field-level verification report. Enrich the public IPO page from structured official exchange fields without weakening the existing rule for financial statements.
+Ship one small, reversible operational PR that adds a safe targeted revalidation service, an authenticated admin **Retry now** action, a 24-hour conflict cooldown, and clearer reuse of the evidence already stored in Production.
 
-The first release targets the largest verified uplift with bounded risk: BSE current/historical catalogue + issue detail, conservative entity aliases, issue-type classification, multi-provider evidence, and clear public provenance. It does not auto-extract financial statements from PDFs.
+Do not rebuild features already on `main`: source-health tables, published drift detection/email, public verification labels and official source links already work. Financial extraction, domain/email configuration and beta validation remain separate follow-ups because they have different trust and external-dependency boundaries.
 
 ## Changes required
 
-### 1. Introduce a provider registry and multi-source result
+### 1. Extract one shared candidate revalidation implementation
 
-**Files:** `src/lib/discovery/official/index.ts`, `src/lib/discovery/official/types.ts`, new `src/lib/discovery/official/registry.ts`
+**File:** `src/lib/discovery/revalidate.ts`
 
-- Replace the hard-coded NSE singleton with a registry of official providers.
-- Fetch catalogues once per ingestion run, bound detail concurrency, and return provider-specific `FOUND | NOT_FOUND | UNAVAILABLE | WRONG_ISSUE_TYPE` results.
-- Keep each provider's evidence independent so NSE/BSE disagreement is observable.
-- Extend source types to `NSE | BSE | SEBI` and preserve a direct source URL per field.
-
-Key shape:
+Refactor the existing body so queue and targeted retries use identical logic:
 
 ```ts
-type OfficialEvidenceBundle = {
-  evidence: OfficialIpoEvidence[];
-  attempts: Array<{
-    source: OfficialSourceName;
-    status: "FOUND" | "NOT_FOUND" | "UNAVAILABLE" | "WRONG_ISSUE_TYPE";
-    reason: string | null;
-  }>;
-};
+async function revalidateCandidate(candidate: RevalidationCandidate): Promise<RevalidationResult> {
+  // existing fetch -> health -> consensus -> transaction -> audit flow
+}
+
+export async function revalidateCandidateById(id: string): Promise<RevalidationResult> {
+  const candidate = await prisma.ipo.findFirst({
+    where: { id, publicationState: { in: ["DRAFT", "QUARANTINED"] } },
+    select: candidateSelect,
+  });
+  return candidate ? revalidateCandidate(candidate) : { company: null, outcome: "EMPTY", reasons: [] };
+}
 ```
 
-### 2. Add a bounded BSE official adapter
+`revalidateOldestCandidate` keeps the current due/oldest selector and delegates to the same implementation. No schema change and no artificial `updatedAt` manipulation.
 
-**Files:** new `src/lib/discovery/official/bse-client.ts`, new `src/lib/discovery/official/bse.ts`
+### 2. Add conflict and invalid-record cooldown
 
-- Read BSE current and historical public-issue catalogues used by BSE's own web application.
-- Deduplicate by `IPO_NO`, then match issuer names conservatively.
-- Reject/category-route anything whose official type is not `IPO`; specifically report FPO and InvIT rather than leaving them in a generic retry loop.
-- Fetch issue detail and normalize the ten existing material fields.
-- Capture non-material enrichments: symbol, issue type, issue-size shares, face value, market lot, minimum bid, maximum bid quantities, sponsor banks, UPI cut-off, price-band ad, official prospectus, corrigendum, anchor allocation and exchange notices.
-- Implement a fixed-host GET-only HTTPS client because BSE's response headers are malformed for normal Undici parsing. Enforce host, path allowlist, timeout, response-size ceiling, no redirects, identity encoding and JSON validation.
+**File:** `src/lib/discovery/revalidate.ts`
 
-### 3. Expand NSE normalization to retain structured enrichment
+Add a deterministic 24-hour cooldown:
 
-**File:** `src/lib/discovery/official/nse.ts`
+```ts
+export function nextOfficialConflictCheckAt(now = new Date()): Date {
+  return new Date(now.getTime() + 24 * 60 * 60 * 1_000);
+}
+```
 
-- Keep the existing publication-gate values unchanged.
-- Normalize already-present NSE fields for face value, issue type, symbol, minimum order, retail/employee limits, employee discount, market timings, sponsor banks, UPI cut-off and official document links.
-- Keep live bid/subscription data as a timestamped demand snapshot rather than mixing it with static facts.
-- Preserve the raw payload for audit and direct official field URLs.
+- `RETRY`: keep exponential 2h/4h/8h/16h/24h backoff.
+- `EXCEPTION`: retain `QUARANTINED`, keep the open incident, schedule a 24-hour recheck.
+- `INVALID`: retain `QUARANTINED`, schedule a 24-hour recheck.
+- Manual **Retry now** bypasses the wait by targeting the record directly; its result writes the normal next schedule.
 
-### 4. Make consensus provider-aware and safe
+### 3. Add an authenticated, locked admin retry action
 
-**Files:** `src/lib/discovery/official/consensus.ts`, `src/lib/discovery/official/normalization.ts`
+**Files:** `src/app/admin/actions.ts`, new `src/lib/discovery/retry-operation.ts`
 
-- Compare candidate-to-provider and provider-to-provider field values.
-- Auto-publish when at least one complete official exchange record matches and no second found provider contradicts it.
-- Route any NSE/BSE disagreement or real candidate conflict to one deduplicated incident.
-- Add conservative whitespace normalization and an explicit registrar alias table for verified legal renames. No fuzzy matching.
-- Permit BSE official prospectus URLs in the RHP/Prospectus evidence guard.
-- Return a verification coverage summary: matched/missing/conflicting material fields and providers checked.
+Keep orchestration outside the page action so it is unit-testable:
 
-### 5. Persist normalized evidence and source-attempt reasons
+```ts
+export async function retryOfficialVerificationNow(ipoId: string, actor: string) {
+  const acquired = await acquireIngestionLock(`admin-retry:${actor}`);
+  if (!acquired) return { status: "BUSY" as const };
+  try {
+    const result = await revalidateCandidateById(ipoId);
+    await recordRetryAudit(ipoId, actor, result);
+    return { status: "COMPLETED" as const, result };
+  } finally {
+    await releaseIngestionLock();
+  }
+}
+```
 
-**Files:** `prisma/schema.prisma`, additive migration, `src/lib/discovery/official/persistence.ts`
+The server action:
 
-- Add normalized evidence/enrichment JSON to `OfficialEvidenceCapture`; raw payload remains append-only.
-- Persist source attempts even when a provider returns not-found/unavailable so the UI/admin dashboard can explain coverage accurately.
-- Store issue type separately from IPO lifecycle status to prevent FPO/InvIT contamination.
-- Keep migrations additive and retain code-first/schema-later compatibility fallbacks on public reads.
+- calls existing `requireAdmin()`;
+- validates a non-empty IPO ID;
+- calls the locked service;
+- revalidates `/admin`, `/`, `/ipo/[slug]` and `/api/calendar` data paths as applicable;
+- never accepts source values or publication decisions from the browser.
 
-### 6. Route existing Production records safely
+### 4. Improve admin retry/source visibility without a new dashboard
 
-**Files:** `src/lib/discovery/discover.ts`, `src/lib/discovery/revalidate.ts`, one read-only audit script under `scripts/`
+**File:** `src/app/admin/page.tsx`
 
-- Record source health per provider instead of labelling every check NSE.
-- Use the multi-source bundle during discovery and retry revalidation.
-- Run a no-write report for all 33 current non-verified records before enabling writes.
-- Expected initial routing from current data:
-  - 10 exact BSE matches immediately eligible;
-  - up to 2 more eligible after deterministic registrar alias normalization;
-  - Dhaval Packaging stays needs-review for material price/lot conflict;
-  - 4 FPOs and 1 InvIT removed from the IPO verification queue and reported separately;
-  - remaining no-exchange matches stay provisional with explicit coverage reason.
-- Do not bulk-correct conflicts or category changes without the dry-run output being attached to the PR.
+- Include recent `officialAttempts` for retry/conflict cards.
+- Display `last checked`, `next retry`, provider status/reason and official link.
+- Add **Retry official sources now** to draft/quarantined cards.
+- Keep conflict resolution actions separate from retry; retry never accepts data.
+- Add a compact excluded issue-types section for `REJECTED` rows whose `officialIssueType` is not `IPO`.
+- Keep the existing source-health and recent-run tables; surface a compact count summary above them instead of creating another page.
 
-### 7. Make verification understandable to users
+### 5. Tests
 
-**Files:** `src/lib/public-verification.ts`, `src/lib/board-data.ts`, `src/app/ipo/[slug]/page.tsx`, `src/components/IpoBoard.tsx`, `src/app/globals.css`
+**Files:** `src/lib/discovery/revalidate.test.ts`, new `src/lib/discovery/retry-operation.test.ts`, targeted admin/view-model tests where practical.
 
-- Show a compact score such as `10/10 core facts matched` and provider chips (`NSE`, `BSE`, `SEBI filing`).
-- Show each material field with status, official value, direct source link and checked time.
-- Replace generic pending text with specific safe reasons:
-  - `Not listed in NSE; BSE check scheduled`
-  - `Official filing found; final exchange terms not published yet`
-  - `Price band and lot size differ across sources`
-- Expose real `officialLastAttemptAt` and `officialNextAttemptAt` through the public select with migration compatibility fallback.
-- Add a structured “Application facts” section for the richer official fields and “Official documents” links.
-- Keep all pending/review pages `noindex`; only fully verified IPOs remain sitemap/indexable.
+Test cases:
 
-### 8. Improve subscription clarity from official demand data
+1. Queue retry and ID retry delegate to identical publication behavior.
+2. ID retry cannot target `PUBLISHED` or `REJECTED` rows.
+3. `EXCEPTION` schedules 24 hours and keeps the incident open.
+4. `INVALID` schedules 24 hours.
+5. `RETRY` retains exponential backoff.
+6. Admin retry acquires/releases the ingestion lock in success and error cases.
+7. Busy lock causes no evidence/publication mutation.
+8. Audit log records actor, IPO and outcome.
+9. Admin view shows provider attempt reasons and unsupported issue types.
 
-**Files:** new official-demand normalizer plus existing subscription ingestion/display modules
+Run:
 
-- Prefer timestamped NSE/BSE official category-level demand when present.
-- Keep Sahi as secondary corroboration/fallback and label it accordingly.
-- Never mix demand/subscription with GMP; show exchange timestamp and source link.
-- Open a conflict incident if official exchange totals disagree beyond deterministic rounding rules.
+```bash
+npm test
+npm run lint
+npx tsc --noEmit
+npm run build
+npx prisma validate
+```
 
-### 9. Preserve strict financial verification
+### 6. Preview and Production release
 
-**Files:** no publication-policy change in `src/lib/financials/workflow.ts`; UI copy only if needed
+1. Push the `codex/production-ops-reliability` branch and create a PR.
+2. Deploy preview; verify unauthenticated `/admin` redirects to login and public pages still render.
+3. Verify the admin retry button with a non-publishing retry fixture or preview database.
+4. Merge only with green CI.
+5. Deploy Production; no migration is required.
+6. Use the new targeted service under the ingestion lock to revalidate the 12 BSE-matched Production drafts immediately.
+7. Confirm exact results, evidence captures, correction logs, published count delta, source links, board/detail/calendar visibility and zero unresolved unexpected conflicts.
 
-- Continue publishing financials only from immutable official documents with fiscal year, scope, unit and page citation.
-- Do not claim exchange issue metadata verifies revenue/PAT/EPS.
-- Show the official RHP/Prospectus link when financials are unavailable and say exactly what is pending.
+## Follow-up PR sequence
 
-## Testing strategy
+### PR 2: Financial evidence automation
 
-- BSE client: host/path rejection, GET-only behavior, timeout, size limit, invalid JSON, malformed-header compatibility, current/historical caching.
-- BSE parser: mainboard, SME, fixed price, missing optional fields, minimum bid vs market lot, official links.
-- Issue-type guard: IPO accepted; FPO/InvIT/rights/buyback rejected or separately classified.
-- Provider consensus: NSE only, BSE only, both agree, both conflict, one unavailable, both unavailable.
-- Normalization: KFin spacing, Bigshare spacing, MUFG/Link Intime legal alias, unrelated near-match rejection.
-- Persistence: append-only captures, source attempts, field sources, normalized enrichment, incident deduplication.
-- Public contract: score, specific pending reasons, last/next check, source links, noindex rules.
-- Production dry-run fixture: exact expected counts and named conflict/category lists.
-- Full suite: Prisma validate/migration smoke, lint, unit/integration tests, Production build, preview smoke and responsive checks at 360/390/768/1024/1440.
+- Official RHP/Prospectus fetch + checksum/versioning.
+- Deterministic table/page/fiscal-year/unit/scope/audit-status extraction.
+- Cross-statement consistency checks.
+- Auto-propose high-confidence figures; auto-publish only after a separately approved policy with regression fixtures.
+- Exception queue for OCR, ambiguous headers, scope conflicts and material revisions.
 
-## Release sequence
+### PR 3: Remaining coverage
 
-1. Create a fresh `codex/` branch from latest `origin/main`.
-2. Implement migration + adapters + tests behind `BSE_OFFICIAL_SOURCE_ENABLED=false`.
-3. Deploy preview, run fixtures and no-write Production audit.
-4. Review exact eligible/conflict/wrong-type lists in PR evidence.
-5. Merge additive migration and code.
-6. Apply Production migration.
-7. Enable BSE source with auto-publish still disabled; run one no-write/held cycle.
-8. Verify captures, source health and public labels.
-9. Enable existing official auto-publish gate and process a bounded batch.
-10. Confirm new verified/pending/review/type counts and watch alerts for one full ingestion cycle.
+- Retry/not-found classification metrics by exchange and issue type.
+- SEBI filing-to-exchange linking improvements.
+- Alias additions only from reviewed fixtures.
+- Coverage acceptance report for Mainboard and SME.
+
+### Release task: Domain and email
+
+- Purchase/connect the final domain.
+- Verify it in Resend and add DNS records.
+- Configure `RESEND_API_KEY`, `AUTH_EMAIL_FROM`, alert recipients and canonical site URL.
+- Redeploy and send test auth, reminder and drift-alert emails.
+
+### Beta task: one real user
+
+- Google sign-in.
+- Mainboard/SME discovery and official-source link inspection.
+- Watchlist add/remove.
+- Google Calendar subscription/add-to-calendar.
+- Real reminder delivery and unsubscribe verification.
 
 ## Rollback
 
-- Disable `BSE_OFFICIAL_SOURCE_ENABLED`; registry returns to NSE-only without a code rollback.
-- New columns/tables are additive and can remain unused.
-- Revert UI/adapter commit if required. Append-only evidence remains audit history.
-- No rollback ever deletes evidence or silently reverts a human correction.
+- Revert the PR; it has no schema migration.
+- Existing queue backoff and ingestion behavior remains intact.
+- Conflict incidents/evidence are append-only and are not deleted.
+- Disable the admin button at the UI level if an operational issue is found; scheduled ingestion continues independently.
 
 ## Todo
 
-- [DONE] Create fresh branch from latest main.
-- [DONE] Add BSE bounded transport and fixtures.
-- [DONE] Add BSE catalogue/detail adapter.
-- [DONE] Expand NSE enrichment normalization.
-- [DONE] Implement source registry and provider-aware consensus.
-- [DONE] Add conservative legal-alias normalization.
-- [DONE] Add additive evidence/source-attempt migration.
-- [DONE] Update discovery/revalidation/source health.
-- [DONE] Add issue-type routing and audit report.
-- [DONE] Add field-level verification and richer official facts UI.
-- [DONE] Add official demand normalization.
-- [DONE] Add unit/integration tests and run all local quality gates.
-- [ ] Confirm the clean-database migration smoke in CI (local Docker daemon was unavailable).
-- [DONE] Run no-write Production audit and attach exact evidence.
-- [DONE] Deploy the branch preview and verify board/detail responsiveness at 360/390/768/1024/1440 without horizontal overflow.
-- [ ] Create the PR (GitHub CLI/browser authentication required).
-- [ ] Merge, migrate, feature-flag enable and monitor one full cycle.
+- [x] [DONE] Refactor shared candidate revalidation.
+- [x] [DONE] Add targeted ID retry.
+- [x] [DONE] Add 24-hour conflict/invalid cooldown.
+- [x] [DONE] Add locked retry operation and audit log.
+- [x] [DONE] Add authenticated admin server action.
+- [x] [DONE] Add retry button and provider-attempt details.
+- [x] [DONE] Add unsupported issue-type admin summary.
+- [x] [DONE] Add/extend unit tests.
+- [x] [DONE] Run full local quality gates.
+- [x] [DONE] Deploy and smoke-test preview.
+- [ ] Push and create PR.
+- [ ] Merge and deploy Production after review.
+- [ ] Immediately revalidate the 12 matched Production IPOs.
+- [ ] Verify public evidence and exact Production counts.
 
 ## Open questions
 
-None required for implementation. The safety defaults are: one complete official exchange source can verify an IPO; any official-source conflict fails closed; SEBI filing-only evidence does not verify final terms; non-IPO issue types do not count as IPOs.
+None. Safety defaults are fixed: admin authentication required, ingestion lock required, no timestamp-ordering hacks, no browser-supplied official values, no auto-resolution of conflicts, and no financial publication-policy change in this PR.

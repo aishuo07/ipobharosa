@@ -1,3 +1,3 @@
-phase=verification
-feature=multi-source-official-verification
-approved=true
+phase=release
+checkpoint=preview-passed-commit-pr-next
+feature=production-ops-reliability

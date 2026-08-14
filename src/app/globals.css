@@ -706,6 +706,9 @@ footer.page-foot {
 .admin-title-row h1 { font: 600 38px/1.08 var(--font-display); margin: 5px 0 7px; letter-spacing: -.02em; }
 .admin-title-row p:not(.section-label) { color: var(--ink-muted); margin: 0; font-size: 14px; }
 .admin-identity { font: 11px/1 var(--font-mono); color: var(--ink-faint); padding: 10px 12px; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-sm); }
+.admin-flash { margin: -10px 0 24px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); font-size: 13px; }
+.admin-flash-success { border-color: color-mix(in srgb, var(--good) 45%, var(--border)); background: var(--good-tint); color: var(--good); }
+.admin-flash-warning { border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); background: var(--warning-tint); color: var(--warning); }
 .pipeline-flow {
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0 0 40px;
 }
@@ -765,6 +768,11 @@ footer.page-foot {
 .review-reject { align-self: start; background: var(--surface-2); }
 .review-reject summary { color: var(--critical); font-size: 12.5px; font-weight: 650; cursor: pointer; }
 .review-reject form { display: grid; gap: 11px; margin-top: 14px; }
+.review-retry { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 18px; padding: 13px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2); }
+.review-retry div { display: grid; gap: 3px; }
+.review-retry strong { color: var(--ink); font-size: 12.5px; }
+.review-retry span { color: var(--ink-faint); font-size: 11px; }
+.review-list + .review-section-head, .table-wrap + .review-section-head { margin-top: 34px; }
 .admin-operations { margin-top: 32px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); padding: 15px 18px; }
 .admin-operations > summary { cursor: pointer; font-weight: 650; font-size: 13px; }
 .admin-operations > p { color: var(--ink-faint); font-size: 12px; }
@@ -824,6 +832,8 @@ footer.page-foot {
   .review-decision-grid { grid-template-columns: 1fr; }
   .review-approve { display: grid; grid-template-columns: 1fr; }
   .review-approve > button { grid-column: 1; grid-row: auto; margin-top: 12px; width: 100%; }
+  .review-retry { align-items: stretch; flex-direction: column; }
+  .review-retry .ui-button { width: 100%; }
   .pipeline-summary { grid-template-columns: 1fr 1fr; }
 }
 
