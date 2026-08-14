@@ -133,6 +133,17 @@ export default async function IpoDetailPage({
             <ProvenanceGroup title="Subscription" sources={ipo.provenance.subscription ? [ipo.provenance.subscription] : []} />
             <ProvenanceGroup title="Official filings" sources={ipo.documents.map((doc) => ({ name: doc.label, url: doc.url, note: doc.docType.toUpperCase() }))} />
           </div>
+          {ipo.provenance.officialFields.length > 0 && <div className="table-wrap provenance-fields">
+            <table className="dates">
+              <thead><tr><th>IPO field</th><th>Official value</th><th>Verified from</th><th>Checked</th></tr></thead>
+              <tbody>{ipo.provenance.officialFields.map((field) => <tr key={`${field.field}-${field.url}`}>
+                <td>{fieldLabel(field.field)}</td>
+                <td>{field.value}</td>
+                <td><a href={field.url} target="_blank" rel="noopener noreferrer">{field.source} ↗</a></td>
+                <td>{new Date(field.checkedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</td>
+              </tr>)}</tbody>
+            </table>
+          </div>}
         </Surface>
 
         <div className="ipo-detail-sections">
@@ -160,6 +171,10 @@ export default async function IpoDetailPage({
       </article>
     </div>
   );
+}
+
+function fieldLabel(field: string): string {
+  return field.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^\w/, (letter) => letter.toUpperCase());
 }
 
 function ProvenanceGroup({ title, sources }: { title: string; sources: { name: string; url: string; note: string }[] }) {

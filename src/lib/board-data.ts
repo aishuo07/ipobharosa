@@ -43,6 +43,10 @@ export type BoardIpo = {
     fiscalYear: string;
     revenueCr: number | null;
     patCr: number | null;
+    ebitdaCr: number | null;
+    assetsCr: number | null;
+    netWorthCr: number | null;
+    borrowingsCr: number | null;
     peRatio: number | null;
     ronwPct: number | null;
     debtEquity: number | null;
@@ -54,12 +58,14 @@ export type BoardIpo = {
       pageNumber: number | null;
       approvedBy: string | null;
       verificationDate: string;
+      metrics: string[];
     }[];
   }[];
   provenance: {
     discovery: { name: string; url: string; note: string }[];
     gmp: { name: string; url: string; note: string }[];
     subscription: { name: string; url: string; note: string } | null;
+    officialFields: { field: string; value: string; source: string; url: string; checkedAt: string }[];
   };
 };
 
@@ -84,7 +90,20 @@ const IPO_INCLUDE = {
 
 type IpoWithRelations = Awaited<ReturnType<typeof prisma.ipo.findFirstOrThrow<{ include: typeof IPO_INCLUDE }>>>;
 
-type OfficialProvenance = { name: string; url: string; note: string };
+type OfficialProvenance = {
+  summary: { name: string; url: string; note: string };
+  fields: BoardIpo["provenance"]["officialFields"];
+};
+
+function evidenceValue(value: string | null): string {
+  if (value === null) return "—";
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.join(", ") : String(parsed);
+  } catch {
+    return value;
+  }
+}
 
 function shapeIpo(ipo: IpoWithRelations, officialProvenance?: OfficialProvenance): BoardIpo {
   const latestGmp = ipo.gmpSnapshots[ipo.gmpSnapshots.length - 1] ?? null;
@@ -111,13 +130,17 @@ function shapeIpo(ipo: IpoWithRelations, officialProvenance?: OfficialProvenance
     url: ipo.sourceUrl,
     note: `Discovered from ${ipo.discoveredFrom.join(" + ") || "stored source"}`,
   }] : [];
-  if (officialProvenance) discovery.unshift(officialProvenance);
+  if (officialProvenance) discovery.unshift(officialProvenance.summary);
   const publishedByYear = new Map<string, BoardIpo["financials"][number]>();
   for (const value of ipo.publishedFinancials) {
     const row = publishedByYear.get(value.fiscalYear) ?? {
       fiscalYear: value.fiscalYear,
       revenueCr: null,
       patCr: null,
+      ebitdaCr: null,
+      assetsCr: null,
+      netWorthCr: null,
+      borrowingsCr: null,
       peRatio: null,
       ronwPct: null,
       debtEquity: null,
@@ -128,13 +151,21 @@ function shapeIpo(ipo: IpoWithRelations, officialProvenance?: OfficialProvenance
     if (value.metric === "REVENUE") row.revenueCr = toNum(value.value);
     if (value.metric === "PAT") row.patCr = toNum(value.value);
     if (value.metric === "EPS") row.eps = toNum(value.value);
-    if (!row.sources.some((source) => source.url === value.sourceUrl && source.pageNumber === value.pageNumber)) {
+    if (value.metric === "EBITDA") row.ebitdaCr = toNum(value.value);
+    if (value.metric === "ASSETS") row.assetsCr = toNum(value.value);
+    if (value.metric === "NET_WORTH") row.netWorthCr = toNum(value.value);
+    if (value.metric === "BORROWINGS") row.borrowingsCr = toNum(value.value);
+    const existingSource = row.sources.find((source) => source.url === value.sourceUrl && source.pageNumber === value.pageNumber);
+    if (existingSource) {
+      if (!existingSource.metrics.includes(value.metric)) existingSource.metrics.push(value.metric);
+    } else {
       row.sources.push({
         url: value.sourceUrl,
         documentType: value.sourceDocument,
         pageNumber: value.pageNumber,
         approvedBy: value.approvedBy,
         verificationDate: value.verificationDate.toISOString(),
+        metrics: [value.metric],
       });
     }
     publishedByYear.set(value.fiscalYear, row);
@@ -202,6 +233,7 @@ function shapeIpo(ipo: IpoWithRelations, officialProvenance?: OfficialProvenance
         url: `https://www.sahi.com/blogs/${slug}-ipo-gmp-today`,
         note: `${latestSub.sourceExchange.toUpperCase()}-attributed data captured ${latestSub.capturedAt.toISOString()}`,
       } : null,
+      officialFields: officialProvenance?.fields ?? [],
     },
   };
 }
@@ -225,11 +257,20 @@ export async function getBoardIpos(): Promise<BoardIpo[]> {
     for (const capture of captures) {
       if (provenanceByIpo.has(capture.ipoId)) continue;
       provenanceByIpo.set(capture.ipoId, {
-        name: `${capture.source} official issue details`,
-        url: capture.sourceUrl,
-        note: capture.comparisons.length
-          ? `Matched fields: ${capture.comparisons.map((comparison) => comparison.field).join(", ")}`
-          : `Checked ${capture.capturedAt.toISOString()}`,
+        summary: {
+          name: `${capture.source} official issue details`,
+          url: capture.sourceUrl,
+          note: capture.comparisons.length
+            ? `Matched fields: ${capture.comparisons.map((comparison) => comparison.field).join(", ")}`
+            : `Checked ${capture.capturedAt.toISOString()}`,
+        },
+        fields: capture.comparisons.map((comparison) => ({
+          field: comparison.field,
+          value: evidenceValue(comparison.officialValue),
+          source: capture.source,
+          url: comparison.sourceUrl ?? capture.sourceUrl,
+          checkedAt: capture.capturedAt.toISOString(),
+        })),
       });
     }
   } catch (error) {

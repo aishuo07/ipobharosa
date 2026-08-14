@@ -1075,7 +1075,9 @@ function FinancialsContent({ financials }: { financials: BoardIpo["financials"] 
             <tr>
               <th>Year</th>
               <th>Revenue</th>
+              <th>EBITDA</th>
               <th>Profit after tax</th>
+              <th>EPS</th>
             </tr>
           </thead>
           <tbody>
@@ -1083,11 +1085,22 @@ function FinancialsContent({ financials }: { financials: BoardIpo["financials"] 
               <tr key={y.fiscalYear}>
                 <td>{y.fiscalYear}</td>
                 <td>{y.revenueCr !== null ? fmtCr(y.revenueCr) : "—"}</td>
+                <td>{y.ebitdaCr !== null ? fmtCr(y.ebitdaCr) : "—"}</td>
                 <td>{y.patCr !== null ? fmtCr(y.patCr) : "—"}</td>
+                <td>{y.eps !== null ? `₹${y.eps}` : "—"}</td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+      <p className="section-label" style={{ marginTop: 22 }}>
+        Balance sheet (latest verified year: {latest.fiscalYear})
+      </p>
+      <div className="ratio-grid">
+        <div className="ratio-tile"><div className="stat-k">Total assets</div><div className="stat-v">{latest.assetsCr !== null ? fmtCr(latest.assetsCr) : "—"}</div></div>
+        <div className="ratio-tile"><div className="stat-k">Net worth</div><div className="stat-v">{latest.netWorthCr !== null ? fmtCr(latest.netWorthCr) : "—"}</div></div>
+        <div className="ratio-tile"><div className="stat-k">Borrowings</div><div className="stat-v">{latest.borrowingsCr !== null ? fmtCr(latest.borrowingsCr) : "—"}</div></div>
+        <div className="ratio-tile"><div className="stat-k">EBITDA</div><div className="stat-v">{latest.ebitdaCr !== null ? fmtCr(latest.ebitdaCr) : "—"}</div></div>
       </div>
       <p className="section-label" style={{ marginTop: 22 }}>
         Key ratios (latest year: {latest.fiscalYear})
@@ -1120,10 +1133,20 @@ function FinancialsContent({ financials }: { financials: BoardIpo["financials"] 
 
 export function FinancialsPanel({ ipo }: { ipo: BoardIpo }) {
   if (ipo.financials.length === 0) {
+    const filings = ipo.documents.filter((document) => document.docType === "rhp" || document.docType === "drhp");
     return (
-      <StatePanel title="Verified financials are not available yet">
-        We only publish figures after a reviewer approves filing-backed values with a source link and audit record.
-      </StatePanel>
+      <>
+        <StatePanel title="Financial figures are being verified">
+          We have not published revenue, profit or balance-sheet figures without page-level filing evidence. Open the official filing below while verification is pending.
+        </StatePanel>
+        {filings.length > 0 && <div className="doc-list" style={{ marginTop: 12 }}>
+          {filings.map((document) => <a key={document.url} className="doc-row" href={document.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+            <span className="stamp">{document.docType.toUpperCase()}</span>
+            <span className="doc-copy"><span className="doc-name">{document.label}</span><span className="doc-source">{document.evidenceLabel} · {document.sourceHost}</span></span>
+            <span className="doc-sub">Open official filing ↗</span>
+          </a>)}
+        </div>}
+      </>
     );
   }
 
@@ -1145,7 +1168,7 @@ export function FinancialsPanel({ ipo }: { ipo: BoardIpo }) {
           >
             <span className="stamp">{source.documentType}</span>
             <span className="doc-copy">
-              <span className="doc-name">{year.fiscalYear} filing evidence</span>
+              <span className="doc-name">{year.fiscalYear} · {source.metrics.map((metric) => metric.replace("_", " ")).join(", ")}</span>
               <span className="doc-source">
                 Reviewed {new Date(source.verificationDate).toLocaleDateString("en-IN")}
                 {source.pageNumber ? ` · page ${source.pageNumber}` : ""}

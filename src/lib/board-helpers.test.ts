@@ -38,7 +38,7 @@ function makeIpo(overrides: Partial<BoardIpo> = {}): BoardIpo {
     gmpHistory: [],
     documents: [],
     financials: [],
-    provenance: { discovery: [], gmp: [], subscription: null },
+    provenance: { discovery: [], gmp: [], subscription: null, officialFields: [] },
     ...overrides,
   };
 }
