@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
-const LOCK_ID = "singleton";
+const DEFAULT_LOCK_ID = "singleton";
 // A route invocation has a hard 60-second ceiling. Anything still locked after
 // two minutes cannot be live work and is safe for the next caller to recover.
 const STALE_AFTER_MS = 2 * 60 * 1000;
@@ -12,19 +12,19 @@ const STALE_AFTER_MS = 2 * 60 * 1000;
  * `runningSince`. No separate distributed-lock infrastructure needed
  * at this scale.
  */
-export async function acquireIngestionLock(startedBy: string): Promise<boolean> {
+export async function acquireIngestionLock(startedBy: string, lockId = DEFAULT_LOCK_ID): Promise<boolean> {
   const now = new Date();
   const staleThreshold = new Date(now.getTime() - STALE_AFTER_MS);
 
   await prisma.ingestionLock.upsert({
-    where: { id: LOCK_ID },
+    where: { id: lockId },
     update: {},
-    create: { id: LOCK_ID },
+    create: { id: lockId },
   });
 
   const result = await prisma.ingestionLock.updateMany({
     where: {
-      id: LOCK_ID,
+      id: lockId,
       OR: [{ runningSince: null }, { runningSince: { lt: staleThreshold } }],
     },
     data: { runningSince: now, startedBy },
@@ -33,9 +33,9 @@ export async function acquireIngestionLock(startedBy: string): Promise<boolean> 
   return result.count === 1;
 }
 
-export async function releaseIngestionLock(): Promise<void> {
+export async function releaseIngestionLock(lockId = DEFAULT_LOCK_ID): Promise<void> {
   await prisma.ingestionLock.update({
-    where: { id: LOCK_ID },
+    where: { id: lockId },
     data: { runningSince: null, startedBy: null },
   });
 }

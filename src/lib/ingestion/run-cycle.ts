@@ -12,8 +12,6 @@ import { acquireIngestionLock, releaseIngestionLock } from "@/lib/ingestion/lock
 import { computeAlertReasons } from "@/lib/ingestion/alert";
 import { sendEmail } from "@/lib/email/resend";
 import type { GmpAdapter } from "@/lib/gmp/types";
-import { captureFilingEvidence } from "@/lib/financials/filing-evidence";
-import { filingEvidenceClass } from "@/lib/document-evidence";
 import { syncOfficialFilingCatalogue, type FilingCatalogueSync } from "@/lib/discovery/filing-catalogue";
 import { countRevalidationCandidates, revalidateOldestCandidate } from "@/lib/discovery/revalidate";
 import { countPublishedRevalidationCandidates, revalidateOldestPublished } from "@/lib/discovery/revalidate-published";
@@ -25,13 +23,15 @@ const BATCH_SIZE = 3;
 const GMP_ADAPTERS: GmpAdapter[] = [ipoWatchAdapter, sahiAdapter, ipojiAdapter];
 const GMP_ELIGIBLE_STATUSES = ["UPCOMING", "OPEN", "CLOSED"] as const;
 const SUBSCRIPTION_ELIGIBLE_STATUSES = ["OPEN", "CLOSED"] as const;
-// A clean cycle currently consumes ~83 of the workflow's 120 HTTP-step budget
-// with eight candidate checks. Draining up to 32 candidates adds at most 24
-// steps, keeping the worst observed cycle below the ceiling while avoiding a
-// multi-day wait for an otherwise publication-ready backlog.
+// Candidate checks are bounded so the workflow still has ample calls for GMP,
+// subscription and finalization. Remote PDF work is intentionally excluded
+// from this budget and runs in the daily filing-evidence worker.
 const REVALIDATION_PER_RUN = 32;
 const PUBLISHED_REVALIDATION_PER_RUN = 4;
 
+// `filings` remains readable so an in-flight checkpoint written by an older
+// deployment can be advanced safely. New runs never enter that stage: remote
+// PDF downloads run in the independent daily filing-evidence worker.
 export type IngestionStage = "prepare" | "revalidation" | "publishedRevalidation" | "filings" | "gmp" | "subscription" | "finalize" | "complete";
 
 export type IngestionSummary = {
@@ -145,7 +145,7 @@ export async function runIngestionStep(startedBy = "cron"): Promise<IngestionSte
     if (checkpoint.stage === "prepare") checkpoint = await runPrepare(checkpoint);
     else if (checkpoint.stage === "revalidation") checkpoint = await runRevalidationBatch(checkpoint);
     else if (checkpoint.stage === "publishedRevalidation") checkpoint = await runPublishedRevalidationBatch(checkpoint);
-    else if (checkpoint.stage === "filings") checkpoint = await runFilingBatch(checkpoint);
+    else if (checkpoint.stage === "filings") checkpoint = nextStage(checkpoint, "gmp");
     else if (checkpoint.stage === "gmp") checkpoint = await runGmpBatch(run.id, run.startedAt, checkpoint);
     else if (checkpoint.stage === "subscription") checkpoint = await runSubscriptionBatch(run.id, run.startedAt, checkpoint);
     else if (checkpoint.stage === "finalize") checkpoint = nextStage(checkpoint, "complete");
@@ -218,10 +218,10 @@ async function runRevalidationBatch(checkpoint: IngestionCheckpoint): Promise<In
 
 async function runPublishedRevalidationBatch(checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
   if (checkpoint.summary.publishedRevalidation.checked >= checkpoint.summary.publishedRevalidation.target) {
-    return nextStage(checkpoint, "filings");
+    return nextStage(checkpoint, "gmp");
   }
   const result = await revalidateOldestPublished();
-  if (result.outcome === "EMPTY") return nextStage(checkpoint, "filings");
+  if (result.outcome === "EMPTY") return nextStage(checkpoint, "gmp");
   const summary = structuredClone(checkpoint.summary);
   summary.publishedRevalidation.checked++;
   if (result.outcome === "MATCHED") summary.publishedRevalidation.matched++;
@@ -241,44 +241,6 @@ async function runPublishedRevalidationBatch(checkpoint: IngestionCheckpoint): P
   }
   else if (result.outcome === "RETRY") summary.publishedRevalidation.retries++;
   else if (result.outcome === "INVALID") summary.publishedRevalidation.invalid++;
-  return { ...checkpoint, cursor: checkpoint.cursor + 1, summary };
-}
-
-async function runFilingBatch(checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
-  const ipos = await prisma.ipo.findMany({
-    where: { publicationState: "PUBLISHED", OR: [{ rhpUrl: { not: null } }, { drhpUrl: { not: null } }] },
-    include: { company: true },
-    orderBy: { id: "asc" },
-    skip: checkpoint.cursor,
-    take: 1,
-  });
-  if (ipos.length === 0) return nextStage(checkpoint, "gmp");
-  const ipo = ipos[0];
-  const candidates = [
-    ipo.rhpUrl ? { type: "RHP" as const, url: ipo.rhpUrl } : null,
-    ipo.drhpUrl ? { type: "DRHP" as const, url: ipo.drhpUrl } : null,
-  ].filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null)
-    .filter((candidate) => filingEvidenceClass(candidate.url) !== "THIRD_PARTY");
-  const summary = structuredClone(checkpoint.summary);
-  const candidate = candidates[0];
-  if (!candidate) {
-    summary.filings.skipped++;
-  } else {
-    const exists = await prisma.financialDocument.findFirst({
-      where: { ipoId: ipo.id, documentType: candidate.type, sourceUrl: candidate.url },
-    });
-    if (exists) summary.filings.skipped++;
-    else {
-      try {
-        await captureFilingEvidence(ipo.id, candidate.type, candidate.url);
-        await recordSourceSuccess("official:filing-download", "Official filing host", "filing-download");
-        summary.filings.captured++;
-      } catch (error) {
-        await recordSourceFailure("official:filing-download", "Official filing host", "filing-download", error);
-        summary.filings.failed.push({ ipoName: ipo.company.name, error: error instanceof Error ? error.message : String(error) });
-      }
-    }
-  }
   return { ...checkpoint, cursor: checkpoint.cursor + 1, summary };
 }
 
