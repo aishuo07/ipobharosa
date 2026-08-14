@@ -5,6 +5,7 @@ import {
   boardFilterQuery,
   filterIposByBoard,
   filterIposByStatus,
+  filterIposByVerification,
   parseBoardFilter,
 } from "./board-filter";
 
@@ -15,6 +16,16 @@ const makeIpo = (id: string, board: BoardIpo["board"]): BoardIpo => ({
   sector: "",
   status: "OPEN",
   board,
+  verification: {
+    state: "VERIFIED",
+    label: "Automated verification passed",
+    shortLabel: "Verified",
+    calendarLabel: "Verified",
+    description: "Verified",
+    checkedAt: null,
+    nextCheckAt: null,
+    issueSummary: null,
+  },
   priceBandLow: 1,
   priceBandHigh: 1,
   lotSize: 1,
@@ -77,5 +88,12 @@ describe("board filters", () => {
     expect(filterIposByStatus([open, upcoming, closed], "UPCOMING").map((ipo) => ipo.id)).toEqual([
       "upcoming",
     ]);
+  });
+
+  it("filters mixed-trust IPOs without hiding them from the all-data view", () => {
+    const verified = makeIpo("verified", "MAINBOARD");
+    const pending = { ...makeIpo("pending", "SME"), verification: { ...makeIpo("pending", "SME").verification, state: "PENDING" as const } };
+    expect(filterIposByVerification([verified, pending], "ALL")).toHaveLength(2);
+    expect(filterIposByVerification([verified, pending], "PENDING").map((ipo) => ipo.id)).toEqual(["pending"]);
   });
 });

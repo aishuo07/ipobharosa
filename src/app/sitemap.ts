@@ -1,12 +1,12 @@
 import type { MetadataRoute } from "next";
-import { getBoardIpos } from "@/lib/board-data";
+import { getIndexableIpos } from "@/lib/board-data";
 
 const SITE_URL = "https://ipobharosa.vercel.app";
 
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const ipos = await getBoardIpos();
+  const ipos = await getIndexableIpos();
 
   const ipoEntries: MetadataRoute.Sitemap = ipos.map((ipo) => ({
     url: `${SITE_URL}/ipo/${ipo.slug}`,

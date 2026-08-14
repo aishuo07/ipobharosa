@@ -1,9 +1,11 @@
 import type { BoardIpo } from "@/lib/board-data";
+import type { PublicVerificationState } from "@/lib/public-verification";
 
 export const BOARD_FILTERS = ["ALL", "MAINBOARD", "SME"] as const;
 
 export type BoardFilter = (typeof BOARD_FILTERS)[number];
 export type StatusFilter = BoardIpo["status"] | "ALL";
+export type VerificationFilter = PublicVerificationState | "ALL";
 
 export function parseBoardFilter(value: string | null): BoardFilter | null {
   if (value === null || value === "") return "ALL";
@@ -16,6 +18,10 @@ export function filterIposByBoard(ipos: BoardIpo[], board: BoardFilter): BoardIp
 
 export function filterIposByStatus(ipos: BoardIpo[], status: StatusFilter): BoardIpo[] {
   return status === "ALL" ? ipos : ipos.filter((ipo) => ipo.status === status);
+}
+
+export function filterIposByVerification(ipos: BoardIpo[], verification: VerificationFilter): BoardIpo[] {
+  return verification === "ALL" ? ipos : ipos.filter((ipo) => ipo.verification.state === verification);
 }
 
 export function boardFilterLabel(board: BoardFilter): string {

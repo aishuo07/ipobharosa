@@ -8,6 +8,7 @@ import {
   GmpPanel,
   OverviewPanel,
   SubscriptionPanel,
+  VerificationNotice,
 } from "@/components/IpoBoard";
 import { Badge, Surface } from "@/components/ui";
 import { badgeText, confidenceLabel, countdownText, effectiveStatus, fmtDate, fmtINR } from "@/lib/board-helpers";
@@ -45,6 +46,9 @@ export async function generateMetadata({
     title: `${ipo.companyName} IPO — GMP, Price Band, Dates, Subscription | IPOBharosa`,
     description,
     alternates: { canonical: `/ipo/${ipo.slug}` },
+    robots: ipo.verification.state === "VERIFIED"
+      ? { index: true, follow: true }
+      : { index: false, follow: true },
   };
 }
 
@@ -101,6 +105,8 @@ export default async function IpoDetailPage({
             <a className="ui-button ui-button-secondary" href={googleCalendarSubscriptionUrl()} target="_blank" rel="noopener noreferrer">Subscribe in Google Calendar ↗</a>
           </div>
         </Surface>
+
+        <VerificationNotice ipo={ipo} />
 
         <nav className="ipo-detail-nav" aria-label="IPO detail sections">
           <a href="#overview">Overview</a>

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { toIpoSlug } from "@/lib/ipo-slug";
 import { filingEvidenceLabel, filingSourceHost } from "@/lib/document-evidence";
+import { publicVerificationFromPublicationState, type PublicVerification } from "@/lib/public-verification";
 
 export type BoardIpo = {
   id: string;
@@ -9,6 +10,7 @@ export type BoardIpo = {
   sector: string;
   status: "UPCOMING" | "OPEN" | "CLOSED" | "LISTED";
   board: "MAINBOARD" | "SME";
+  verification: PublicVerification;
   priceBandLow: number;
   priceBandHigh: number;
   lotSize: number;
@@ -109,6 +111,13 @@ function shapeIpo(ipo: IpoWithRelations, officialProvenance?: OfficialProvenance
   const latestGmp = ipo.gmpSnapshots[ipo.gmpSnapshots.length - 1] ?? null;
   const latestSub = ipo.subscriptionSnapshots[0] ?? null;
   const slug = toIpoSlug(ipo.company.name);
+  const verification = publicVerificationFromPublicationState({
+    publicationState: ipo.publicationState,
+    officialLastAttemptAt: ipo.officialLastAttemptAt,
+    officialNextAttemptAt: ipo.officialNextAttemptAt,
+    quarantineReason: ipo.quarantineReason,
+  });
+  if (!verification) throw new Error("Rejected IPO cannot be shaped for public display");
   const gmpSourceLinks = new Map<string, { name: string; url: string; note: string }>();
   for (const observation of ipo.gmpObservations) {
     if (!observation.success || gmpSourceLinks.has(observation.source.adapterKey)) continue;
@@ -178,6 +187,7 @@ function shapeIpo(ipo: IpoWithRelations, officialProvenance?: OfficialProvenance
     sector: ipo.company.sector ?? "",
     status: ipo.status,
     board: ipo.board,
+    verification,
     priceBandLow: toNum(ipo.priceBandLow),
     priceBandHigh: toNum(ipo.priceBandHigh),
     lotSize: ipo.lotSize ?? 0,
@@ -238,9 +248,22 @@ function shapeIpo(ipo: IpoWithRelations, officialProvenance?: OfficialProvenance
   };
 }
 
-export async function getBoardIpos(): Promise<BoardIpo[]> {
+const COMPLETE_PUBLIC_FACTS = {
+  priceBandLow: { not: null },
+  priceBandHigh: { not: null },
+  lotSize: { not: null },
+  issueSizeCr: { not: null },
+  openDate: { not: null },
+  closeDate: { not: null },
+  allotmentDate: { not: null },
+  refundDate: { not: null },
+  listingDate: { not: null },
+  registrar: { not: null },
+} as const;
+
+async function getIposByPublicationState(states: ("PUBLISHED" | "DRAFT" | "QUARANTINED")[]): Promise<BoardIpo[]> {
   const ipos = await prisma.ipo.findMany({
-    where: { publicationState: "PUBLISHED" },
+    where: { publicationState: { in: states }, ...COMPLETE_PUBLIC_FACTS },
     include: IPO_INCLUDE,
     orderBy: { createdAt: "asc" },
   });
@@ -280,11 +303,24 @@ export async function getBoardIpos(): Promise<BoardIpo[]> {
   return ipos.map((ipo) => shapeIpo(ipo, provenanceByIpo.get(ipo.id)));
 }
 
+export async function getPublicIpos(): Promise<BoardIpo[]> {
+  return getIposByPublicationState(["PUBLISHED", "DRAFT", "QUARANTINED"]);
+}
+
+export async function getIndexableIpos(): Promise<BoardIpo[]> {
+  return getIposByPublicationState(["PUBLISHED"]);
+}
+
+/** @deprecated Prefer the explicit public or indexable query. */
+export async function getBoardIpos(): Promise<BoardIpo[]> {
+  return getPublicIpos();
+}
+
 // No dedicated slug column exists yet — company count is small enough
 // that computing the slug for every IPO and matching is simpler than a
 // migration.
 export async function getBoardIpoBySlug(slug: string): Promise<BoardIpo | null> {
-  const ipos = await getBoardIpos();
+  const ipos = await getPublicIpos();
   return ipos.find((ipo) => ipo.slug === slug) ?? null;
 }
 
