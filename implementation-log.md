@@ -1,5 +1,15 @@
 # Implementation log
 
+## 2026-08-14 — ingestion reliability and evidence transparency
+
+- Product owner approved the two-PR reliability/provenance plan.
+- Created `codex/ingestion-reliability-provenance` from current `origin/main` (`8affceb`).
+- Implementation is intentionally fail-safe: source drift opens an incident and alert; it never silently overwrites public IPO facts.
+- Added bounded transient retry, per-source operation health, candidate backoff, conflict deduplication, and published-fact drift detection.
+- Added an authenticated correction workflow with immutable audit records, source-health/incident admin views, idempotent IST daily digest, and transport-level workflow retries.
+- Added public field-level official provenance plus expanded immutable financial evidence, citations, and honest empty states.
+- Root-caused the previous Production workflow failure as exhaustion of the 50-request orchestration ceiling, not a failed ingestion step. Raised the bounded ceiling to 120, added a 40-minute hard timeout, and serialized Production ingestion jobs so persisted runs can finish without overlap.
+
 ## 2026-08-13 — coverage architecture
 
 - Split official filing coverage from application-ready IPO records with `IpoFilingCatalogue`.

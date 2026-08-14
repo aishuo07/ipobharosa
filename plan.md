@@ -1,106 +1,153 @@
-# Implementation Plan: Mainboard + SME board and calendar sync
+# Implementation Plan: Reliable official ingestion and transparent IPO evidence
 
-Status: approved by the product owner on 2026-08-13; historical NSE coverage extension explicitly requested and in progress.
+Status: approved by the product owner on 2026-08-14; implementation in progress.
 
 ## Approach
 
-Deliver the user-visible filtering and calendar subscription without changing the database contract, then diagnose and repair the actual SME publication gap with the existing authoritative-source rules. This avoids shipping an empty decorative SME tab or weakening the trust gate.
+Deliver two reviewable PRs. PR A adds the reliability and operator-control foundation. PR B adds public field-level provenance and improves financial evidence coverage/presentation. Existing auto-publication rules remain unchanged; published source drift is fail-safe and never auto-overwrites public facts.
 
-## Changes
+## PR A — reliability, health, conflict/drift operations
 
-### 1. Shared board filter contract
+### 1. Add additive operational models
 
-**Files:** `src/lib/board-filter.ts`, `src/lib/board-filter.test.ts`
+**Files:** `prisma/schema.prisma`, new timestamped migration
 
-- Add the allowlisted filter type `ALL | MAINBOARD | SME`.
-- Add reusable predicate, label, and strict query parser.
-- Test all values and invalid query input.
+Add:
 
-### 2. Board experience
+```prisma
+model SourceOperationHealth {
+  key String @id
+  source String
+  operation String
+  lastAttemptAt DateTime?
+  lastSuccessAt DateTime?
+  lastFailureAt DateTime?
+  consecutiveFailures Int @default(0)
+  nextRetryAt DateTime?
+  lastError String?
+  updatedAt DateTime @updatedAt
+}
+```
 
-**Files:** `src/components/IpoBoard.tsx`, `src/app/globals.css`, component tests
+- Add official revalidation retry fields to `Ipo`: attempt count, next attempt, last attempt, last successful check.
+- Add `OfficialEvidenceIncident` keyed by stable fingerprint with kind (`CONFLICT` or `PUBLISHED_DRIFT`), first/last seen, occurrence count, status, resolution note/actor/time, and latest capture relation.
+- Add `DigestDelivery` with unique `(digestDate, recipient)` for exactly-once daily email attempts.
+- All changes are additive; existing evidence/audit rows remain untouched.
 
-- Add a prominent `All IPOs / Mainboard / SME` segmented selector to Board and Calendar views.
-- Default to `All IPOs`.
-- Scope lifecycle counts, search results, cards, compare state, and calendar events to the selected board.
-- Show real counts beside each option.
-- Make the zero-SME state operationally honest: no verified SME IPOs currently available, rather than suggesting the feature is broken.
-- Preserve the current responsive design and keyboard/ARIA behavior.
+### 2. Shared bounded retry and health recorder
 
-### 3. Board-specific calendar subscriptions
+**Files:** new `src/lib/ingestion/source-operation.ts`, official adapters/call sites, tests
 
-**Files:** `src/lib/calendar.ts`, `src/app/api/calendar/route.ts`, `src/lib/calendar.test.ts`, route tests
+- Implement maximum-attempt exponential backoff with capped delay and deterministic jitter injection for tests.
+- Retry only transient failures (timeouts, network errors, 408/425/429/5xx), not validation conflicts or 4xx contract errors.
+- Record source operation success/failure and next retry without leaking response bodies or secrets.
+- Keep serverless work bounded; do not sleep beyond a few seconds inside a step.
 
-- Support `/api/calendar?board=MAINBOARD` and `/api/calendar?board=SME`; keep `/api/calendar` as all IPOs.
-- Preserve the existing `?ipo=<slug>` single-IPO feed.
-- Make Google Calendar subscription URLs board-aware.
-- Use distinct calendar names for all/Mainboard/SME feeds.
-- Keep every event's detail-page URL so users can return to IPOBharosa for sources and current data.
-- Add short UI copy explaining this is a live subscription and Google controls refresh timing.
+### 3. Revalidation retry state and deduplicated incidents
 
-### 4. SME publication-gap diagnostic and fix
+**Files:** `src/lib/discovery/revalidate.ts`, `src/lib/discovery/official/persistence.ts`, tests
 
-**Files:** existing discovery/official-source modules and focused tests only where the diagnostic proves a defect
+- Select only due unpublished candidates.
+- Back off `RETRY` outcomes and clear retry state after a found official result.
+- Continue appending raw evidence captures.
+- Compute a stable fingerprint from IPO, decision kind, conflicting fields, candidate values, official values, and source.
+- Upsert one incident per unchanged conflict; increment occurrences instead of creating duplicate admin work.
 
-- Run a no-write classification of current SME candidates.
-- Report counts by `AUTO_PUBLISH`, `RETRY`, and `EXCEPTION`, with concrete reasons.
-- If a deterministic parser/matching defect blocks valid SME candidates, add a focused regression test and fix it.
-- Do not bulk publish weak/unverified candidates and do not weaken official-source requirements.
-- If valid SMEs become `AUTO_PUBLISH`, keep the write behind the existing publication flag and separately report the exact candidates before any Production write.
+### 4. Published-source revalidation and drift alerts
 
-### 5. Official NSE historical coverage extension
+**Files:** `src/lib/discovery/revalidate-published.ts`, `src/lib/ingestion/run-cycle.ts`, alert tests
 
-**Files:** `src/lib/discovery/official/nse.ts`, normalization/consensus modules, focused adapter tests
+- Add a resumable bounded `publishedRevalidation` stage (small batch per full run).
+- Compare live official facts to currently published IPO facts with the existing consensus semantics.
+- On match: store evidence and successful-check time.
+- On unavailable source: back off without changing public data.
+- On changed material field: append evidence, open/update `PUBLISHED_DRIFT`, and include it in immediate alerts/digest. Never mutate the published IPO automatically.
+- Preserve checkpoint v1 compatibility by defaulting new stage summary fields.
 
-- Fetch and cache NSE's public past-issues catalogue only after current/upcoming lookup misses.
-- Match exact normalized issuer names first; permit only one unambiguous multi-token prefix match for shortened source names.
-- Request the archived issue through NSE's official detail endpoint using its symbol, series and `type=Past`.
-- Normalize historical `Lot Size` and final `Prospectus` labels into the existing material evidence contract.
-- Keep the same field-level consensus; archive coverage changes evidence availability, not publication safety.
-- Re-run the 37-SME no-write diagnostic and report exact results before any write.
+### 5. Source-health dashboard and correction workflow
 
-### 6. Verification and delivery
+**Files:** `src/app/admin/page.tsx`, `src/app/admin/actions.ts`, `src/lib/admin-correction.ts`, CSS/tests
 
-- Run lint, unit/integration tests, build, and migration smoke.
-- Verify 390px, 768px, and desktop layouts without overflow.
-- Verify All/Mainboard/SME filters and Google Calendar URLs in the preview.
-- Create a PR and deploy the reviewed build; do not apply the pending Production Prisma migrations in this change.
+- Show NSE, SEBI, discovery, filing, GMP, and subscription health with last success, failures, next retry, and error summary.
+- Group repeated conflicts into one incident with occurrence count and last-seen time.
+- Add `Accept official values` for allowlisted material fields and require a reason/confirmation.
+- Write the correction and `CorrectionLog` atomically, mark incident resolved, then schedule immediate revalidation.
+- Keep retries informational and non-actionable.
 
-### 7. Existing-draft automatic revalidation
+### 6. Daily digest and workflow transport retry
 
-- Add a bounded ingestion stage that rechecks up to eight oldest Draft/Quarantined candidates per run.
-- Rotate every checked row by `updatedAt` so the queue progresses without a manual ID list or unbounded request.
-- Keep publication behind `OFFICIAL_IPO_AUTO_PUBLISH_ENABLED`; conflicts remain quarantined and missing evidence remains unpublished.
-- Persist every available official comparison and create the correct official document/audit entry only when publication succeeds.
+**Files:** `src/lib/ingestion/digest.ts`, `src/lib/ingestion/run-cycle.ts`, `.github/workflows/ingest.yml`, tests
 
-## Todo
+- Send one digest per IST date to configured admin recipient(s), idempotently.
+- Include published, waiting, conflicts, drifts, source health, filing failures, and financial review count.
+- Add curl retry/backoff for transient transport/HTTP failures; retain persisted-cursor semantics and hard failure after a bounded limit.
+- Email errors are recorded and alerted but do not corrupt ingestion state.
 
-- [DONE] Add and test shared board-filter contract.
-- [DONE] Add All/Mainboard/SME selector with accurate counts.
-- [DONE] Scope status tabs, search, compare, and calendar UI by board.
-- [DONE] Add board-aware ICS API and Google Calendar subscription URLs.
-- [DONE] Add calendar subscription explanation and return-to-site links.
-- [DONE] Run SME no-write diagnostic and document exact blockers.
-- [DONE] Fix only demonstrated deterministic SME ingestion defects (none demonstrated; no unsafe matching change made).
-- [DONE] Add official NSE historical catalogue fallback and focused tests.
-- [DONE] Run a public-name coverage check for all previously diagnosed SME candidates; 9/37 now have complete official NSE evidence. A full decision rerun still requires the candidate facts stored in Production and remains no-write.
-- [DONE] Run full automated verification after the coverage extension (191 tests, lint, build, schema validation; existing CI migration smoke remains green).
-- [DONE] Verify preview interactions and desktop overflow; responsive CSS breakpoints remain covered by the existing mobile layout rules.
-- [DONE] Push branch and open PR #29.
-- [DONE] Add and test bounded automatic revalidation for already-tracked drafts.
-- [DONE] Apply the two explicitly approved Production migrations and verify migration status.
-- [DONE] Resume and complete the persisted ingestion cycle; capture exact publication outcomes.
-- [DONE] Verify a fresh cycle persists the official filing catalogue (100 stored, 29 linked).
-- [DONE] Fix the demonstrated IST date and SME minimum-application normalization defects with regression coverage.
+## PR B — public provenance and financial evidence UX
+
+### 7. Field-level clickable provenance
+
+**Files:** `src/lib/board-data.ts`, `src/app/ipo/[slug]/page.tsx`, `src/components/IpoBoard.tsx`, CSS/tests
+
+- Expose latest official comparison per material field: field label, displayed value, official source, source URL, and checked-at time.
+- Render a compact `Data sources` table on each IPO page.
+- Keep GMP explicitly unofficial and show its source links/capture times separately.
+- Deduplicate document/source links.
+
+### 8. Financial evidence coverage and display
+
+**Files:** financial ingestion helpers, `src/lib/board-data.ts`, `src/components/IpoBoard.tsx`, admin financial queue, tests
+
+- Queue uncaptured official RHP/DRHP documents with retry/health state.
+- Keep metric publication restricted to immutable `FinancialPublished` rows with source URL and page citation.
+- Improve financial table to show revenue, PAT, EPS and other available metrics without implying absent values are zero.
+- Show per-year source links, page numbers, document type, and verification date.
+- When no verified metrics exist, show direct official RHP/DRHP links and an honest `financial figures are being verified` state.
+- Do not auto-publish PDF-extracted metrics unless a later plan defines deterministic multi-source agreement for fiscal year, unit, scope, audit status, value, and page evidence.
+
+### 9. Production refresh and evidence report
+
+- Run Prisma validation and migration smoke before deployment.
+- Run lint, full tests, typecheck/build, responsive checks, and authenticated admin smoke.
+- Deploy migration then application in the safe order.
+- Trigger the real Production ingestion workflow and monitor it to completion.
+- Report exact published/retry/conflict/drift/source-health counts and provide clickable public IPO/source/financial links.
+
+## Test strategy
+
+- Unit tests for transient classification, backoff, fingerprint stability, incident upsert, due-candidate selection, drift detection, digest idempotency, and correction validation.
+- Integration tests for old checkpoint compatibility and transaction behavior.
+- Component tests for source health, deduped incidents, correction form, provenance table, financial source/page links, and empty states.
+- Existing 196+ tests, lint, Prisma validation, and production build must stay green.
 
 ## Rollback
 
-- Revert the feature commit; no database migration or destructive data mutation is part of this plan.
-- Existing unfiltered `/api/calendar` and single-IPO feeds remain compatible throughout.
+- Revert application commits; additive tables/nullable columns can remain unused.
+- Disable published revalidation/digest with feature flags if source load or email behavior is unexpected.
+- Existing public data remains unchanged because drift detection never auto-overwrites published values.
+
+## Todo
+
+- [DONE] Create a fresh branch from current `main`.
+- [DONE] Add and test additive operational models/migration.
+- [DONE] Implement shared bounded retry and generic source health.
+- [DONE] Add explicit official revalidation backoff.
+- [DONE] Add conflict fingerprinting and incident deduplication.
+- [DONE] Add bounded published revalidation and drift alerts.
+- [DONE] Add source-health dashboard.
+- [DONE] Add authenticated, audited correction action/form.
+- [DONE] Add idempotent daily digest.
+- [DONE] Harden GitHub Actions HTTP retries.
+- [ ] Run PR A verification and deploy safely.
+- [DONE] Add field-level public provenance.
+- [DONE] Improve financial evidence queue and public presentation.
+- [ ] Run PR B verification and deploy safely.
+- [ ] Trigger and monitor a fresh Production data cycle.
+- [ ] Report exact data state and clickable evidence links.
 
 ## Explicitly out of scope
 
-- Publishing unverified SME candidates.
-- Bypassing source access controls.
-- Applying the two currently pending Production Prisma migrations.
-- Native Google OAuth calendar-write access; hosted ICS subscription achieves continuous sync without requesting broad calendar permissions.
+- Bypassing exchange/SEBI access controls.
+- Auto-overwriting already-published issue terms after a source change.
+- Publishing financial figures without official document and page-level evidence.
+- Treating GMP as official or guaranteed data.

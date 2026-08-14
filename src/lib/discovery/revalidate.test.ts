@@ -7,7 +7,10 @@ const mocks = vi.hoisted(() => ({
   documentCreate: vi.fn(),
   correctionCreate: vi.fn(),
   persistDecision: vi.fn(),
+  persistIncident: vi.fn(),
   fetchEvidence: vi.fn(),
+  sourceSuccess: vi.fn(),
+  sourceFailure: vi.fn(),
   autoPublish: false,
 }));
 
@@ -15,6 +18,7 @@ const tx = vi.hoisted(() => ({
   ipo: { update: mocks.update },
   document: { findFirst: mocks.documentFindFirst, create: mocks.documentCreate },
   correctionLog: { create: mocks.correctionCreate },
+  officialEvidenceIncident: { upsert: vi.fn() },
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -27,6 +31,11 @@ vi.mock("./official", () => ({ fetchOfficialIpoEvidence: mocks.fetchEvidence }))
 vi.mock("./official/persistence", () => ({
   officialAutoPublishEnabled: () => mocks.autoPublish,
   persistOfficialDecision: mocks.persistDecision,
+  persistOfficialIncident: mocks.persistIncident,
+}));
+vi.mock("@/lib/ingestion/source-operation", () => ({
+  recordSourceSuccess: mocks.sourceSuccess,
+  recordSourceFailure: mocks.sourceFailure,
 }));
 
 import { revalidateOldestCandidate } from "./revalidate";
@@ -57,6 +66,8 @@ function candidate() {
     rhpUrl: null,
     reviewedAt: null,
     quarantineReason: null,
+    officialCheckAttempts: 0,
+    officialNextAttemptAt: null,
     company: { name: "Teja Engineering" },
   };
 }

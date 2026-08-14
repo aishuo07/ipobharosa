@@ -65,6 +65,22 @@ enum OfficialFieldStatus {
   MISSING_OFFICIAL
 }
 
+enum OfficialIncidentKind {
+  CONFLICT
+  PUBLISHED_DRIFT
+}
+
+enum OfficialIncidentStatus {
+  OPEN
+  RESOLVED
+  IGNORED
+}
+
+enum DeliveryStatus {
+  SENT
+  FAILED
+}
+
 enum IpoFilingStage {
   DRHP_FILED
   RHP_FILED
@@ -126,16 +142,20 @@ model Ipo {
   // full publish/reject/auto-publish audit trail. QUARANTINED candidates
   // failed validation or source agreement and are kept (not silently
   // discarded) so a human can see exactly why.
-  publicationState PublicationState              @default(DRAFT)
-  discoveredFrom   String[]                      @default([]) // e.g. ["ipowatch", "sahi"] — which sources found this candidate
-  discoveredAt     DateTime?
-  reviewedBy       String?
-  reviewedAt       DateTime?
-  autoPublished    Boolean                       @default(false)
-  quarantineReason String? // why validation/confidence checks failed
-  drhpUrl          String?
-  rhpUrl           String?
-  sourceUrl        String? // the exact discovery detail-page URL — reconstructing it from the
+  publicationState      PublicationState @default(DRAFT)
+  discoveredFrom        String[]         @default([]) // e.g. ["ipowatch", "sahi"] — which sources found this candidate
+  discoveredAt          DateTime?
+  reviewedBy            String?
+  reviewedAt            DateTime?
+  autoPublished         Boolean          @default(false)
+  quarantineReason      String? // why validation/confidence checks failed
+  officialCheckAttempts Int              @default(0)
+  officialNextAttemptAt DateTime?
+  officialLastAttemptAt DateTime?
+  officialLastSuccessAt DateTime?
+  drhpUrl               String?
+  rhpUrl                String?
+  sourceUrl             String? // the exact discovery detail-page URL — reconstructing it from the
   // company name later (e.g. for reclassification) is a guess that fails on
   // multi-word/punctuated names; storing it once avoids ever needing to guess.
 
@@ -155,10 +175,13 @@ model Ipo {
   alertSubscriptions AlertSubscription[]
   reminderDeliveries ReminderDelivery[]
   officialEvidence   OfficialEvidenceCapture[]
+  officialIncidents  OfficialEvidenceIncident[]
   filingCatalogue    IpoFilingCatalogue[]
 
   @@index([status])
   @@index([publicationState])
+  @@index([publicationState, officialNextAttemptAt])
+  @@index([officialLastSuccessAt])
 }
 
 // Official filing coverage is intentionally separate from `Ipo`. A DRHP is
@@ -166,21 +189,21 @@ model Ipo {
 // size, or even an exchange board yet. Keeping it here lets the public product
 // show the full pipeline without inventing application-ready terms.
 model IpoFilingCatalogue {
-  id           String         @id @default(uuid())
-  issuerKey    String
-  companyName  String
-  stage        IpoFilingStage
-  filingDate   DateTime
-  source       String
-  sourceUrl    String         @unique
-  documentUrl  String?
-  raw          Json
-  ipo          Ipo?           @relation(fields: [ipoId], references: [id], onDelete: SetNull)
-  ipoId        String?
-  firstSeenAt  DateTime       @default(now())
-  lastSeenAt   DateTime       @default(now())
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  id          String         @id @default(uuid())
+  issuerKey   String
+  companyName String
+  stage       IpoFilingStage
+  filingDate  DateTime
+  source      String
+  sourceUrl   String         @unique
+  documentUrl String?
+  raw         Json
+  ipo         Ipo?           @relation(fields: [ipoId], references: [id], onDelete: SetNull)
+  ipoId       String?
+  firstSeenAt DateTime       @default(now())
+  lastSeenAt  DateTime       @default(now())
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
   @@index([issuerKey, filingDate])
   @@index([stage, filingDate])
@@ -219,6 +242,32 @@ model OfficialFieldComparison {
   createdAt      DateTime                @default(now())
 
   @@index([captureId, field])
+}
+
+// Operator-facing projection of repeated official-source conflicts. Raw
+// evidence remains append-only in OfficialEvidenceCapture; this table prevents
+// the same unchanged conflict from becoming dozens of separate admin tasks.
+model OfficialEvidenceIncident {
+  id              String                 @id @default(uuid())
+  ipo             Ipo                    @relation(fields: [ipoId], references: [id], onDelete: Cascade)
+  ipoId           String
+  fingerprint     String                 @unique
+  kind            OfficialIncidentKind
+  status          OfficialIncidentStatus @default(OPEN)
+  source          String
+  fields          String[]
+  reasons         String[]
+  occurrenceCount Int                    @default(1)
+  firstSeenAt     DateTime               @default(now())
+  lastSeenAt      DateTime               @default(now())
+  resolvedAt      DateTime?
+  resolvedBy      String?
+  resolutionNote  String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@index([status, kind, lastSeenAt])
+  @@index([ipoId, status])
 }
 
 model Document {
@@ -281,6 +330,26 @@ model SourceHealth {
   lastError           String?
   consecutiveFailures Int       @default(0)
   degraded            Boolean   @default(false)
+}
+
+// Health for all non-GMP operations: official catalogues/details, discovery,
+// subscriptions and filing downloads. GMP retains SourceHealth because it is
+// naturally keyed by GmpSource; the admin dashboard reads both contracts.
+model SourceOperationHealth {
+  key                 String    @id
+  source              String
+  operation           String
+  lastAttemptAt       DateTime?
+  lastSuccessAt       DateTime?
+  lastFailureAt       DateTime?
+  consecutiveFailures Int       @default(0)
+  nextRetryAt         DateTime?
+  lastError           String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([source, operation])
+  @@index([nextRetryAt])
 }
 
 // ---------- subscription (single primary source + exchange fallback) ----------
@@ -616,4 +685,19 @@ model IngestionRun {
   error            String?
 
   @@index([startedAt])
+}
+
+model DigestDelivery {
+  id         String         @id @default(uuid())
+  digestDate DateTime
+  recipient  String
+  status     DeliveryStatus
+  attempts   Int            @default(1)
+  lastError  String?
+  sentAt     DateTime?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@unique([digestDate, recipient])
+  @@index([status, digestDate])
 }

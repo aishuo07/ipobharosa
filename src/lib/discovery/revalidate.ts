@@ -3,9 +3,10 @@ import { prisma } from "@/lib/prisma";
 import type { IpoFacts } from "./types";
 import { fetchOfficialIpoEvidence } from "./official";
 import { decidePublication } from "./official/consensus";
-import { officialAutoPublishEnabled, persistOfficialDecision } from "./official/persistence";
+import { officialAutoPublishEnabled, persistOfficialDecision, persistOfficialIncident } from "./official/persistence";
+import { recordSourceFailure, recordSourceSuccess } from "@/lib/ingestion/source-operation";
 
-const candidateSelect = {
+export const candidateSelect = {
   id: true,
   publicationState: true,
   board: true,
@@ -26,10 +27,12 @@ const candidateSelect = {
   rhpUrl: true,
   reviewedAt: true,
   quarantineReason: true,
+  officialCheckAttempts: true,
+  officialNextAttemptAt: true,
   company: { select: { name: true } },
 } satisfies Prisma.IpoSelect;
 
-type RevalidationCandidate = Prisma.IpoGetPayload<{ select: typeof candidateSelect }>;
+export type RevalidationCandidate = Prisma.IpoGetPayload<{ select: typeof candidateSelect }>;
 
 export type RevalidationOutcome = "PUBLISHED" | "ELIGIBLE_HELD" | "RETRY" | "EXCEPTION" | "INVALID" | "EMPTY";
 
@@ -65,7 +68,16 @@ export function candidateAsFacts(candidate: RevalidationCandidate): IpoFacts | n
 }
 
 export async function countRevalidationCandidates(): Promise<number> {
-  return prisma.ipo.count({ where: { publicationState: { in: ["DRAFT", "QUARANTINED"] } } });
+  const now = new Date();
+  return prisma.ipo.count({ where: {
+    publicationState: { in: ["DRAFT", "QUARANTINED"] },
+    OR: [{ officialNextAttemptAt: null }, { officialNextAttemptAt: { lte: now } }],
+  } });
+}
+
+export function nextOfficialRetryAt(attempts: number, now = new Date()): Date {
+  const delayMs = Math.min(24, 2 ** Math.max(1, attempts)) * 60 * 60 * 1_000;
+  return new Date(now.getTime() + delayMs);
 }
 
 /**
@@ -74,8 +86,12 @@ export async function countRevalidationCandidates(): Promise<number> {
  * queue without holding a large ID list in the ingestion checkpoint.
  */
 export async function revalidateOldestCandidate(): Promise<RevalidationResult> {
+  const now = new Date();
   const candidate = await prisma.ipo.findFirst({
-    where: { publicationState: { in: ["DRAFT", "QUARANTINED"] } },
+    where: {
+      publicationState: { in: ["DRAFT", "QUARANTINED"] },
+      OR: [{ officialNextAttemptAt: null }, { officialNextAttemptAt: { lte: now } }],
+    },
     select: candidateSelect,
     orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
   });
@@ -91,7 +107,13 @@ export async function revalidateOldestCandidate(): Promise<RevalidationResult> {
     return { company: candidate.company.name, outcome: "INVALID", reasons: [reason] };
   }
 
-  const decision = decidePublication(facts, await fetchOfficialIpoEvidence(candidate.company.name));
+  const officialResult = await fetchOfficialIpoEvidence(candidate.company.name);
+  if (officialResult.status === "UNAVAILABLE") {
+    await recordSourceFailure("nse:ipo-evidence", "NSE", "ipo-evidence", officialResult.reason, now);
+  } else {
+    await recordSourceSuccess("nse:ipo-evidence", "NSE", "ipo-evidence", now);
+  }
+  const decision = decidePublication(facts, officialResult);
   const publish = decision.decision === "AUTO_PUBLISH" && officialAutoPublishEnabled();
   const outcome: RevalidationOutcome = decision.decision === "AUTO_PUBLISH"
     ? publish ? "PUBLISHED" : "ELIGIBLE_HELD"
@@ -105,7 +127,13 @@ export async function revalidateOldestCandidate(): Promise<RevalidationResult> {
           ? "QUARANTINED"
           : publish ? "PUBLISHED" : decision.decision === "AUTO_PUBLISH" ? "DRAFT" : candidate.publicationState,
         autoPublished: publish,
-        reviewedAt: publish ? new Date() : candidate.reviewedAt,
+        reviewedAt: publish ? now : candidate.reviewedAt,
+        officialLastAttemptAt: now,
+        officialLastSuccessAt: officialResult.status === "FOUND" ? now : undefined,
+        officialCheckAttempts: decision.decision === "RETRY" ? candidate.officialCheckAttempts + 1 : 0,
+        officialNextAttemptAt: decision.decision === "RETRY"
+          ? nextOfficialRetryAt(candidate.officialCheckAttempts + 1, now)
+          : null,
         quarantineReason: decision.decision === "EXCEPTION"
           ? decision.reasons.join("; ")
           : decision.decision === "RETRY" ? candidate.quarantineReason : null,
@@ -123,6 +151,9 @@ export async function revalidateOldestCandidate(): Promise<RevalidationResult> {
       },
     });
     await persistOfficialDecision(tx, candidate.id, decision);
+    if (decision.decision === "EXCEPTION") {
+      await persistOfficialIncident(tx, candidate.id, "CONFLICT", decision);
+    }
     if (!publish || !decision.evidence) return;
 
     const documentUrl = decision.evidence.facts.rhpUrl!;

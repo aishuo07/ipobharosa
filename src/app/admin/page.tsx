@@ -6,7 +6,7 @@ import { isAdminEmail } from "@/lib/admin";
 import { loginPathFor } from "@/lib/auth-redirect";
 import { REJECTION_REASONS } from "@/lib/admin-review";
 import { filingEvidenceClass, filingEvidenceLabel, filingSourceHost } from "@/lib/document-evidence";
-import { approveIpo, rejectIpo } from "./actions";
+import { acceptOfficialCorrection, approveIpo, ignoreOfficialIncident, rejectIpo } from "./actions";
 
 export const revalidate = 0;
 
@@ -38,9 +38,10 @@ export default async function AdminPage() {
   if (!session?.user) redirect(loginPathFor("/admin"));
   if (!isAdminEmail(session?.user?.email)) notFound();
 
-  const [stateCounts, sources, recentRuns, reviewQueue] = await Promise.all([
+  const [stateCounts, sources, operationHealth, recentRuns, reviewQueue, openIncidents] = await Promise.all([
     prisma.ipo.groupBy({ by: ["publicationState"], _count: true }),
     prisma.gmpSource.findMany({ include: { health: true }, orderBy: { name: "asc" } }),
+    prisma.sourceOperationHealth.findMany({ orderBy: [{ source: "asc" }, { operation: "asc" }] }),
     prisma.ingestionRun.findMany({ orderBy: { startedAt: "desc" }, take: 15 }),
     prisma.ipo.findMany({
       where: { publicationState: { in: ["DRAFT", "QUARANTINED"] } },
@@ -54,6 +55,22 @@ export default async function AdminPage() {
       },
       orderBy: { discoveredAt: "desc" },
     }),
+    prisma.officialEvidenceIncident.findMany({
+      where: { status: "OPEN" },
+      include: {
+        ipo: {
+          include: {
+            company: true,
+            officialEvidence: {
+              orderBy: { capturedAt: "desc" },
+              take: 1,
+              include: { comparisons: { where: { status: "CONFLICT" }, orderBy: { field: "asc" } } },
+            },
+          },
+        },
+      },
+      orderBy: [{ kind: "desc" }, { lastSeenAt: "desc" }],
+    }),
   ]);
 
   const countOf = (state: string) => stateCounts.find((s) => s.publicationState === state)?._count ?? 0;
@@ -61,6 +78,8 @@ export default async function AdminPage() {
   const draft = countOf("DRAFT");
   const quarantined = countOf("QUARANTINED");
   const rejected = countOf("REJECTED");
+  const incidentIpoIds = new Set(openIncidents.map((incident) => incident.ipoId));
+  const retryQueue = reviewQueue.filter((ipo) => !incidentIpoIds.has(ipo.id));
 
   return (
     <div className="wrap">
@@ -102,12 +121,55 @@ export default async function AdminPage() {
         </section>
 
         <div className="review-section-head">
-          <div><h2>Exceptions and retries</h2><p>Conflicts need review; source gaps retry without manual approval.</p></div>
-          <span className="ui-badge ui-badge-warning">{reviewQueue.length} pending</span>
+          <div><h2>Official-source incidents</h2><p>Repeated identical conflicts are grouped. Published drift never changes public data until you approve it.</p></div>
+          <span className={`ui-badge ${openIncidents.some((incident) => incident.kind === "PUBLISHED_DRIFT") ? "ui-badge-critical" : "ui-badge-warning"}`}>{openIncidents.length} open</span>
         </div>
-        {reviewQueue.length === 0 && <p style={{ color: "var(--ink-muted)" }}>Nothing pending review.</p>}
+        {openIncidents.length === 0 ? <p style={{ color: "var(--ink-muted)" }}>No unresolved official-source conflicts or published-value changes.</p> : (
+          <div className="review-list">
+            {openIncidents.map((incident) => {
+              const capture = incident.ipo.officialEvidence[0];
+              const comparisons = capture?.comparisons.filter((comparison) => incident.fields.includes(comparison.field)) ?? [];
+              return <article key={incident.id} className="review-card">
+                <div className="review-head">
+                  <span className={`ui-badge ${incident.kind === "PUBLISHED_DRIFT" ? "ui-badge-critical" : "ui-badge-warning"}`}>
+                    {incident.kind === "PUBLISHED_DRIFT" ? "PUBLISHED DATA CHANGED" : "SOURCE CONFLICT"}
+                  </span>
+                  <div><h3>{incident.ipo.company.name}</h3><span>Seen {incident.occurrenceCount} time{incident.occurrenceCount === 1 ? "" : "s"} · last {fmtDate(incident.lastSeenAt)}</span></div>
+                </div>
+                <div className={`review-hold ${incident.kind === "PUBLISHED_DRIFT" ? "review-hold-critical" : ""}`}>
+                  <strong>Why it is held</strong>
+                  <ul>{incident.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+                </div>
+                {comparisons.length > 0 && <div className="table-wrap"><table className="dates"><thead><tr><th>Field</th><th>Current</th><th>Official</th><th>Evidence</th></tr></thead><tbody>
+                  {comparisons.map((comparison) => <tr key={comparison.id}><td>{comparison.field}</td><td>{comparison.candidateValue ?? "—"}</td><td>{comparison.officialValue ?? "—"}</td><td>{comparison.sourceUrl ? <a href={comparison.sourceUrl} target="_blank" rel="noopener noreferrer">Open source ↗</a> : "—"}</td></tr>)}
+                </tbody></table></div>}
+                <div className="review-decision-grid">
+                  <form action={acceptOfficialCorrection} className="review-decision review-approve">
+                    <input type="hidden" name="incidentId" value={incident.id} />
+                    <div><h4>Use official values</h4><p>Updates only the conflicting allowlisted fields and records every old/new value.</p></div>
+                    <label className="review-field"><span>Reason</span><textarea name="reason" minLength={10} maxLength={500} required rows={2} placeholder="Why this official correction is accepted" /></label>
+                    <label className="review-check"><input type="checkbox" required /><span>I opened the official evidence and checked the values.</span></label>
+                    <button type="submit" className="ui-button ui-button-primary">Accept official correction</button>
+                  </form>
+                  <form action={ignoreOfficialIncident} className="review-decision review-reject">
+                    <input type="hidden" name="incidentId" value={incident.id} />
+                    <div><h4>Ignore with explanation</h4><p>Use only when the source is wrong or the difference is intentional.</p></div>
+                    <label className="review-field"><span>Reason</span><textarea name="reason" minLength={10} maxLength={500} required rows={2} placeholder="Why no data correction is needed" /></label>
+                    <button type="submit" className="ui-button ui-button-secondary">Resolve without change</button>
+                  </form>
+                </div>
+              </article>;
+            })}
+          </div>
+        )}
+
+        <div className="review-section-head">
+          <div><h2>Exceptions and retries</h2><p>Conflicts need review; source gaps retry without manual approval.</p></div>
+          <span className="ui-badge ui-badge-warning">{retryQueue.length} pending</span>
+        </div>
+        {retryQueue.length === 0 && <p style={{ color: "var(--ink-muted)" }}>Nothing pending review.</p>}
         <div className="review-list">
-        {reviewQueue.map((ipo) => {
+        {retryQueue.map((ipo) => {
           const reasons = reviewReasons(ipo);
           const latestOfficial = ipo.officialEvidence[0];
           const needsDecision = ipo.publicationState === "QUARANTINED";
@@ -208,10 +270,15 @@ export default async function AdminPage() {
           <div className="table-wrap"><table className="dates"><thead><tr><th>Source</th><th>Last success</th><th>Failures</th><th>Status</th></tr></thead>
             <tbody>{sources.map((s) => <tr key={s.id}><td>{s.name}</td><td>{fmtDate(s.health?.lastSuccessAt)}</td><td>{s.health?.consecutiveFailures ?? 0}</td><td>{s.health?.degraded ? <span className="status-bad">Degraded</span> : <span className="status-good">Healthy</span>}</td></tr>)}</tbody>
           </table></div>
+          <h3>Official and ingestion source health</h3>
+          <div className="table-wrap"><table className="dates"><thead><tr><th>Source</th><th>Operation</th><th>Last success</th><th>Failures</th><th>Next retry</th><th>Last error</th></tr></thead>
+            <tbody>{operationHealth.map((health) => <tr key={health.key}><td>{health.source}</td><td>{health.operation}</td><td>{fmtDate(health.lastSuccessAt)}</td><td>{health.consecutiveFailures}</td><td>{fmtDate(health.nextRetryAt)}</td><td title={health.lastError ?? ""}>{health.lastError ? health.lastError.slice(0, 100) : "—"}</td></tr>)}</tbody>
+          </table></div>
           <h3>Recent ingestion runs</h3>
           <div className="table-wrap"><table className="dates"><thead><tr><th>Started</th><th>Duration</th><th>Result</th><th>Discovery</th><th>GMP</th></tr></thead>
             <tbody>{recentRuns.map((r) => {
-              const summary = r.summary as Record<string, unknown> | null;
+              const checkpoint = r.summary as Record<string, unknown> | null;
+              const summary = (checkpoint?.summary as Record<string, unknown> | undefined) ?? checkpoint;
               const discovery = summary?.discovery as Record<string, unknown> | undefined;
               const gmp = summary?.gmp as Record<string, unknown> | undefined;
               const durationMs = r.finishedAt ? r.finishedAt.getTime() - r.startedAt.getTime() : null;
