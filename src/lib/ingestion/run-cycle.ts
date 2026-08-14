@@ -25,7 +25,11 @@ const BATCH_SIZE = 3;
 const GMP_ADAPTERS: GmpAdapter[] = [ipoWatchAdapter, sahiAdapter, ipojiAdapter];
 const GMP_ELIGIBLE_STATUSES = ["UPCOMING", "OPEN", "CLOSED"] as const;
 const SUBSCRIPTION_ELIGIBLE_STATUSES = ["OPEN", "CLOSED"] as const;
-const REVALIDATION_PER_RUN = 8;
+// A clean cycle currently consumes ~83 of the workflow's 120 HTTP-step budget
+// with eight candidate checks. Draining up to 32 candidates adds at most 24
+// steps, keeping the worst observed cycle below the ceiling while avoiding a
+// multi-day wait for an otherwise publication-ready backlog.
+const REVALIDATION_PER_RUN = 32;
 const PUBLISHED_REVALIDATION_PER_RUN = 4;
 
 export type IngestionStage = "prepare" | "revalidation" | "publishedRevalidation" | "filings" | "gmp" | "subscription" | "finalize" | "complete";

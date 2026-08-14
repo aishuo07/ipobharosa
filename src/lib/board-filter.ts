@@ -3,6 +3,7 @@ import type { BoardIpo } from "@/lib/board-data";
 export const BOARD_FILTERS = ["ALL", "MAINBOARD", "SME"] as const;
 
 export type BoardFilter = (typeof BOARD_FILTERS)[number];
+export type StatusFilter = BoardIpo["status"] | "ALL";
 
 export function parseBoardFilter(value: string | null): BoardFilter | null {
   if (value === null || value === "") return "ALL";
@@ -11,6 +12,10 @@ export function parseBoardFilter(value: string | null): BoardFilter | null {
 
 export function filterIposByBoard(ipos: BoardIpo[], board: BoardFilter): BoardIpo[] {
   return board === "ALL" ? ipos : ipos.filter((ipo) => ipo.board === board);
+}
+
+export function filterIposByStatus(ipos: BoardIpo[], status: StatusFilter): BoardIpo[] {
+  return status === "ALL" ? ipos : ipos.filter((ipo) => ipo.status === status);
 }
 
 export function boardFilterLabel(board: BoardFilter): string {
