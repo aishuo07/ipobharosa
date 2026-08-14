@@ -6,7 +6,8 @@ import { validateIpoFacts } from "./validate";
 import type { IpoFacts, IpoListingCandidate } from "./types";
 import { fetchOfficialIpoEvidence } from "./official";
 import { decidePublication } from "./official/consensus";
-import { officialAutoPublishEnabled, persistOfficialDecision } from "./official/persistence";
+import { officialAutoPublishEnabled, persistOfficialDecision, persistOfficialIncident } from "./official/persistence";
+import { recordSourceFailure, recordSourceSuccess } from "@/lib/ingestion/source-operation";
 
 // Processing candidates a few at a time, rather than either fully
 // sequential (slow — this can be dozens of network round-trips on the
@@ -117,6 +118,11 @@ async function processCandidate(candidate: IpoListingCandidate): Promise<Candida
   }
 
   const officialResult = await fetchOfficialIpoEvidence(facts.companyName);
+  if (officialResult.status === "UNAVAILABLE") {
+    await recordSourceFailure("nse:ipo-evidence", "NSE", "ipo-evidence", officialResult.reason);
+  } else {
+    await recordSourceSuccess("nse:ipo-evidence", "NSE", "ipo-evidence");
+  }
   const decision = decidePublication(facts, officialResult);
   if (decision.decision === "RETRY") {
     return { kind: "fetchFailed", companyName: candidate.companyName, error: decision.reasons.join("; ") };
@@ -157,6 +163,8 @@ async function processCandidate(candidate: IpoListingCandidate): Promise<Candida
           discoveredFrom: ["ipowatch", decision.evidence!.source.toLowerCase()],
           discoveredAt: now,
           reviewedAt: shouldPublish ? now : null,
+          officialLastAttemptAt: now,
+          officialLastSuccessAt: now,
         },
       });
       const filingDocuments = [
@@ -172,6 +180,9 @@ async function processCandidate(candidate: IpoListingCandidate): Promise<Candida
       ].filter((document): document is NonNullable<typeof document> => document !== null);
       if (filingDocuments.length > 0) await tx.document.createMany({ data: filingDocuments });
       await persistOfficialDecision(tx, ipo.id, decision);
+      if (decision.decision === "EXCEPTION") {
+        await persistOfficialIncident(tx, ipo.id, "CONFLICT", decision);
+      }
       if (shouldPublish) {
         await tx.correctionLog.create({
           data: {

@@ -30,6 +30,12 @@ vi.mock("./official", () => ({
 vi.mock("./official/persistence", () => ({
   officialAutoPublishEnabled: () => autoPublishEnabled,
   persistOfficialDecision: async () => undefined,
+  persistOfficialIncident: async () => undefined,
+}));
+
+vi.mock("@/lib/ingestion/source-operation", () => ({
+  recordSourceSuccess: async () => undefined,
+  recordSourceFailure: async () => undefined,
 }));
 
 function makeTx() {

@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import { normalizeIssuerName } from "./normalization";
+import { withTransientRetries } from "@/lib/ingestion/source-operation";
 
 export type FilingStage = "DRHP_FILED" | "RHP_FILED";
 
@@ -81,12 +82,15 @@ export function parseSebiFilingPage(html: string, stage: FilingStage): OfficialF
 
 export async function fetchSebiFilingCatalogue(fetchImpl: typeof fetch = fetch): Promise<OfficialFilingEntry[]> {
   const pages = await Promise.all(PAGES.map(async ({ stage, url, smid, label }) => {
-    const firstResponse = await fetchImpl(url, {
-      headers: HEADERS,
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      cache: "no-store",
+    const firstResponse = await withTransientRetries(async () => {
+      const response = await fetchImpl(url, {
+        headers: HEADERS,
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(`SEBI ${stage} catalogue: HTTP ${response.status}`);
+      return response;
     });
-    if (!firstResponse.ok) throw new Error(`SEBI ${stage} catalogue: HTTP ${firstResponse.status}`);
     const body = new URLSearchParams({
       nextValue: "1",
       next: "n",
@@ -106,14 +110,17 @@ export async function fetchSebiFilingCatalogue(fetchImpl: typeof fetch = fetch):
       smText: label,
       doDirect: "1",
     });
-    const secondResponse = await fetchImpl(LISTING_ENDPOINT, {
-      method: "POST",
-      headers: { ...HEADERS, "Content-Type": "application/x-www-form-urlencoded", Referer: url },
-      body,
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      cache: "no-store",
+    const secondResponse = await withTransientRetries(async () => {
+      const response = await fetchImpl(LISTING_ENDPOINT, {
+        method: "POST",
+        headers: { ...HEADERS, "Content-Type": "application/x-www-form-urlencoded", Referer: url },
+        body,
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(`SEBI ${stage} catalogue page 2: HTTP ${response.status}`);
+      return response;
     });
-    if (!secondResponse.ok) throw new Error(`SEBI ${stage} catalogue page 2: HTTP ${secondResponse.status}`);
     const [firstHtml, secondHtml] = await Promise.all([firstResponse.text(), secondResponse.text()]);
     return [...parseSebiFilingPage(firstHtml, stage), ...parseSebiFilingPage(secondHtml.split("#@#")[0], stage)];
   }));

@@ -17,6 +17,7 @@ function makeSummary(overrides: Partial<IngestionSummary> = {}): IngestionSummar
     discovery: { candidatesSeen: 0, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, fetchFailed: [], dbErrors: [], queueCapped: false, deferredCandidates: 0 },
     catalogue: { seen: 0, stored: 0, linked: 0 },
     revalidation: { target: 0, checked: 0, published: 0, eligibleHeld: 0, retries: 0, exceptions: 0, invalid: 0 },
+    publishedRevalidation: { target: 0, checked: 0, matched: 0, drifts: 0, retries: 0, invalid: 0 },
     filings: { captured: 0, skipped: 0, failed: [] },
     ...overrides,
   };

@@ -24,6 +24,12 @@ export function computeAlertReasons(summary: IngestionSummary): string[] {
   if (summary.catalogue.error) {
     reasons.push(`Official filing catalogue refresh failed: ${summary.catalogue.error}`);
   }
+  if ((summary.publishedRevalidation?.drifts ?? 0) > 0) {
+    reasons.push(`${summary.publishedRevalidation.drifts} published IPO source drift(s) detected — public values were not changed`);
+  }
+  if ((summary.publishedRevalidation?.invalid ?? 0) > 0) {
+    reasons.push(`${summary.publishedRevalidation.invalid} published IPO record(s) are missing required core facts`);
+  }
 
   const sourceEntries = Object.entries(summary.perSource);
   const allSourcesDown = sourceEntries.length > 0 && sourceEntries.every(([, s]) => s.success === 0 && s.failure > 0);

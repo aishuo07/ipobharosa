@@ -1,5 +1,6 @@
 import { issuerNamesMatch, normalizeIssuerName, parseIndianDate, parseInteger, parsePriceBand, splitManagers } from "./normalization";
 import type { OfficialEvidenceResult, OfficialIpoEvidence, OfficialIpoSource } from "./types";
+import { withTransientRetries } from "@/lib/ingestion/source-operation";
 
 const CATALOGUE_URL = "https://www.nseindia.com/api/all-upcoming-issues?category=ipo";
 const HISTORICAL_CATALOGUE_URL = "https://www.nseindia.com/api/public-past-issues";
@@ -120,9 +121,11 @@ export function parseNseDetail(issue: NseCatalogueIssue, detail: NseDetail, capt
 }
 
 async function getJson<T>(url: string, fetchImpl: typeof fetch): Promise<T> {
-  const response = await fetchImpl(url, { headers: HEADERS, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), cache: "no-store" });
-  if (!response.ok) throw new Error(`NSE HTTP ${response.status}`);
-  return response.json() as Promise<T>;
+  return withTransientRetries(async () => {
+    const response = await fetchImpl(url, { headers: HEADERS, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), cache: "no-store" });
+    if (!response.ok) throw new Error(`NSE HTTP ${response.status}`);
+    return response.json() as Promise<T>;
+  });
 }
 
 export class NseOfficialSource implements OfficialIpoSource {

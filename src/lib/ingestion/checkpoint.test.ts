@@ -36,4 +36,18 @@ describe("ingestion checkpoint", () => {
       invalid: 0,
     });
   });
+
+  it("adds published revalidation counters when restoring an older checkpoint", () => {
+    const saved = initialCheckpoint();
+    const summary = { ...saved.summary } as typeof saved.summary & { publishedRevalidation?: never };
+    delete (summary as unknown as Record<string, unknown>).publishedRevalidation;
+    expect(readCheckpoint({ ...saved, summary }).summary.publishedRevalidation).toEqual({
+      target: 0,
+      checked: 0,
+      matched: 0,
+      drifts: 0,
+      retries: 0,
+      invalid: 0,
+    });
+  });
 });

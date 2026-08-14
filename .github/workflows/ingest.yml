@@ -11,17 +11,32 @@ on:
 jobs:
   ingest:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
+    concurrency:
+      group: production-ingestion
+      cancel-in-progress: false
     steps:
       - name: Trigger ingestion cycle
         run: |
-          for attempt in $(seq 1 50); do
-            status=$(curl --max-time 55 -s -o /tmp/response.json -w "%{http_code}" \
-              -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-              https://ipobharosa.vercel.app/api/cron/ingest)
+          # A full run currently needs one bounded request per batch plus
+          # preparation/finalization. Keep enough headroom for fleet growth and
+          # source retries while the job timeout remains the hard upper bound.
+          for attempt in $(seq 1 120); do
+            if ! status=$(curl --max-time 55 --retry 3 --retry-all-errors --retry-delay 2 -s -o /tmp/response.json -w "%{http_code}" \
+                -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+                https://ipobharosa.vercel.app/api/cron/ingest); then
+              echo "Step $attempt — transport failure after bounded retries; persisted cursor is unchanged"
+              continue
+            fi
             echo "Step $attempt — HTTP $status"
             cat /tmp/response.json
+            if [ "$status" -eq 408 ] || [ "$status" -eq 425 ] || [ "$status" -eq 429 ] || [ "$status" -ge 500 ]; then
+              echo "Transient HTTP failure; retrying the same persisted step"
+              sleep 2
+              continue
+            fi
             if [ "$status" -ne 200 ]; then
-              echo "Ingestion step failed; the persisted cursor will resume safely on retry"
+              echo "Permanent HTTP failure; stopping without advancing the persisted cursor"
               exit 1
             fi
             if jq -e '.complete == true' /tmp/response.json >/dev/null; then
@@ -29,5 +44,5 @@ jobs:
               exit 0
             fi
           done
-          echo "Ingestion did not complete within 50 bounded steps"
+          echo "Ingestion did not complete within 120 bounded steps"
           exit 1
