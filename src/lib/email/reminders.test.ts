@@ -14,6 +14,7 @@ type DeliveryRow = {
 let watchers: { userId: string; user: { email: string | null } }[] = [];
 let deliveries: DeliveryRow[] = [];
 let sendMock: Mock<(args: SendEmailArgs) => Promise<void>>;
+const { emailState } = vi.hoisted(() => ({ emailState: { enabled: true } }));
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -52,12 +53,17 @@ vi.mock("@/lib/email/resend", () => ({
   sendEmail: (args: SendEmailArgs) => sendMock(args),
 }));
 
+vi.mock("@/lib/email/readiness", () => ({
+  getEmailReadiness: () => emailState,
+}));
+
 const { notifyWatchersOfTransitions } = await import("./reminders");
 
 describe("notifyWatchersOfTransitions", () => {
   beforeEach(() => {
     watchers = [{ userId: "u1", user: { email: "u1@example.com" } }];
     deliveries = [];
+    emailState.enabled = true;
     sendMock = vi.fn();
     vi.useFakeTimers();
   });
@@ -135,5 +141,17 @@ describe("notifyWatchersOfTransitions", () => {
 
     expect(summary).toEqual({ sent: 0, failed: 0, skipped: 0 });
     expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("does not attempt user reminders while launch readiness is held", async () => {
+    emailState.enabled = false;
+
+    const summary = await notifyWatchersOfTransitions([
+      { ipoId: "ipo1", companyName: "Test Co", from: "UPCOMING", to: "OPEN" },
+    ]);
+
+    expect(summary).toEqual({ sent: 0, failed: 0, skipped: 0 });
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(deliveries).toEqual([]);
   });
 });

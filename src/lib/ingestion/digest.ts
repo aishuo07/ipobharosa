@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email/resend";
 import type { IngestionSummary } from "./run-cycle";
+import { resolveSiteUrl } from "@/lib/site-url";
+
+const SITE_URL = resolveSiteUrl();
 
 type DigestView = {
   summary: IngestionSummary;
@@ -35,7 +38,7 @@ export function renderDailyDigest(view: DigestView): string {
   const sourceLine = view.unhealthySources.length
     ? `<p><strong>Sources needing attention:</strong> ${view.unhealthySources.join(", ")}</p>`
     : "<p><strong>Source health:</strong> no source currently has consecutive failures.</p>";
-  return `<h2>IPOBharosa daily data digest</h2><ul>${items.map((item) => `<li>${item}</li>`).join("")}</ul>${sourceLine}<p><a href="https://ipobharosa.vercel.app/admin">Open admin dashboard</a></p>`;
+  return `<h2>IPOBharosa daily data digest</h2><ul>${items.map((item) => `<li>${item}</li>`).join("")}</ul>${sourceLine}<p><a href="${SITE_URL}/admin">Open admin dashboard</a></p>`;
 }
 
 function digestRecipients(): string[] {

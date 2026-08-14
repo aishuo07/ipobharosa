@@ -16,11 +16,13 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Capture bounded official filing evidence
+        env:
+          SITE_URL: ${{ vars.SITE_URL || 'https://ipobharosa.vercel.app' }}
         run: |
           for attempt in $(seq 1 30); do
             if ! status=$(curl --max-time 55 -s -o /tmp/response.json -w "%{http_code}" \
                 -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-                https://ipobharosa.vercel.app/api/cron/filing-evidence); then
+                "$SITE_URL/api/cron/filing-evidence"); then
               echo "Capture $attempt — transport timeout; waiting for the document lock"
               sleep 5
               continue

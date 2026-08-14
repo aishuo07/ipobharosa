@@ -17,8 +17,10 @@ import { countRevalidationCandidates, revalidateOldestCandidate } from "@/lib/di
 import { countPublishedRevalidationCandidates, revalidateOldestPublished } from "@/lib/discovery/revalidate-published";
 import { recordSourceFailure, recordSourceSuccess } from "@/lib/ingestion/source-operation";
 import { sendDailyDigestIfDue } from "@/lib/ingestion/digest";
+import { resolveSiteUrl } from "@/lib/site-url";
 
 const ALERT_RECIPIENT = "aish.iiitb@gmail.com";
+const SITE_URL = resolveSiteUrl();
 const BATCH_SIZE = 3;
 const GMP_ADAPTERS: GmpAdapter[] = [ipoWatchAdapter, sahiAdapter, ipojiAdapter];
 const GMP_ELIGIBLE_STATUSES = ["UPCOMING", "OPEN", "CLOSED"] as const;
@@ -232,7 +234,7 @@ async function runPublishedRevalidationBatch(checkpoint: IngestionCheckpoint): P
         await sendEmail({
           to: ALERT_RECIPIENT,
           subject: `IPOBharosa published data changed: ${result.company}`,
-          html: `<p>Official source values now differ for <strong>${result.company}</strong>.</p><ul>${result.reasons.map((reason) => `<li>${reason}</li>`).join("")}</ul><p>Public data was not changed. <a href="https://ipobharosa.vercel.app/admin">Review the incident</a>.</p>`,
+          html: `<p>Official source values now differ for <strong>${result.company}</strong>.</p><ul>${result.reasons.map((reason) => `<li>${reason}</li>`).join("")}</ul><p>Public data was not changed. <a href="${SITE_URL}/admin">Review the incident</a>.</p>`,
         });
       } catch (error) {
         console.error("Failed to send published drift alert:", error instanceof Error ? error.message : String(error));

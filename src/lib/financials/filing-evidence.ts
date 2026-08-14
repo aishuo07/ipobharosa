@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { filingEvidenceClass } from "@/lib/document-evidence";
 import { withTransientRetries } from "@/lib/ingestion/source-operation";
 import { syncDocument } from "./workflow";
+import { ipobharosaUserAgent } from "@/lib/site-url";
 
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
 // The route has a 60-second hard ceiling. Two bounded attempts leave enough
@@ -20,7 +21,7 @@ export async function downloadFilingEvidence(sourceUrl: string): Promise<FilingC
   }
   const response = await withTransientRetries(async () => {
     const result = await fetch(sourceUrl, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; IPOBharosaBot/1.0; +https://ipobharosa.vercel.app)" },
+      headers: { "User-Agent": ipobharosaUserAgent() },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!result.ok) throw new Error(`filing download: HTTP ${result.status}`);

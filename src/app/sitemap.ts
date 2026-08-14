@@ -1,7 +1,8 @@
 import type { MetadataRoute } from "next";
 import { getIndexableIpos } from "@/lib/board-data";
+import { resolveSiteUrl } from "@/lib/site-url";
 
-const SITE_URL = "https://ipobharosa.vercel.app";
+const SITE_URL = resolveSiteUrl();
 
 export const dynamic = "force-dynamic";
 

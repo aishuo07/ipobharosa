@@ -53,3 +53,23 @@ Open [http://localhost:3000](http://localhost:3000).
 
 Preview must never receive Production database credentials, personal data, or
 live email delivery credentials.
+
+## Site and email configuration
+
+All public links share one validated origin. Set `NEXT_PUBLIC_SITE_URL` and,
+optionally, `SITE_URL` to the same origin (HTTPS outside localhost). GitHub
+Actions may use the repository variable `SITE_URL`; it falls back to the public
+Vercel alias until a custom domain is connected.
+
+User-facing email sign-in and watchlist reminders remain hidden unless every
+setting below is present:
+
+```text
+EMAIL_USER_FEATURES_ENABLED=true
+RESEND_API_KEY=<secret>
+AUTH_EMAIL_FROM=IPOBharosa <hello@verified-sender-domain>
+NEXT_PUBLIC_SITE_URL=https://your-production-domain
+```
+
+Google sign-in remains available when user email features are held. The admin
+dashboard reports only configuration presence and never displays secret values.

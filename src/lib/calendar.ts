@@ -1,7 +1,8 @@
 import type { BoardIpo } from "@/lib/board-data";
 import { boardFilterLabel, boardFilterQuery, type BoardFilter } from "@/lib/board-filter";
+import { resolveSiteUrl } from "@/lib/site-url";
 
-const SITE_URL = "https://ipobharosa.vercel.app";
+const SITE_URL = resolveSiteUrl();
 
 type CalendarEvent = {
   uid: string;

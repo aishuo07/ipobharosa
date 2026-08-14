@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { BoardIpo } from "./board-data";
 import { buildIcs, googleCalendarSubscriptionUrl, ipoCalendarEvents } from "./calendar";
+import { resolveSiteUrl } from "./site-url";
 
 const ipo = {
   id: "ipo-1", slug: "test-ipo", companyName: "Test & Co", sector: "Tech",
@@ -36,13 +37,13 @@ describe("IPO calendar export", () => {
     const result = buildIcs([ipo]);
     expect(result).toContain("BEGIN:VCALENDAR\r\nVERSION:2.0");
     expect(result).toContain("UID:ipo-1-opens@ipobharosa");
-    expect(result).toContain("URL:https://ipobharosa.vercel.app/ipo/test-ipo");
+    expect(result).toContain(`URL:${resolveSiteUrl()}/ipo/test-ipo`);
     expect(result.match(/BEGIN:VEVENT/g)).toHaveLength(4);
     expect(result).toContain("X-WR-CALNAME:IPOBharosa — All IPOs");
   });
 
   it("builds Google Calendar subscription links for all and board-specific feeds", () => {
-    expect(decodeURIComponent(googleCalendarSubscriptionUrl())).toContain("https://ipobharosa.vercel.app/api/calendar");
+    expect(decodeURIComponent(googleCalendarSubscriptionUrl())).toContain(`${resolveSiteUrl()}/api/calendar`);
     expect(decodeURIComponent(googleCalendarSubscriptionUrl("MAINBOARD"))).toContain("/api/calendar?board=MAINBOARD");
     expect(decodeURIComponent(googleCalendarSubscriptionUrl("SME"))).toContain("/api/calendar?board=SME");
     expect(buildIcs([ipo], "SME")).toContain("X-WR-CALNAME:IPOBharosa — SME");

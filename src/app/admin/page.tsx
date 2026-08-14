@@ -6,6 +6,8 @@ import { isAdminEmail } from "@/lib/admin";
 import { loginPathFor } from "@/lib/auth-redirect";
 import { REJECTION_REASONS } from "@/lib/admin-review";
 import { filingEvidenceClass, filingEvidenceLabel, filingSourceHost } from "@/lib/document-evidence";
+import { getEmailReadiness } from "@/lib/email/readiness";
+import { resolveSiteUrl } from "@/lib/site-url";
 import { acceptOfficialCorrection, approveIpo, ignoreOfficialIncident, rejectIpo, retryOfficialVerification } from "./actions";
 
 export const revalidate = 0;
@@ -109,6 +111,8 @@ export default async function AdminPage({
   const due = reviewQueue.length - retrying;
   const degradedSources = operationHealth.filter((health) => health.consecutiveFailures > 0).length;
   const feedback = retryFeedback(params.retry, params.company, params.outcome);
+  const emailReadiness = getEmailReadiness();
+  const siteUrl = resolveSiteUrl();
 
   return (
     <div className="wrap">
@@ -157,6 +161,22 @@ export default async function AdminPage({
           <div><strong>{openIncidents.length}</strong><span>Open source conflicts</span></div>
           <div><strong>{degradedSources}</strong><span>Degraded source operations</span></div>
         </section>
+
+        <div className="review-section-head">
+          <div><h2>Launch configuration</h2><p>Presence checks only—secret values are never displayed.</p></div>
+          <span className={`ui-badge ${emailReadiness.enabled ? "ui-badge-positive" : "ui-badge-warning"}`}>
+            {emailReadiness.enabled ? "USER EMAIL READY" : "EMAIL HELD"}
+          </span>
+        </div>
+        <section className="pipeline-summary" aria-label="Site and email readiness">
+          <div><strong>{new URL(siteUrl).hostname}</strong><span>Canonical site origin</span></div>
+          <div><strong>{emailReadiness.apiKeyConfigured ? "Present" : "Missing"}</strong><span>Resend API key</span></div>
+          <div><strong>{emailReadiness.senderConfigured ? "Present" : "Missing"}</strong><span>Verified sender setting</span></div>
+          <div><strong>{emailReadiness.featureFlagEnabled ? "Enabled" : "Disabled"}</strong><span>User email feature flag</span></div>
+        </section>
+        {!emailReadiness.enabled && <div className="admin-flash admin-flash-warning" role="status">
+          Email sign-in and watchlist reminders stay hidden until: {emailReadiness.reasons.join("; ")}.
+        </div>}
 
         <div className="review-section-head">
           <div><h2>Official-source incidents</h2><p>Repeated identical conflicts are grouped. Published drift never changes public data until you approve it.</p></div>

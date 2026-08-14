@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { resolveSiteUrl } from "@/lib/site-url";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(resolveSiteUrl()),
   title: "IPOBharosa — IPO Board",
   description:
     "Track open, upcoming, and listed IPOs in India — price band, lot size, subscription, and grey market premium with honest source confidence, not blind numbers.",

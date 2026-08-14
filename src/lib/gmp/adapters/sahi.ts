@@ -1,8 +1,9 @@
 import type { GmpAdapter } from "../types";
 import { toIpoSlug } from "@/lib/ipo-slug";
 
-const USER_AGENT =
-  "Mozilla/5.0 (compatible; IPOBharosaBot/1.0; +https://ipobharosa.vercel.app)";
+import { ipobharosaUserAgent } from "@/lib/site-url";
+
+const USER_AGENT = ipobharosaUserAgent();
 
 // Sahi's articles state the figure inconsistently — sometimes in the meta
 // description ("GMP today is ₹259"), sometimes only in the article body

@@ -2,13 +2,9 @@ import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
 import { auth, signIn } from "@/auth";
 import { safeRedirectPath } from "@/lib/auth-redirect";
+import { getEmailReadiness } from "@/lib/email/readiness";
 
 const SIGNIN_ERROR_URL = "/login/error";
-
-// Email delivery (magic-link sign-in, reminder emails) is not live yet —
-// Resend isn't configured end-to-end. Google is the only sign-in path
-// until that's verified working; re-enable the form below once it is.
-const EMAIL_SIGNIN_ENABLED = false;
 
 type LoginPageProps = {
   searchParams: Promise<{ callbackUrl?: string | string[] }>;
@@ -19,6 +15,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const redirectTo = safeRedirectPath(callbackUrl);
   const session = await auth();
   if (session) redirect(redirectTo);
+  const emailReadiness = getEmailReadiness();
 
   return (
     <div className="wrap" style={{ maxWidth: 400, paddingTop: 64 }}>
@@ -45,7 +42,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         </button>
       </form>
 
-      {EMAIL_SIGNIN_ENABLED && (
+      {emailReadiness.enabled && (
         <>
           <div
             style={{
@@ -89,8 +86,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       )}
 
       <p className="disclaimer" style={{ marginTop: 24 }}>
-        We only use your Google account to save your watchlist — never for marketing. Email
-        reminders are coming soon.
+        We only use your account to save your watchlist — never for marketing. {emailReadiness.enabled
+          ? "Watchlist reminders are available for saved IPOs."
+          : "Email sign-in and reminders will appear after the sender domain is fully verified."}
       </p>
     </div>
   );

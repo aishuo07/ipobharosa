@@ -2,8 +2,9 @@ import * as cheerio from "cheerio";
 import type { SubscriptionAdapter, SubscriptionResult } from "../types";
 import { toIpoSlug } from "@/lib/ipo-slug";
 
-const USER_AGENT =
-  "Mozilla/5.0 (compatible; IPOBharosaBot/1.0; +https://ipobharosa.vercel.app)";
+import { ipobharosaUserAgent } from "@/lib/site-url";
+
+const USER_AGENT = ipobharosaUserAgent();
 
 function parseNum(text: string): number | null {
   const t = text.trim().toLowerCase();
