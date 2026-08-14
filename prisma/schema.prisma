@@ -153,6 +153,7 @@ model Ipo {
   officialNextAttemptAt DateTime?
   officialLastAttemptAt DateTime?
   officialLastSuccessAt DateTime?
+  officialIssueType     String?
   drhpUrl               String?
   rhpUrl                String?
   sourceUrl             String? // the exact discovery detail-page URL — reconstructing it from the
@@ -175,6 +176,7 @@ model Ipo {
   alertSubscriptions AlertSubscription[]
   reminderDeliveries ReminderDelivery[]
   officialEvidence   OfficialEvidenceCapture[]
+  officialAttempts   OfficialSourceAttempt[]
   officialIncidents  OfficialEvidenceIncident[]
   filingCatalogue    IpoFilingCatalogue[]
 
@@ -222,12 +224,32 @@ model OfficialEvidenceCapture {
   decision   OfficialVerificationDecision
   reasons    String[]
   raw        Json
+  normalized Json?
+  enrichment Json?
   createdAt  DateTime                     @default(now())
 
   comparisons OfficialFieldComparison[]
 
   @@index([ipoId, capturedAt])
   @@index([decision, capturedAt])
+}
+
+// Every provider check is retained even when no official record is found.
+// This is the public/admin explanation layer for why a candidate is pending.
+model OfficialSourceAttempt {
+  id          String   @id @default(uuid())
+  ipo         Ipo      @relation(fields: [ipoId], references: [id], onDelete: Cascade)
+  ipoId       String
+  source      String
+  status      String
+  reason      String?
+  issueType   String?
+  sourceUrl   String?
+  attemptedAt DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([ipoId, attemptedAt])
+  @@index([source, status, attemptedAt])
 }
 
 model OfficialFieldComparison {

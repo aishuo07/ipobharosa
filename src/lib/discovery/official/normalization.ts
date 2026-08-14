@@ -35,6 +35,18 @@ export function normalizeComparableText(value: string): string {
   return normalizeIssuerName(value).replace(/\s+/g, " ");
 }
 
+const REGISTRAR_ALIASES = new Map<string, string>([
+  [normalizeComparableText("Link Intime India Private Limited"), "mufg-intime-india"],
+  [normalizeComparableText("MUFG Intime India Private Limited"), "mufg-intime-india"],
+  [normalizeComparableText("Big Share Services Private Limited"), "bigshare-services"],
+  [normalizeComparableText("Bigshare Services Private Limited"), "bigshare-services"],
+]);
+
+export function normalizeRegistrar(value: string): string {
+  const normalized = normalizeComparableText(value);
+  return REGISTRAR_ALIASES.get(normalized) ?? normalized;
+}
+
 export function parseInteger(value: string | number | null | undefined): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? Math.trunc(value) : null;
   if (!value) return null;
@@ -61,6 +73,26 @@ export function parseIndianDate(value: string | null | undefined): Date {
   const month = months.indexOf(match[2].slice(0, 3).toLowerCase());
   if (month < 0) throw new Error(`unsupported NSE month: ${match[2]}`);
   return new Date(Date.UTC(Number(match[3]), month, Number(match[1])));
+}
+
+export function parseFlexibleIndianDate(value: string | null | undefined): Date {
+  if (!value) throw new Error("missing date");
+  const date = value.match(/\b\d{1,2}(?:-|\s+)[A-Za-z]+(?:-|\s+)\d{4}\b/)?.[0];
+  if (!date) throw new Error(`unsupported Indian date: ${value}`);
+  const normalized = date.trim().replace(/\s+/g, "-");
+  return parseIndianDate(normalized);
+}
+
+export function parseDecimal(value: string | number | null | undefined): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (!value) return null;
+  const match = value.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : null;
+}
+
+export function extractHttpsUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return value.match(/https:\/\/[^\s"'<>|]+/i)?.[0] ?? null;
 }
 
 export function splitManagers(value: string | null | undefined): string[] {

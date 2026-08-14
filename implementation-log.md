@@ -1,5 +1,19 @@
 # Implementation log
 
+## 2026-08-14 — multi-source official verification
+
+- Product owner approved the BSE/NSE/SEBI multi-source verification and richer evidence plan.
+- Created `codex/multisource-official-verification` from current `origin/main` (`1c455dd`).
+- Implementation safety defaults remain fail-closed: official-source conflicts go to review; filing-only evidence cannot verify final offer terms; non-IPO issue types do not count as IPOs.
+- Added a fixed-host, GET-only, timeout/size-bounded BSE transport that tolerates BSE's malformed response headers only for the three allowlisted public endpoints.
+- Added cached current/historical BSE catalogues, issue-type routing, normalized core/application facts and official-document capture.
+- Expanded NSE evidence with application limits, sponsor banks, UPI timing, documents and timestamped official demand, and added provider-aware consensus plus explicit legal registrar aliases.
+- Provider tests and TypeScript pass after the first implementation checkpoint.
+- Added an additive migration for normalized facts, enrichment, issue type and append-only provider attempts; public reads retain schema-rollout fallbacks.
+- Revalidation now records source health per provider and removes officially classified FPO/InvIT records from the IPO queue without deleting their audit history.
+- Public IPO pages now expose a core-fact match score, provider checks, per-field match/conflict state, exact retry timing, official application facts/documents and official NSE demand when it is fresher than the secondary subscription feed.
+- Added a strictly no-write Production coverage audit script; financial publication policy remains unchanged.
+
 ## 2026-08-14 — public coverage with explicit verification states
 
 - Decoupled public visibility from verification: complete Draft and Quarantined records are now visible as `Verification pending` or `Needs review`; Rejected and incomplete records remain private.
@@ -57,3 +71,11 @@
 - Verified the next clean cycle writes the filing catalogue (100 stored, 29 linked) and revalidates another bounded batch without schema errors.
 - Diagnosed the apparent conflicts as two deterministic semantic defects: dates were compared as UTC instead of Indian calendar dates, and NSE's one-lot SME bid quantity was compared with the app's two-lot minimum application quantity.
 - Added India-calendar comparison and SME minimum-application normalization with regression tests; full verification now passes 196 tests, lint, and production build.
+## 2026-08-14 — Production no-write audit
+
+- Ran the multi-source audit against all 33 current Production `DRAFT`/`QUARANTINED` candidates without writes.
+- Final mutually exclusive routing: 12 auto-publish eligible, 13 retry, 3 material conflicts, 4 FPO, 1 InvIT.
+- Fixed BSE extended-close-date parsing after the first audit exposed an appended extension note for G.V. Electricals; added a regression test and reran the full audit.
+- Attached the exact named evidence in `docs/reports/2026-08-14-official-source-no-write-audit.md`.
+- Vercel branch preview was Ready and repository smoke checks passed; board/detail pages had no horizontal overflow at 360, 390, 768, 1024 and 1440 px.
+- Preserved the official NSE `totalX` demand value. Public cards/panels now use that weighted exchange total when available and explicitly call the old arithmetic fallback a category average instead of mislabelling it as overall subscription.

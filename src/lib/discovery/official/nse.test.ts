@@ -25,6 +25,13 @@ const detail = {
       { title: "Red Herring Prospectus", value: "https://nsearchives.nseindia.com/content/ipo/RHP_SHIPROCKET.zip" },
     ],
   },
+  bidDetails: [
+    { category: "Qualified Institutional Buyers(QIBs)", noOfTime: "12.5", srNo: "1" },
+    { category: "Non Institutional Investors", noOfTime: "8.25", srNo: "2" },
+    { category: "Retail Individual Investors(RIIs)", noOfTime: "4.5", srNo: "3" },
+    { category: "Employees", noOfTime: "2", srNo: "4" },
+    { category: "Total", noOfTime: "7.9", srNo: null },
+  ],
 };
 
 const historicalCatalogue = [{
@@ -70,6 +77,7 @@ describe("NSE official adapter parsing", () => {
     expect(evidence.facts.openDate?.toISOString()).toBe("2026-08-12T00:00:00.000Z");
     expect(evidence.sourceUrl).toContain("symbol=SHIPROCKET");
     expect(evidence.fieldSources.priceBandLow).toBe(evidence.sourceUrl);
+    expect(evidence.enrichment?.demand).toMatchObject({ qibX: 12.5, niiX: 8.25, retailX: 4.5, employeeX: 2, totalX: 7.9 });
   });
 
   it("matches one unambiguous shortened issuer name in the historical catalogue", () => {

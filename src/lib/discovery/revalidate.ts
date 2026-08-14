@@ -3,8 +3,8 @@ import { prisma } from "@/lib/prisma";
 import type { IpoFacts } from "./types";
 import { fetchOfficialIpoEvidence } from "./official";
 import { decidePublication } from "./official/consensus";
+import { hasOfficialEvidence, recordOfficialEvidenceHealth } from "./official/health";
 import { officialAutoPublishEnabled, persistOfficialDecision, persistOfficialIncident } from "./official/persistence";
-import { recordSourceFailure, recordSourceSuccess } from "@/lib/ingestion/source-operation";
 
 export const candidateSelect = {
   id: true,
@@ -34,7 +34,7 @@ export const candidateSelect = {
 
 export type RevalidationCandidate = Prisma.IpoGetPayload<{ select: typeof candidateSelect }>;
 
-export type RevalidationOutcome = "PUBLISHED" | "ELIGIBLE_HELD" | "RETRY" | "EXCEPTION" | "INVALID" | "EMPTY";
+export type RevalidationOutcome = "PUBLISHED" | "ELIGIBLE_HELD" | "RETRY" | "EXCEPTION" | "WRONG_TYPE" | "INVALID" | "EMPTY";
 
 export type RevalidationResult = {
   company: string | null;
@@ -108,14 +108,11 @@ export async function revalidateOldestCandidate(): Promise<RevalidationResult> {
   }
 
   const officialResult = await fetchOfficialIpoEvidence(candidate.company.name);
-  if (officialResult.status === "UNAVAILABLE") {
-    await recordSourceFailure("nse:ipo-evidence", "NSE", "ipo-evidence", officialResult.reason, now);
-  } else {
-    await recordSourceSuccess("nse:ipo-evidence", "NSE", "ipo-evidence", now);
-  }
+  await recordOfficialEvidenceHealth(officialResult, now);
   const decision = decidePublication(facts, officialResult);
-  const publish = decision.decision === "AUTO_PUBLISH" && officialAutoPublishEnabled();
-  const outcome: RevalidationOutcome = decision.decision === "AUTO_PUBLISH"
+  const wrongIssueType = decision.issueType !== null && decision.issueType !== undefined && decision.issueType !== "IPO";
+  const publish = !wrongIssueType && decision.decision === "AUTO_PUBLISH" && officialAutoPublishEnabled();
+  const outcome: RevalidationOutcome = wrongIssueType ? "WRONG_TYPE" : decision.decision === "AUTO_PUBLISH"
     ? publish ? "PUBLISHED" : "ELIGIBLE_HELD"
     : decision.decision;
 
@@ -123,13 +120,16 @@ export async function revalidateOldestCandidate(): Promise<RevalidationResult> {
     await tx.ipo.update({
       where: { id: candidate.id },
       data: {
-        publicationState: decision.decision === "EXCEPTION"
+        publicationState: wrongIssueType
+          ? "REJECTED"
+          : decision.decision === "EXCEPTION"
           ? "QUARANTINED"
           : publish ? "PUBLISHED" : decision.decision === "AUTO_PUBLISH" ? "DRAFT" : candidate.publicationState,
         autoPublished: publish,
         reviewedAt: publish ? now : candidate.reviewedAt,
         officialLastAttemptAt: now,
-        officialLastSuccessAt: officialResult.status === "FOUND" ? now : undefined,
+        officialLastSuccessAt: hasOfficialEvidence(officialResult) ? now : undefined,
+        officialIssueType: decision.issueType ?? undefined,
         officialCheckAttempts: decision.decision === "RETRY" ? candidate.officialCheckAttempts + 1 : 0,
         officialNextAttemptAt: decision.decision === "RETRY"
           ? nextOfficialRetryAt(candidate.officialCheckAttempts + 1, now)
@@ -151,7 +151,7 @@ export async function revalidateOldestCandidate(): Promise<RevalidationResult> {
       },
     });
     await persistOfficialDecision(tx, candidate.id, decision);
-    if (decision.decision === "EXCEPTION") {
+    if (decision.decision === "EXCEPTION" && decision.evidence) {
       await persistOfficialIncident(tx, candidate.id, "CONFLICT", decision);
     }
     if (!publish || !decision.evidence) return;
@@ -174,7 +174,7 @@ export async function revalidateOldestCandidate(): Promise<RevalidationResult> {
         entityId: candidate.id,
         action: "auto-publish",
         performedBy: "official-revalidation",
-        note: "all material IPO fields matched captured official evidence",
+        note: `all material IPO fields matched captured official evidence from ${(decision.coverage?.providersFound ?? [decision.evidence.source]).join(" + ")}`,
       },
     });
   });

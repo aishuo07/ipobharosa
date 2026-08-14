@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { officialIncidentFingerprint, persistOfficialIncident } from "./persistence";
+import { officialIncidentFingerprint, persistOfficialDecision, persistOfficialIncident } from "./persistence";
 import type { PublicationDecision } from "./types";
 
 function decision(order: "normal" | "reversed" = "normal"): PublicationDecision {
@@ -49,5 +49,30 @@ describe("official incident persistence", () => {
       create: expect.objectContaining({ ipoId: "ipo-1", kind: "CONFLICT", fields: ["lotSize", "openDate"] }),
       update: expect.objectContaining({ occurrenceCount: { increment: 1 } }),
     }));
+  });
+});
+
+describe("multi-source evidence persistence", () => {
+  it("retains every provider attempt and one append-only capture per found provider", async () => {
+    const value = decision();
+    const bse = { ...value.evidence!, source: "BSE" as const, sourceUrl: "https://api.bseindia.com/detail" };
+    value.evidences = [value.evidence!, bse];
+    value.attempts = [
+      { source: "NSE", status: "FOUND", reason: null, issueType: "IPO", sourceUrl: value.evidence!.sourceUrl },
+      { source: "BSE", status: "FOUND", reason: null, issueType: "IPO", sourceUrl: bse.sourceUrl },
+    ];
+    value.comparisons = value.comparisons.flatMap((comparison) => [
+      { ...comparison, source: "NSE" as const },
+      { ...comparison, source: "BSE" as const, sourceUrl: bse.sourceUrl },
+    ]);
+    const createMany = vi.fn().mockResolvedValue({ count: 2 });
+    const create = vi.fn().mockResolvedValue({});
+    const tx = { officialSourceAttempt: { createMany }, officialEvidenceCapture: { create } };
+
+    await persistOfficialDecision(tx as never, "ipo-1", value);
+
+    expect(createMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.arrayContaining([expect.objectContaining({ source: "NSE" }), expect.objectContaining({ source: "BSE" })]) }));
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ source: "BSE", normalized: expect.any(Object) }) }));
   });
 });

@@ -149,8 +149,9 @@ export function subSummary(ipo: BoardIpo): string {
     if (ipo.status === "LISTED") return "Final subscription not available";
     return "Subscription data pending";
   }
-  const overall = ((s.qibX + s.niiX + s.retailX + (s.employeeX ?? 0)) / (s.employeeX !== null ? 4 : 3)).toFixed(1);
-  return `${s.retailX.toFixed(1)}x retail · ${overall}x overall`;
+  if (s.totalX !== null && s.totalX !== undefined) return `${s.retailX.toFixed(1)}x retail · ${s.totalX.toFixed(1)}x overall`;
+  const categoryAverage = ((s.qibX + s.niiX + s.retailX + (s.employeeX ?? 0)) / (s.employeeX !== null ? 4 : 3)).toFixed(1);
+  return `${s.retailX.toFixed(1)}x retail · ${categoryAverage}x category avg`;
 }
 
 export const LIFECYCLE_STEPS: { key: string; label: string; dateKey: keyof BoardIpo }[] = [

@@ -1,10 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { fetchOfficialIpoEvidence } from "./official";
 import { decidePublication } from "./official/consensus";
+import { hasOfficialEvidence, recordOfficialEvidenceHealth } from "./official/health";
 import type { PublicationDecision } from "./official/types";
 import { persistOfficialDecision, persistOfficialIncident } from "./official/persistence";
 import { candidateAsFacts, candidateSelect, nextOfficialRetryAt } from "./revalidate";
-import { recordSourceFailure, recordSourceSuccess } from "@/lib/ingestion/source-operation";
 
 export type PublishedRevalidationOutcome = "MATCHED" | "DRIFT" | "RETRY" | "INVALID" | "EMPTY";
 
@@ -55,11 +55,7 @@ export async function revalidateOldestPublished(): Promise<PublishedRevalidation
   }
 
   const officialResult = await fetchOfficialIpoEvidence(candidate.company.name);
-  if (officialResult.status === "UNAVAILABLE") {
-    await recordSourceFailure("nse:ipo-evidence", "NSE", "ipo-evidence", officialResult.reason, now);
-  } else {
-    await recordSourceSuccess("nse:ipo-evidence", "NSE", "ipo-evidence", now);
-  }
+  await recordOfficialEvidenceHealth(officialResult, now);
   const decision = decidePublication(facts, officialResult);
   const outcome = publishedOutcome(decision);
 
@@ -68,7 +64,8 @@ export async function revalidateOldestPublished(): Promise<PublishedRevalidation
       where: { id: candidate.id },
       data: {
         officialLastAttemptAt: now,
-        officialLastSuccessAt: officialResult.status === "FOUND" ? now : undefined,
+        officialLastSuccessAt: hasOfficialEvidence(officialResult) ? now : undefined,
+        officialIssueType: decision.issueType ?? undefined,
         officialCheckAttempts: outcome === "RETRY" ? candidate.officialCheckAttempts + 1 : 0,
         officialNextAttemptAt: outcome === "RETRY"
           ? nextOfficialRetryAt(candidate.officialCheckAttempts + 1, now)

@@ -33,6 +33,7 @@ describe("ingestion checkpoint", () => {
       eligibleHeld: 0,
       retries: 0,
       exceptions: 0,
+      wrongTypes: 0,
       invalid: 0,
     });
   });

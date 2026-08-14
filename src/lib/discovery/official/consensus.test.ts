@@ -79,12 +79,45 @@ describe("authoritative publication consensus", () => {
   });
 
   it("retries a temporarily unavailable official source", () => {
-    expect(decidePublication(candidate, { status: "UNAVAILABLE", reason: "NSE HTTP 503" })).toEqual({
+    expect(decidePublication(candidate, { status: "UNAVAILABLE", reason: "NSE HTTP 503" })).toMatchObject({
       decision: "RETRY",
       reasons: ["NSE HTTP 503"],
       comparisons: [],
       evidence: null,
     });
+  });
+
+  it("publishes from one complete exchange while another is temporarily unavailable", () => {
+    const result = decidePublication(candidate, {
+      evidence: [evidence],
+      attempts: [
+        { source: "NSE", status: "FOUND", reason: null, issueType: "IPO", sourceUrl: evidence.sourceUrl },
+        { source: "BSE", status: "UNAVAILABLE", reason: "BSE HTTP 503", issueType: null, sourceUrl: null },
+      ],
+    });
+    expect(result.decision).toBe("AUTO_PUBLISH");
+    expect(result.coverage).toMatchObject({ matchedFields: 10, providersChecked: ["NSE", "BSE"], providersFound: ["NSE"] });
+  });
+
+  it("fails closed when an official exchange contradicts another complete source", () => {
+    const bse = { ...evidence, source: "BSE" as const, facts: { ...evidence.facts, lotSize: 160 } };
+    const result = decidePublication(candidate, {
+      evidence: [evidence, bse],
+      attempts: [
+        { source: "NSE", status: "FOUND", reason: null, issueType: "IPO", sourceUrl: evidence.sourceUrl },
+        { source: "BSE", status: "FOUND", reason: null, issueType: "IPO", sourceUrl: bse.sourceUrl },
+      ],
+    });
+    expect(result.decision).toBe("EXCEPTION");
+    expect(result.reasons).toContain("lotSize differs between discovery and BSE");
+  });
+
+  it("routes an official non-IPO classification out of the IPO publish path", () => {
+    const result = decidePublication(candidate, {
+      evidence: [],
+      attempts: [{ source: "BSE", status: "WRONG_ISSUE_TYPE", reason: "BSE classifies it as FPO, not IPO", issueType: "FPO", sourceUrl: "https://api.bseindia.com/example" }],
+    });
+    expect(result).toMatchObject({ decision: "EXCEPTION", issueType: "FPO" });
   });
 
   it("retries incomplete official data instead of asking a human to invent it", () => {

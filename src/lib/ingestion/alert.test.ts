@@ -14,9 +14,9 @@ function makeSummary(overrides: Partial<IngestionSummary> = {}): IngestionSummar
     },
     statusTransitions: 0,
     reminders: { sent: 0, failed: 0, skipped: 0 },
-    discovery: { candidatesSeen: 0, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, fetchFailed: [], dbErrors: [], queueCapped: false, deferredCandidates: 0 },
+    discovery: { candidatesSeen: 0, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, rejectedWrongType: 0, fetchFailed: [], dbErrors: [], queueCapped: false, deferredCandidates: 0 },
     catalogue: { seen: 0, stored: 0, linked: 0 },
-    revalidation: { target: 0, checked: 0, published: 0, eligibleHeld: 0, retries: 0, exceptions: 0, invalid: 0 },
+    revalidation: { target: 0, checked: 0, published: 0, eligibleHeld: 0, retries: 0, exceptions: 0, wrongTypes: 0, invalid: 0 },
     publishedRevalidation: { target: 0, checked: 0, matched: 0, drifts: 0, retries: 0, invalid: 0 },
     filings: { captured: 0, skipped: 0, failed: [] },
     ...overrides,
@@ -36,7 +36,7 @@ describe("computeAlertReasons", () => {
   it("flags discovery database write failures", () => {
     const reasons = computeAlertReasons(
       makeSummary({
-        discovery: { candidatesSeen: 1, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, fetchFailed: [], dbErrors: [{ companyName: "X", error: "constraint violation" }], queueCapped: false, deferredCandidates: 0 },
+        discovery: { candidatesSeen: 1, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, rejectedWrongType: 0, fetchFailed: [], dbErrors: [{ companyName: "X", error: "constraint violation" }], queueCapped: false, deferredCandidates: 0 },
       }),
     );
     expect(reasons.some((r) => r.includes("database write failure"))).toBe(true);
@@ -45,7 +45,7 @@ describe("computeAlertReasons", () => {
   it("flags a capped review queue", () => {
     const reasons = computeAlertReasons(
       makeSummary({
-        discovery: { candidatesSeen: 1, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, fetchFailed: [], dbErrors: [], queueCapped: true, deferredCandidates: 1 },
+        discovery: { candidatesSeen: 1, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, rejectedWrongType: 0, fetchFailed: [], dbErrors: [], queueCapped: true, deferredCandidates: 1 },
       }),
     );
     expect(reasons.some((r) => r.includes("capacity"))).toBe(true);

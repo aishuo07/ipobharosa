@@ -43,7 +43,7 @@ export type IngestionSummary = {
   reminders: { sent: number; failed: number; skipped: number };
   discovery: DiscoverySummary | { error: string };
   catalogue: FilingCatalogueSync;
-  revalidation: { target: number; checked: number; published: number; eligibleHeld: number; retries: number; exceptions: number; invalid: number };
+  revalidation: { target: number; checked: number; published: number; eligibleHeld: number; retries: number; exceptions: number; wrongTypes: number; invalid: number };
   publishedRevalidation: { target: number; checked: number; matched: number; drifts: number; retries: number; invalid: number };
   filings: { captured: number; skipped: number; failed: { ipoName: string; error: string }[] };
   skippedDueToLock?: boolean;
@@ -71,9 +71,9 @@ export const EMPTY_SUMMARY: IngestionSummary = {
   perSource: {},
   statusTransitions: 0,
   reminders: { sent: 0, failed: 0, skipped: 0 },
-  discovery: { candidatesSeen: 0, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, fetchFailed: [], dbErrors: [], queueCapped: false, deferredCandidates: 0 },
+  discovery: { candidatesSeen: 0, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, rejectedWrongType: 0, fetchFailed: [], dbErrors: [], queueCapped: false, deferredCandidates: 0 },
   catalogue: { seen: 0, stored: 0, linked: 0 },
-  revalidation: { target: 0, checked: 0, published: 0, eligibleHeld: 0, retries: 0, exceptions: 0, invalid: 0 },
+  revalidation: { target: 0, checked: 0, published: 0, eligibleHeld: 0, retries: 0, exceptions: 0, wrongTypes: 0, invalid: 0 },
   publishedRevalidation: { target: 0, checked: 0, matched: 0, drifts: 0, retries: 0, invalid: 0 },
   filings: { captured: 0, skipped: 0, failed: [] },
 };
@@ -211,6 +211,7 @@ async function runRevalidationBatch(checkpoint: IngestionCheckpoint): Promise<In
   else if (result.outcome === "ELIGIBLE_HELD") summary.revalidation.eligibleHeld++;
   else if (result.outcome === "RETRY") summary.revalidation.retries++;
   else if (result.outcome === "EXCEPTION") summary.revalidation.exceptions++;
+  else if (result.outcome === "WRONG_TYPE") summary.revalidation.wrongTypes++;
   else if (result.outcome === "INVALID") summary.revalidation.invalid++;
   return { ...checkpoint, cursor: checkpoint.cursor + 1, summary };
 }
