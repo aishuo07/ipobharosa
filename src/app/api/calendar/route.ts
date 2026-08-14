@@ -1,11 +1,11 @@
-import { getBoardIpos } from "@/lib/board-data";
+import { getPublicIpos } from "@/lib/board-data";
 import { filterIposByBoard, parseBoardFilter } from "@/lib/board-filter";
 import { buildIcs } from "@/lib/calendar";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const ipos = await getBoardIpos();
+  const ipos = await getPublicIpos();
   const searchParams = new URL(request.url).searchParams;
   const slug = searchParams.get("ipo");
   const board = parseBoardFilter(searchParams.get("board"));

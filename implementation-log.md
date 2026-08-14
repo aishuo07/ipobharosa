@@ -1,5 +1,15 @@
 # Implementation log
 
+## 2026-08-14 — public coverage with explicit verification states
+
+- Decoupled public visibility from verification: complete Draft and Quarantined records are now visible as `Verification pending` or `Needs review`; Rejected and incomplete records remain private.
+- Added verification filters, unavoidable trust labels on cards/details/compare, and safe issue summaries that never expose internal diagnostics.
+- Added all complete IPOs to calendar exports with trust-prefixed titles and warnings that remain visible after syncing to Google or Apple Calendar.
+- Kept search indexing fail-safe: only verified IPOs enter the sitemap; pending and review pages are `noindex, follow`.
+- Upgraded the official filing pipeline with DRHP/RHP totals, board-link coverage, filing-only/trust labels, and direct links to matching IPOBharosa records.
+- Made public page reads migration-order safe by selecting only the fields needed for rendering; preview databases that have not received newer ingestion-only columns no longer fail closed.
+- Verified locally with 214 tests, zero-warning lint, and a clean Next.js Production build.
+
 ## 2026-08-14 — ingestion reliability and evidence transparency
 
 - Product owner approved the two-PR reliability/provenance plan.

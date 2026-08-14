@@ -28,7 +28,7 @@ function escapeIcs(value: string): string {
 
 export function ipoCalendarEvents(ipo: BoardIpo): CalendarEvent[] {
   const url = `${SITE_URL}/ipo/${ipo.slug}`;
-  const description = `IPOBharosa source-backed IPO timeline. Review current facts and sources: ${url}`;
+  const description = `${ipo.verification.label}. ${ipo.verification.issueSummary ?? ipo.verification.description} Review current facts, verification state and source links: ${url}`;
   return [
     ["opens", "IPO opens", ipo.openDate],
     ["closes", "IPO closes", ipo.closeDate],
@@ -36,7 +36,7 @@ export function ipoCalendarEvents(ipo: BoardIpo): CalendarEvent[] {
     ["listing", "Listing expected", ipo.listingDate],
   ].flatMap(([key, label, date]) => date ? [{
     uid: `${ipo.id}-${key}@ipobharosa`,
-    title: `${ipo.companyName}: ${label}`,
+    title: `[${ipo.verification.calendarLabel}] ${ipo.companyName}: ${label}`,
     date,
     description,
     url,

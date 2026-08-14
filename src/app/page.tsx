@@ -1,4 +1,4 @@
-import { getBoardIpos } from "@/lib/board-data";
+import { getPublicIpos } from "@/lib/board-data";
 import IpoBoard from "@/components/IpoBoard";
 import { auth, signOut } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -12,7 +12,7 @@ async function handleSignOut() {
 }
 
 export default async function Home() {
-  const [ipos, filings, session] = await Promise.all([getBoardIpos(), getFilingRadarEntries(), auth()]);
+  const [ipos, filings, session] = await Promise.all([getPublicIpos(), getFilingRadarEntries(), auth()]);
 
   let watchlistedIds: string[] = [];
   if (session?.user?.id) {

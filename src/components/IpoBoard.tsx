@@ -9,10 +9,12 @@ import {
   boardFilterQuery,
   filterIposByBoard,
   filterIposByStatus,
+  filterIposByVerification,
   type BoardFilter,
   type StatusFilter,
+  type VerificationFilter,
 } from "@/lib/board-filter";
-import { SegmentedTabs, StatePanel, TabButton, TextInput } from "@/components/ui";
+import { Badge, SegmentedTabs, StatePanel, TabButton, TextInput } from "@/components/ui";
 import { googleCalendarSubscriptionUrl } from "@/lib/calendar";
 import {
   badgeText,
@@ -78,6 +80,7 @@ export default function IpoBoard({
   const [showCompare, setShowCompare] = useState(false);
   const [view, setView] = useState<"board" | "pipeline" | "calendar">("board");
   const [boardFilter, setBoardFilter] = useState<BoardFilter>("ALL");
+  const [verificationFilter, setVerificationFilter] = useState<VerificationFilter>("ALL");
   const [calMonth, setCalMonth] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -85,6 +88,10 @@ export default function IpoBoard({
   const router = useRouter();
 
   const MAX_COMPARE = 3;
+  const trackedIssuerCount = useMemo(
+    () => new Set([...ipos.map((ipo) => ipo.companyName.toLowerCase()), ...filings.map((entry) => entry.companyName.toLowerCase())]).size,
+    [ipos, filings],
+  );
 
   async function toggleWatch(ipoId: string) {
     if (!user) {
@@ -110,14 +117,18 @@ export default function IpoBoard({
   }
 
   const boardIpos = useMemo(() => filterIposByBoard(ipos, boardFilter), [ipos, boardFilter]);
+  const visibleBoardIpos = useMemo(
+    () => filterIposByVerification(boardIpos, verificationFilter),
+    [boardIpos, verificationFilter],
+  );
   const boardCounts = useMemo(() => ({
     ALL: ipos.length,
     MAINBOARD: ipos.filter((ipo) => ipo.board === "MAINBOARD").length,
     SME: ipos.filter((ipo) => ipo.board === "SME").length,
   }), [ipos]);
   const compareList = useMemo(
-    () => compareIds.map((id) => boardIpos.find((i) => i.id === id)).filter((i): i is BoardIpo => !!i),
-    [compareIds, boardIpos],
+    () => compareIds.map((id) => visibleBoardIpos.find((i) => i.id === id)).filter((i): i is BoardIpo => !!i),
+    [compareIds, visibleBoardIpos],
   );
 
   useEffect(() => {
@@ -132,23 +143,23 @@ export default function IpoBoard({
     // to be selected.
     const trimmed = query.trim().toLowerCase();
     if (trimmed) {
-      return boardIpos
+      return visibleBoardIpos
         .filter(
           (i) => i.companyName.toLowerCase().includes(trimmed) || i.sector.toLowerCase().includes(trimmed),
         )
         .sort((a, b) => a.companyName.localeCompare(b.companyName));
     }
 
-    const filtered = filterIposByStatus(boardIpos, tab);
+    const filtered = filterIposByStatus(visibleBoardIpos, tab);
     if (tab === "OPEN") {
       return [...filtered].sort(
         (a, b) => new Date(a.closeDate).getTime() - new Date(b.closeDate).getTime(),
       );
     }
     return filtered;
-  }, [boardIpos, tab, query]);
+  }, [visibleBoardIpos, tab, query]);
 
-  const selected = boardIpos.find((i) => i.id === selectedId) ?? null;
+  const selected = visibleBoardIpos.find((i) => i.id === selectedId) ?? null;
   const filingList = useMemo(() => {
     const trimmed = query.trim().toLowerCase();
     return trimmed ? filings.filter((entry) => entry.companyName.toLowerCase().includes(trimmed)) : filings;
@@ -173,6 +184,13 @@ export default function IpoBoard({
 
   function changeBoard(next: BoardFilter) {
     setBoardFilter(next);
+    setSelectedId(null);
+    setCompareIds([]);
+    setShowCompare(false);
+  }
+
+  function changeVerification(next: VerificationFilter) {
+    setVerificationFilter(next);
     setSelectedId(null);
     setCompareIds([]);
     setShowCompare(false);
@@ -217,7 +235,7 @@ export default function IpoBoard({
           <p>Dates, demand and grey-market signals—clearly sourced, honestly labelled.</p>
         </div>
         <div className="board-proof" aria-label="IPOBharosa data principles">
-          <span><b>{ipos.length + filings.length}</b> tracked IPOs</span>
+          <span><b>{trackedIssuerCount}</b> tracked issuers</span>
           <span><b>{filings.length}</b> official filings</span>
           <span><b>3</b> GMP sources</span>
           <span><b>0</b> paid rankings</span>
@@ -264,12 +282,31 @@ export default function IpoBoard({
             ))}
           </SegmentedTabs>
         )}
+        {view === "board" && (
+          <SegmentedTabs label="Data verification">
+            {([
+              ["ALL", "All data"],
+              ["VERIFIED", "Verified"],
+              ["PENDING", "Pending"],
+              ["NEEDS_REVIEW", "Needs review"],
+            ] as const).map(([filter, label]) => (
+              <TabButton
+                key={filter}
+                type="button"
+                active={verificationFilter === filter}
+                onClick={() => changeVerification(filter)}
+              >
+                {label} <span className="n">{filterIposByVerification(boardIpos, filter).length}</span>
+              </TabButton>
+            ))}
+          </SegmentedTabs>
+        )}
         {(view === "board" || view === "pipeline") && (
           <>
             {view === "board" && (
               <SegmentedTabs label="IPO status">
                 {TAB_DEFS.map((t) => {
-                  const count = filterIposByStatus(boardIpos, t.key).length;
+                  const count = filterIposByStatus(visibleBoardIpos, t.key).length;
                   return (
                     <TabButton
                       key={t.key}
@@ -417,6 +454,9 @@ export default function IpoBoard({
 }
 
 function FilingPipeline({ entries }: { entries: FilingRadarEntry[] }) {
+  const rhpCount = entries.filter((entry) => entry.stage === "RHP_FILED").length;
+  const drhpCount = entries.length - rhpCount;
+  const linkedCount = entries.filter((entry) => entry.linkedIpo).length;
   return (
     <section className="filing-pipeline" aria-labelledby="filing-pipeline-title">
       <div className="pipeline-explainer">
@@ -429,14 +469,26 @@ function FilingPipeline({ entries }: { entries: FilingRadarEntry[] }) {
           on the main board only after exchange verification—missing terms are never shown as zero.
         </p>
       </div>
+      <div className="pipeline-summary" aria-label="Official filing pipeline summary">
+        <div><strong>{entries.length}</strong><span>Official issuers</span></div>
+        <div><strong>{rhpCount}</strong><span>RHP filed</span></div>
+        <div><strong>{drhpCount}</strong><span>DRHP filed</span></div>
+        <div><strong>{linkedCount}</strong><span>Linked to board</span></div>
+      </div>
       <div className="filing-grid">
-        {entries.map((entry) => (
-          <article className="filing-card" key={entry.id}>
+        {entries.map((entry) => {
+          const trustTone = entry.linkedIpo?.verificationState === "VERIFIED"
+            ? "positive"
+            : entry.linkedIpo?.verificationState === "NEEDS_REVIEW" ? "critical" : entry.linkedIpo ? "warning" : "info";
+          const trustLabel = entry.linkedIpo?.verificationState === "VERIFIED"
+            ? "Available on board"
+            : entry.linkedIpo?.verificationLabel ?? "Filing only";
+          return <article className="filing-card" key={entry.id}>
             <div className="filing-card-top">
               <span className={`badge ${entry.stage === "RHP_FILED" ? "badge-open" : "badge-upcoming"}`}>
                 {entry.stage === "RHP_FILED" ? "RHP filed" : "DRHP filed"}
               </span>
-              <span className="board-tag">SEBI official</span>
+              <Badge tone={trustTone}>{trustLabel}</Badge>
             </div>
             <h3>{entry.companyName}</h3>
             <p className="filing-date">
@@ -444,14 +496,15 @@ function FilingPipeline({ entries }: { entries: FilingRadarEntry[] }) {
             </p>
             <div className="filing-awaiting">
               <span>Application terms</span>
-              <strong>Awaiting exchange announcement</strong>
+              <strong>{entry.linkedIpo ? entry.linkedIpo.verificationLabel : "Awaiting exchange announcement"}</strong>
             </div>
             <div className="filing-links">
+              {entry.linkedIpo && <a href={`/ipo/${entry.linkedIpo.slug}`}>View IPOBharosa details →</a>}
               <a href={entry.sourceUrl} target="_blank" rel="noopener noreferrer">View SEBI filing ↗</a>
               {entry.documentUrl && <a href={entry.documentUrl} target="_blank" rel="noopener noreferrer">Open document ↗</a>}
             </div>
-          </article>
-        ))}
+          </article>;
+        })}
       </div>
       {entries.length === 0 && (
         <StatePanel title="Official filing feed is temporarily unavailable">
@@ -558,6 +611,10 @@ function Card({
           </button>
         </div>
       </div>
+      <div className={`verification-line verification-${ipo.verification.state.toLowerCase()}`}>
+        <VerificationBadge ipo={ipo} />
+        <span>{ipo.verification.issueSummary ?? ipo.verification.description}</span>
+      </div>
       <div>
         <div className="card-name">{ipo.companyName}</div>
         <div className="card-sector">{ipo.sector}</div>
@@ -662,6 +719,8 @@ function DetailPanel({
         </div>
       </div>
 
+      <VerificationNotice ipo={ipo} />
+
       <div className="dtabs" role="tablist">
         {DTABS.map((t) => (
           <button
@@ -683,6 +742,27 @@ function DetailPanel({
         {dtab === "subscription" && <SubscriptionPanel ipo={ipo} />}
         {dtab === "gmp" && <GmpPanel ipo={ipo} now={now} />}
         {dtab === "documents" && <DocumentsPanel ipo={ipo} />}
+      </div>
+    </div>
+  );
+}
+
+function VerificationBadge({ ipo }: { ipo: BoardIpo }) {
+  const tone = ipo.verification.state === "VERIFIED"
+    ? "positive"
+    : ipo.verification.state === "PENDING" ? "warning" : "critical";
+  return <Badge tone={tone}>{ipo.verification.shortLabel}</Badge>;
+}
+
+export function VerificationNotice({ ipo }: { ipo: BoardIpo }) {
+  return (
+    <div className={`verification-notice verification-${ipo.verification.state.toLowerCase()}`} role="status">
+      <VerificationBadge ipo={ipo} />
+      <div>
+        <strong>{ipo.verification.label}</strong>
+        <p>{ipo.verification.issueSummary ?? ipo.verification.description}</p>
+        {ipo.verification.checkedAt && <small>Last checked {new Date(ipo.verification.checkedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</small>}
+        {!ipo.verification.checkedAt && ipo.verification.nextCheckAt && <small>Next automated check scheduled</small>}
       </div>
     </div>
   );
@@ -1235,6 +1315,7 @@ const COMPARE_ROWS: {
   label: string;
   render: (ipo: BoardIpo, now: number) => React.ReactNode;
 }[] = [
+  { label: "Verification", render: (ipo) => ipo.verification.label },
   { label: "Status", render: (ipo, now) => badgeText(effectiveStatus(ipo, now)) },
   { label: "Board", render: (ipo) => (ipo.board === "MAINBOARD" ? "Mainboard" : "SME") },
   { label: "Price band", render: (ipo) => `₹${ipo.priceBandLow} – ₹${ipo.priceBandHigh}` },

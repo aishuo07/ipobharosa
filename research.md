@@ -1,5 +1,56 @@
 # Research: IPO ingestion reliability, provenance, drift detection, and financial evidence
 
+## 2026-08-14 extension: public visibility for unverified IPOs
+
+### Product problem confirmed in Production
+
+- Production currently contains 30 `PUBLISHED`, 31 `DRAFT`, and 3 `QUARANTINED` IPO records. The public board only queries `publicationState: "PUBLISHED"` in `src/lib/board-data.ts:242-247`, so more than half of the complete discovered IPO records are intentionally invisible.
+- The hidden records are not all bad records: drafts include complete IPO terms awaiting an official check or retry; quarantined records contain a detected source mismatch. The user wants visibility without falsely presenting those records as verified.
+- A separate SEBI filing radar already shows filing-only issuers in `src/components/IpoBoard.tsx:406-454`. Those records do not necessarily contain final price, lot, or dates and should remain separate from IPO-term cards.
+
+### Current public data flow and affected consumers
+
+```text
+Ipo rows
+  -> getBoardIpos() [PUBLISHED only]
+     -> Home board, search, compare, selected detail
+     -> /ipo/[slug] detail lookup + metadata
+     -> sitemap.xml
+     -> calendar ICS / Google Calendar subscription
+```
+
+- `src/lib/board-data.ts:8-58` has no publication/verification state in `BoardIpo`; the UI cannot distinguish verified, pending, or conflicting records.
+- `src/lib/board-data.ts:91-231` shapes nullable database values into zero-like values. Unverified records must only enter the board contract when all required core facts are present; otherwise the existing filing radar is the honest representation.
+- `src/components/IpoBoard.tsx:519-618` renders lifecycle and board badges but no trust badge. `DetailPanel` and `/ipo/[slug]` similarly present all facts without an overall verification warning.
+- `src/components/IpoBoard.tsx:1238+` compare rows do not include verification state, so mixed-trust comparisons would be misleading without an explicit row.
+- `src/app/ipo/[slug]/page.tsx:29-51` generates indexable metadata. Pending/conflicting detail pages should be accessible but `noindex` until verified.
+- `src/app/sitemap.ts:9-21` and `src/app/api/calendar/route.ts:7-22` consume `getBoardIpos`. Search indexing and calendar syndication need separate policies: pending/conflicting pages remain `noindex`, while calendars may include every complete IPO only if each event permanently carries the verification state and warning in its title and description.
+- Watchlisting can safely remain available: it is a user preference, not a verification claim, and reminders already follow stored lifecycle transitions.
+
+### Trust-state model
+
+The database state already provides the correct source of truth; no migration is required:
+
+| Database state | Public trust state | User-facing language | Public behavior |
+|---|---|---|---|
+| `PUBLISHED` | `VERIFIED` | Automated verification passed | Normal card, indexable, calendar event labelled verified |
+| `DRAFT` | `PENDING` | Automated verification pending | Visible with warning; collected values may change; noindex; calendar event labelled pending |
+| `QUARANTINED` | `NEEDS_REVIEW` | Source mismatch under review | Visible with critical warning; noindex; calendar event labelled needs review |
+| `REJECTED` | none | none | Never public |
+
+Latest official capture timestamps and matched field provenance already exist and can support the trust explanation. Internal raw errors should not be exposed; only a short safe conflict summary belongs in the public contract.
+
+### Architectural conclusion
+
+Use two explicit read contracts instead of weakening verification:
+
+```text
+getPublicIpos()   -> complete PUBLISHED + DRAFT + QUARANTINED records
+getIndexableIpos() -> PUBLISHED records only
+```
+
+The board/detail/search/calendar use the public contract and make trust state unavoidable. Calendar event summaries and descriptions carry the trust state because external calendar clients cannot rely on the website UI. Sitemap uses the indexable verified-only contract. This preserves coverage and honesty simultaneously.
+
 ## Scope researched
 
 The requested change spans the scheduled ingestion runner, official NSE/SEBI adapters, append-only evidence storage, admin operations, public IPO detail pages, and the financial publication pipeline. This report documents the current flow and the smallest production-safe extension.

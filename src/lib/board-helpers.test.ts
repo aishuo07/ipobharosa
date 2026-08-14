@@ -39,6 +39,16 @@ function makeIpo(overrides: Partial<BoardIpo> = {}): BoardIpo {
     documents: [],
     financials: [],
     provenance: { discovery: [], gmp: [], subscription: null, officialFields: [] },
+    verification: {
+      state: "VERIFIED",
+      label: "Verified from official sources",
+      shortLabel: "Verified",
+      description: "Core IPO terms match official sources.",
+      calendarLabel: "Verified",
+      checkedAt: null,
+      nextCheckAt: null,
+      issueSummary: null,
+    },
     ...overrides,
   };
 }

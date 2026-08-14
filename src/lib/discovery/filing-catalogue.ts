@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { normalizeIssuerName } from "./official/normalization";
 import { fetchSebiFilingCatalogue, type OfficialFilingEntry } from "./official/sebi-catalogue";
+import { publicVerificationFromPublicationState, type PublicVerificationState } from "@/lib/public-verification";
+import { toIpoSlug } from "@/lib/ipo-slug";
 
 export type FilingRadarEntry = {
   id: string;
@@ -10,6 +12,11 @@ export type FilingRadarEntry = {
   source: string;
   sourceUrl: string;
   documentUrl: string | null;
+  linkedIpo: {
+    slug: string;
+    verificationState: PublicVerificationState;
+    verificationLabel: string;
+  } | null;
 };
 
 export type FilingCatalogueSync = {
@@ -44,6 +51,7 @@ function shapeFetched(entries: OfficialFilingEntry[]): FilingRadarEntry[] {
     source: entry.source,
     sourceUrl: entry.sourceUrl,
     documentUrl: entry.documentUrl,
+    linkedIpo: null,
   })));
 }
 
@@ -85,34 +93,60 @@ export async function syncOfficialFilingCatalogue(): Promise<FilingCatalogueSync
 }
 
 export async function getFilingRadarEntries(): Promise<FilingRadarEntry[]> {
-  const publishedCompanies = await prisma.company.findMany({
-    where: { ipos: { some: { publicationState: "PUBLISHED" } } },
-    select: { name: true },
-  });
-  const publishedKeys = new Set(publishedCompanies.map((company) => normalizeIssuerName(company.name)));
   try {
     const entries = await prisma.ipoFilingCatalogue.findMany({
-      where: { OR: [{ ipoId: null }, { ipo: { publicationState: { not: "PUBLISHED" } } }] },
       orderBy: { filingDate: "desc" },
-      take: 100,
+      take: 150,
+      include: { ipo: { select: {
+        publicationState: true,
+        quarantineReason: true,
+        priceBandLow: true,
+        priceBandHigh: true,
+        lotSize: true,
+        issueSizeCr: true,
+        openDate: true,
+        closeDate: true,
+        allotmentDate: true,
+        refundDate: true,
+        listingDate: true,
+        registrar: true,
+        company: { select: { name: true } },
+      } } },
     });
     if (entries.length > 0) {
-      return newestPerIssuer(entries.map((entry) => ({
-        id: entry.id,
-        companyName: entry.companyName,
-        stage: entry.stage,
-        filingDate: entry.filingDate.toISOString(),
-        source: entry.source,
-        sourceUrl: entry.sourceUrl,
-        documentUrl: entry.documentUrl,
-      })));
+      return newestPerIssuer(entries.map((entry) => {
+        const ipo = entry.ipo;
+        const complete = ipo && ipo.priceBandLow !== null && ipo.priceBandHigh !== null && ipo.lotSize !== null &&
+          ipo.issueSizeCr !== null && ipo.openDate !== null && ipo.closeDate !== null && ipo.allotmentDate !== null &&
+          ipo.refundDate !== null && ipo.listingDate !== null && ipo.registrar !== null;
+        const verification = complete ? publicVerificationFromPublicationState({
+          publicationState: ipo.publicationState,
+          officialLastAttemptAt: null,
+          officialNextAttemptAt: null,
+          quarantineReason: ipo.quarantineReason,
+        }) : null;
+        return {
+          id: entry.id,
+          companyName: entry.companyName,
+          stage: entry.stage,
+          filingDate: entry.filingDate.toISOString(),
+          source: entry.source,
+          sourceUrl: entry.sourceUrl,
+          documentUrl: entry.documentUrl,
+          linkedIpo: verification ? {
+            slug: toIpoSlug(ipo!.company.name),
+            verificationState: verification.state,
+            verificationLabel: verification.label,
+          } : null,
+        };
+      }));
     }
   } catch (error) {
     const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
     if (code !== "P2021" && code !== "P2022") throw error;
   }
   try {
-    return (await fallbackEntries()).filter((entry) => !publishedKeys.has(normalizeIssuerName(entry.companyName)));
+    return await fallbackEntries();
   } catch {
     return [];
   }
