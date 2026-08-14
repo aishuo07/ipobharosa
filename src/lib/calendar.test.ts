@@ -10,7 +10,7 @@ const ipo = {
   allotmentDate: "2026-08-14T00:00:00.000Z", refundDate: "2026-08-15T00:00:00.000Z",
   listingDate: "2026-08-17T00:00:00.000Z", listingPrice: null, registrar: null,
   leadManagers: [], gmp: null, subscription: null, gmpHistory: [], documents: [],
-  financials: [], provenance: { discovery: [], gmp: [], subscription: null },
+  financials: [], provenance: { discovery: [], gmp: [], subscription: null, officialFields: [] },
 } satisfies BoardIpo;
 
 describe("IPO calendar export", () => {

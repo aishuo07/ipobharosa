@@ -33,7 +33,7 @@ const makeIpo = (id: string, board: BoardIpo["board"]): BoardIpo => ({
   gmpHistory: [],
   documents: [],
   financials: [],
-  provenance: { discovery: [], gmp: [], subscription: null },
+  provenance: { discovery: [], gmp: [], subscription: null, officialFields: [] },
 });
 
 describe("board filters", () => {
