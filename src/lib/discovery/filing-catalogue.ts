@@ -97,7 +97,21 @@ export async function getFilingRadarEntries(): Promise<FilingRadarEntry[]> {
     const entries = await prisma.ipoFilingCatalogue.findMany({
       orderBy: { filingDate: "desc" },
       take: 150,
-      include: { ipo: { include: { company: true } } },
+      include: { ipo: { select: {
+        publicationState: true,
+        quarantineReason: true,
+        priceBandLow: true,
+        priceBandHigh: true,
+        lotSize: true,
+        issueSizeCr: true,
+        openDate: true,
+        closeDate: true,
+        allotmentDate: true,
+        refundDate: true,
+        listingDate: true,
+        registrar: true,
+        company: { select: { name: true } },
+      } } },
     });
     if (entries.length > 0) {
       return newestPerIssuer(entries.map((entry) => {
@@ -107,8 +121,8 @@ export async function getFilingRadarEntries(): Promise<FilingRadarEntry[]> {
           ipo.refundDate !== null && ipo.listingDate !== null && ipo.registrar !== null;
         const verification = complete ? publicVerificationFromPublicationState({
           publicationState: ipo.publicationState,
-          officialLastAttemptAt: ipo.officialLastAttemptAt,
-          officialNextAttemptAt: ipo.officialNextAttemptAt,
+          officialLastAttemptAt: null,
+          officialNextAttemptAt: null,
           quarantineReason: ipo.quarantineReason,
         }) : null;
         return {

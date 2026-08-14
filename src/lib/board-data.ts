@@ -90,7 +90,35 @@ const IPO_INCLUDE = {
   gmpObservations: { orderBy: { capturedAt: "desc" as const }, take: 12, include: { source: true } },
 };
 
-type IpoWithRelations = Awaited<ReturnType<typeof prisma.ipo.findFirstOrThrow<{ include: typeof IPO_INCLUDE }>>>;
+// Select public fields explicitly. This also keeps page reads compatible while
+// an additive ingestion migration is rolling out and newer operational columns
+// are not present in every preview database yet.
+const IPO_SELECT = {
+  id: true,
+  status: true,
+  board: true,
+  publicationState: true,
+  quarantineReason: true,
+  discoveredFrom: true,
+  priceBandLow: true,
+  priceBandHigh: true,
+  lotSize: true,
+  issueSizeCr: true,
+  freshIssueCr: true,
+  ofsCr: true,
+  openDate: true,
+  closeDate: true,
+  allotmentDate: true,
+  refundDate: true,
+  listingDate: true,
+  listingPrice: true,
+  registrar: true,
+  leadManagers: true,
+  sourceUrl: true,
+  ...IPO_INCLUDE,
+};
+
+type IpoWithRelations = Awaited<ReturnType<typeof prisma.ipo.findFirstOrThrow<{ select: typeof IPO_SELECT }>>>;
 
 type OfficialProvenance = {
   summary: { name: string; url: string; note: string };
@@ -113,8 +141,8 @@ function shapeIpo(ipo: IpoWithRelations, officialProvenance?: OfficialProvenance
   const slug = toIpoSlug(ipo.company.name);
   const verification = publicVerificationFromPublicationState({
     publicationState: ipo.publicationState,
-    officialLastAttemptAt: ipo.officialLastAttemptAt,
-    officialNextAttemptAt: ipo.officialNextAttemptAt,
+    officialLastAttemptAt: null,
+    officialNextAttemptAt: null,
     quarantineReason: ipo.quarantineReason,
   });
   if (!verification) throw new Error("Rejected IPO cannot be shaped for public display");
@@ -264,7 +292,7 @@ const COMPLETE_PUBLIC_FACTS = {
 async function getIposByPublicationState(states: ("PUBLISHED" | "DRAFT" | "QUARANTINED")[]): Promise<BoardIpo[]> {
   const ipos = await prisma.ipo.findMany({
     where: { publicationState: { in: states }, ...COMPLETE_PUBLIC_FACTS },
-    include: IPO_INCLUDE,
+    select: IPO_SELECT,
     orderBy: { createdAt: "asc" },
   });
   // Deployment order is code -> migration in some preview/production flows.
@@ -327,7 +355,7 @@ export async function getBoardIpoBySlug(slug: string): Promise<BoardIpo | null> 
 export async function getWatchlistIpos(userId: string): Promise<BoardIpo[]> {
   const items = await prisma.watchlistItem.findMany({
     where: { userId },
-    include: { ipo: { include: IPO_INCLUDE } },
+    include: { ipo: { select: IPO_SELECT } },
     orderBy: { createdAt: "desc" },
   });
   return items.map((item) => shapeIpo(item.ipo));
