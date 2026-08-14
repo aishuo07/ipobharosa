@@ -1,6 +1,6 @@
 # Implementation Plan: Reliable official ingestion and transparent IPO evidence
 
-Status: approved by the product owner on 2026-08-14; implementation in progress.
+Status: completed and verified in Production on 2026-08-14.
 
 ## Approach
 
@@ -138,12 +138,12 @@ model SourceOperationHealth {
 - [DONE] Add authenticated, audited correction action/form.
 - [DONE] Add idempotent daily digest.
 - [DONE] Harden GitHub Actions HTTP retries.
-- [ ] Run PR A verification and deploy safely.
+- [DONE] Run PR A verification and deploy safely.
 - [DONE] Add field-level public provenance.
 - [DONE] Improve financial evidence queue and public presentation.
-- [ ] Run PR B verification and deploy safely.
-- [ ] Trigger and monitor a fresh Production data cycle.
-- [ ] Report exact data state and clickable evidence links.
+- [DONE] Run PR B verification and deploy safely.
+- [DONE] Trigger and monitor a fresh Production data cycle.
+- [DONE] Report exact data state and clickable evidence links.
 
 ## Explicitly out of scope
 

@@ -9,6 +9,11 @@
 - Added an authenticated correction workflow with immutable audit records, source-health/incident admin views, idempotent IST daily digest, and transport-level workflow retries.
 - Added public field-level official provenance plus expanded immutable financial evidence, citations, and honest empty states.
 - Root-caused the previous Production workflow failure as exhaustion of the 50-request orchestration ceiling, not a failed ingestion step. Raised the bounded ceiling to 120, added a 40-minute hard timeout, and serialized Production ingestion jobs so persisted runs can finish without overlap.
+- Merged PRs #32, #33, and #34; applied the additive Production migration before deploying the application.
+- Added lock-aware workflow pacing, a two-minute stale-lock recovery threshold, and bounded filing downloads so a timed-out serverless request cannot strand or hammer the ingestion run.
+- Completed fresh Production run `2294db33-3b6c-4e6f-9038-51d3925de998` in 83 resumable attempts. The run revalidated 8 queued IPOs (4 published, 4 scheduled for retry), matched all 4 published revalidations without drift, processed 22 filing candidates, wrote 43 GMP snapshots and 14 subscription snapshots, and finished successfully.
+- Final Production state: 29 published IPOs (21 Mainboard, 8 SME), 31 drafts, 4 quarantined, 4 scheduled official retries, 0 open conflict/drift incidents, 231 matched official fields across 25 evidence captures, and 2 immutable page-cited financial rows for Lohia Corp.
+- Production smoke passed for the board, IPO detail, backend health, and fail-closed admin mutation; `ipobharosa.vercel.app` serves the Ready hotfix deployment.
 
 ## 2026-08-13 — coverage architecture
 
