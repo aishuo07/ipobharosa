@@ -1,3 +1,3 @@
 phase=implementation
-checkpoint=pr2-local-gates-passed-preview-next
-feature=ingestion-critical-path-repair
+checkpoint=pr3-local-gates-passed-preview-next
+feature=site-url-email-readiness

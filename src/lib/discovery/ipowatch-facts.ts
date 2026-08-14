@@ -1,8 +1,9 @@
 import * as cheerio from "cheerio";
 import type { IpoFacts } from "./types";
 
-const USER_AGENT =
-  "Mozilla/5.0 (compatible; IPOBharosaBot/1.0; +https://ipobharosa.vercel.app)";
+import { ipobharosaUserAgent } from "@/lib/site-url";
+
+const USER_AGENT = ipobharosaUserAgent();
 const FETCH_TIMEOUT_MS = 15000;
 
 export function parseCr(text: string): number | null {

@@ -2,8 +2,9 @@ import * as cheerio from "cheerio";
 import type { GmpAdapter } from "../types";
 import { toIpoSlug } from "@/lib/ipo-slug";
 
-const USER_AGENT =
-  "Mozilla/5.0 (compatible; IPOBharosaBot/1.0; +https://ipobharosa.vercel.app)";
+import { ipobharosaUserAgent } from "@/lib/site-url";
+
+const USER_AGENT = ipobharosaUserAgent();
 
 export const ipojiAdapter: GmpAdapter = {
   key: "ipoji",

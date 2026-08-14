@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email/resend";
 import type { StatusTransition } from "@/lib/ipo-status";
+import { getEmailReadiness } from "@/lib/email/readiness";
+import { resolveSiteUrl } from "@/lib/site-url";
 
-const SITE_URL = "https://ipobharosa.vercel.app";
+const SITE_URL = resolveSiteUrl();
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 1500;
 
@@ -38,6 +40,7 @@ export type ReminderSummary = { sent: number; failed: number; skipped: number };
  */
 export async function notifyWatchersOfTransitions(transitions: StatusTransition[]): Promise<ReminderSummary> {
   const summary: ReminderSummary = { sent: 0, failed: 0, skipped: 0 };
+  if (!getEmailReadiness().enabled) return summary;
 
   for (const t of transitions) {
     const template = TEMPLATES[`${t.from}->${t.to}`];

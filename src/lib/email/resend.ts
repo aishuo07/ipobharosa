@@ -1,4 +1,4 @@
-const FROM_ADDRESS = process.env.AUTH_EMAIL_FROM ?? "IPOBharosa <no-reply@ipobharosa.com>";
+import { getEmailReadiness } from "./readiness";
 
 export async function sendEmail({
   to,
@@ -9,10 +9,9 @@ export async function sendEmail({
   subject: string;
   html: string;
 }): Promise<void> {
+  const readiness = getEmailReadiness();
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    throw new Error("RESEND_API_KEY not configured");
-  }
+  if (!readiness.transportReady || !apiKey || !readiness.from) throw new Error("Resend transport is not fully configured");
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -20,7 +19,7 @@ export async function sendEmail({
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ from: FROM_ADDRESS, to, subject, html }),
+    body: JSON.stringify({ from: readiness.from, to, subject, html }),
   });
 
   if (!res.ok) {

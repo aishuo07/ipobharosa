@@ -17,6 +17,8 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Trigger ingestion cycle
+        env:
+          SITE_URL: ${{ vars.SITE_URL || 'https://ipobharosa.vercel.app' }}
         run: |
           # A full run currently needs one bounded request per batch plus
           # preparation/finalization. Keep enough headroom for fleet growth and
@@ -24,7 +26,7 @@ jobs:
           for attempt in $(seq 1 120); do
             if ! status=$(curl --max-time 55 -s -o /tmp/response.json -w "%{http_code}" \
                 -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-                https://ipobharosa.vercel.app/api/cron/ingest); then
+                "$SITE_URL/api/cron/ingest"); then
               echo "Step $attempt — transport failure; persisted cursor is unchanged"
               # Do not let curl launch a duplicate while a timed-out serverless
               # invocation may still be finishing and holding the DB mutex.

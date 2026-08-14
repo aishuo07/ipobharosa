@@ -1,7 +1,8 @@
 import { toIpoSlug } from "@/lib/ipo-slug";
 
-const USER_AGENT =
-  "Mozilla/5.0 (compatible; IPOBharosaBot/1.0; +https://ipobharosa.vercel.app)";
+import { ipobharosaUserAgent } from "@/lib/site-url";
+
+const USER_AGENT = ipobharosaUserAgent();
 
 export type GmpHistoryPoint = { value: number; capturedAt: Date };
 

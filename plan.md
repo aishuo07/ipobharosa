@@ -1,6 +1,6 @@
 # Implementation Plan: launch readiness and date-wise IPO experience
 
-Status: approved by the product owner on 15 August 2026; PR 1 is live and PR 2 is in implementation.
+Status: approved by the product owner on 15 August 2026; PR 1 and PR 2 are live, and PR 3 has passed local gates.
 
 ## Outcome
 
@@ -261,7 +261,12 @@ Financial coverage can continue after private beta, but unverified figures must 
 - [x] Remove PDF downloads from the two-hour ingestion checkpoint path.
 - [x] Add the separately locked, bounded filing-evidence worker with persisted per-document backoff.
 - [x] Pass PR 2 local tests, typecheck, lint, build and Prisma validation.
-- [ ] Validate PR 2 in Preview, merge and observe three scheduled ingestion cycles.
+- [x] Validate PR 2 in Preview and merge.
+- [x] Run one Production ingestion cycle successfully (run 31836766490: complete in 1m55s; 47 GMP and 14 subscription snapshots written while legacy PDF failures were bypassed).
+- [ ] Observe two more scheduled ingestion cycles to complete the three-cycle acceptance window.
+- [x] Implement the validated site-origin contract, canonical metadata, configurable workflow URLs and honest user-email readiness gate.
+- [x] Add non-secret site/email readiness to the admin dashboard and pass PR 3 local gates (40 files, 255 tests).
+- [ ] Validate PR 3 in Preview and merge.
 - [ ] Implement and prove PR 2.
 - [ ] Implement PR 3 code work and complete owner DNS/domain actions.
 - [ ] Run the real-user beta checklist and record evidence.
