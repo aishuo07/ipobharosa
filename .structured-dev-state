@@ -1,3 +1,3 @@
-phase=release
-checkpoint=preview-passed-commit-pr-next
-feature=production-ops-reliability
+phase=implementation
+checkpoint=pr1-local-gates-passed-preview-next
+feature=launch-readiness-datewise-catalogue

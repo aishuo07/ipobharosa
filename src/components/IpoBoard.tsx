@@ -17,6 +17,14 @@ import {
 import { Badge, SegmentedTabs, StatePanel, TabButton, TextInput } from "@/components/ui";
 import { googleCalendarSubscriptionUrl } from "@/lib/calendar";
 import {
+  chronologyAnchor,
+  groupIposByChronology,
+  lifecycleEventsByDay,
+  marketDayKey,
+  type CatalogueSort,
+  type IpoCalendarEvent,
+} from "@/lib/ipo-chronology";
+import {
   badgeText,
   confidenceLabel,
   countdownText,
@@ -37,7 +45,7 @@ import {
 } from "@/lib/board-helpers";
 
 const TAB_DEFS: { key: StatusFilter; label: string }[] = [
-  { key: "ALL", label: "All IPOs" },
+  { key: "ALL", label: "All statuses" },
   { key: "OPEN", label: "Open Now" },
   { key: "UPCOMING", label: "Upcoming" },
   { key: "CLOSED", label: "Awaiting Allotment" },
@@ -54,6 +62,7 @@ const DTABS: { key: DTab; label: string }[] = [
 ];
 
 type BoardUser = { email: string | null; name: string | null } | null;
+type PublicView = "board" | "catalogue" | "pipeline" | "calendar";
 
 export default function IpoBoard({
   ipos,
@@ -78,7 +87,7 @@ export default function IpoBoard({
   const [query, setQuery] = useState("");
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [showCompare, setShowCompare] = useState(false);
-  const [view, setView] = useState<"board" | "pipeline" | "calendar">("board");
+  const [view, setView] = useState<PublicView>("board");
   const [boardFilter, setBoardFilter] = useState<BoardFilter>("ALL");
   const [verificationFilter, setVerificationFilter] = useState<VerificationFilter>("ALL");
   const [calMonth, setCalMonth] = useState(() => {
@@ -176,7 +185,7 @@ export default function IpoBoard({
     setSelectedId(null);
   }
 
-  function changeView(next: "board" | "pipeline" | "calendar") {
+  function changeView(next: PublicView) {
     setView(next);
     setSelectedId(null);
     setQuery("");
@@ -237,8 +246,8 @@ export default function IpoBoard({
         <div className="board-proof" aria-label="IPOBharosa data principles">
           <span><b>{trackedIssuerCount}</b> tracked issuers</span>
           <span><b>{filings.length}</b> official filings</span>
+          <span><b>{ipos.length}</b> complete IPO pages</span>
           <span><b>3</b> GMP sources</span>
-          <span><b>0</b> paid rankings</span>
         </div>
       </section>
 
@@ -250,6 +259,13 @@ export default function IpoBoard({
             onClick={() => changeView("board")}
           >
             Board
+          </TabButton>
+          <TabButton
+            type="button"
+            active={view === "catalogue"}
+            onClick={() => changeView("catalogue")}
+          >
+            All IPOs <span className="n">{ipos.length}</span>
           </TabButton>
           {filings.length > 0 && (
             <TabButton
@@ -268,7 +284,7 @@ export default function IpoBoard({
             Calendar
           </TabButton>
         </SegmentedTabs>
-        {(view === "board" || view === "calendar") && (
+        {(view === "board" || view === "catalogue" || view === "calendar") && (
           <SegmentedTabs label="IPO type">
             {(["ALL", "MAINBOARD", "SME"] as const).map((filter) => (
               <TabButton
@@ -282,7 +298,7 @@ export default function IpoBoard({
             ))}
           </SegmentedTabs>
         )}
-        {view === "board" && (
+        {(view === "board" || view === "catalogue") && (
           <SegmentedTabs label="Data verification">
             {([
               ["ALL", "All data"],
@@ -301,9 +317,9 @@ export default function IpoBoard({
             ))}
           </SegmentedTabs>
         )}
-        {(view === "board" || view === "pipeline") && (
+        {(view === "board" || view === "catalogue" || view === "pipeline") && (
           <>
-            {view === "board" && (
+            {(view === "board" || view === "catalogue") && (
               <SegmentedTabs label="IPO status">
                 {TAB_DEFS.map((t) => {
                   const count = filterIposByStatus(visibleBoardIpos, t.key).length;
@@ -343,6 +359,8 @@ export default function IpoBoard({
             <div className="sort-note">
               {view === "pipeline"
                 ? `${filingList.length} official filing${filingList.length !== 1 ? "s" : ""}`
+                : view === "catalogue"
+                  ? `${list.length} complete IPO${list.length !== 1 ? "s" : ""} in this view`
                 : query
                 ? `${list.length} result${list.length !== 1 ? "s" : ""} for "${query.trim()}"`
                 : tab === "OPEN"
@@ -411,6 +429,14 @@ export default function IpoBoard({
             </div>
           )}
         </>
+      ) : view === "catalogue" ? (
+        <IpoCatalogue
+          ipos={list}
+          now={now}
+          watching={watching}
+          onToggleWatch={toggleWatch}
+          filingsCount={filings.length}
+        />
       ) : view === "pipeline" ? (
         <FilingPipeline entries={filingList} />
       ) : (
@@ -450,6 +476,151 @@ export default function IpoBoard({
         </div>
       </footer>
     </div>
+  );
+}
+
+function IpoCatalogue({
+  ipos,
+  now,
+  watching,
+  onToggleWatch,
+  filingsCount,
+}: {
+  ipos: BoardIpo[];
+  now: number;
+  watching: Record<string, boolean>;
+  onToggleWatch: (ipoId: string) => void;
+  filingsCount: number;
+}) {
+  const [sort, setSort] = useState<CatalogueSort>("NEXT_EVENT");
+  const groups = useMemo(() => groupIposByChronology(ipos, now, sort), [ipos, now, sort]);
+
+  return (
+    <section className="ipo-catalogue" aria-labelledby="ipo-catalogue-title">
+      <div className="catalogue-intro">
+        <div>
+          <p className="board-kicker">Complete issue terms</p>
+          <h2 id="ipo-catalogue-title">All IPOs, in date order.</h2>
+          <p>
+            These issues have enough public terms to compare. Verification labels tell you whether
+            official checks passed, are retrying, or need review.
+          </p>
+        </div>
+        <label className="catalogue-sort">
+          <span>Sort by</span>
+          <select value={sort} onChange={(event) => setSort(event.target.value as CatalogueSort)}>
+            <option value="NEXT_EVENT">Next important date</option>
+            <option value="OPEN_ASC">Opening date · earliest</option>
+            <option value="OPEN_DESC">Opening date · latest</option>
+          </select>
+        </label>
+      </div>
+      <div className="catalogue-boundary" role="note">
+        <strong>{ipos.length} complete IPOs in this view.</strong>{" "}
+        Early DRHP/RHP filings without final price, lot or dates stay in IPO Pipeline ({filingsCount})—missing facts are never shown as zero.
+      </div>
+
+      {groups.map((group) => (
+        <section className="catalogue-day" key={group.dayKey} aria-labelledby={`catalogue-${group.dayKey}`}>
+          <header className="catalogue-day-head">
+            <time id={`catalogue-${group.dayKey}`} dateTime={group.dayKey}>{fmtDate(group.event.iso)}</time>
+            <span>{group.ipos.length} IPO{group.ipos.length === 1 ? "" : "s"}</span>
+          </header>
+          <div className="catalogue-rows">
+            {group.ipos.map((ipo) => (
+              <CatalogueRow
+                key={ipo.id}
+                ipo={ipo}
+                now={now}
+                watching={!!watching[ipo.id]}
+                onToggleWatch={() => onToggleWatch(ipo.id)}
+              />
+            ))}
+          </div>
+        </section>
+      ))}
+
+      {ipos.length === 0 && (
+        <StatePanel title="No complete IPOs match these filters">
+          Try another status or verification filter. Early filings remain available in IPO Pipeline.
+        </StatePanel>
+      )}
+    </section>
+  );
+}
+
+function CatalogueRow({
+  ipo,
+  now,
+  watching,
+  onToggleWatch,
+  event,
+}: {
+  ipo: BoardIpo;
+  now: number;
+  watching?: boolean;
+  onToggleWatch?: () => void;
+  event?: IpoCalendarEvent<BoardIpo>;
+}) {
+  const status = effectiveStatus(ipo, now);
+  const anchor = event ?? chronologyAnchor(ipo, now);
+  return (
+    <article className="catalogue-row">
+      <div className="catalogue-company">
+        <div className="catalogue-row-badges">
+          <span className={`badge badge-${status}`}>{badgeText(status)}</span>
+          <span className="board-tag">{ipo.board === "MAINBOARD" ? "Mainboard" : "SME"}</span>
+          <VerificationBadge ipo={ipo} />
+        </div>
+        <a className="catalogue-company-link" href={`/ipo/${ipo.slug}`}>{ipo.companyName}</a>
+        <span>{ipo.sector}</span>
+        <p className="catalogue-anchor">
+          <strong>{anchor.label}</strong> {fmtDate(anchor.iso)}
+        </p>
+      </div>
+      <div className="catalogue-dates" aria-label={`${ipo.companyName} dates`}>
+        <span><b>Open</b>{fmtDateShort(ipo.openDate)}</span>
+        <span><b>Close</b>{fmtDateShort(ipo.closeDate)}</span>
+        <span><b>Allotment</b>{fmtDateShort(ipo.allotmentDate)}</span>
+        <span><b>Listing</b>{fmtDateShort(ipo.listingDate)}</span>
+      </div>
+      <MajorIpoFacts ipo={ipo} now={now} />
+      <div className="catalogue-actions">
+        <a className="ui-button ui-button-primary" href={`/ipo/${ipo.slug}`}>Full details & sources</a>
+        <a className="ui-button ui-button-secondary" href={`/api/calendar?ipo=${ipo.slug}`}>Add dates (.ics)</a>
+        {onToggleWatch && (
+          <button
+            type="button"
+            className="ui-button ui-button-secondary"
+            aria-pressed={watching}
+            onClick={onToggleWatch}
+          >
+            {watching ? "★ Watching" : "☆ Watchlist"}
+          </button>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function MajorIpoFacts({ ipo, now }: { ipo: BoardIpo; now: number }) {
+  const gain = listingGainPct(ipo);
+  const gmpValue = ipo.status === "LISTED" && gain !== null
+    ? `${gain >= 0 ? "+" : ""}${gain.toFixed(1)}% debut`
+    : ipo.gmp ? `${fmtINR(ipo.gmp.medianValue)} (+${gmpPct(ipo)}%)` : "Not available";
+  const gmpContext = ipo.status === "LISTED"
+    ? "Listing performance"
+    : ipo.gmp
+      ? `${isStale(ipo.gmp.capturedAt, now) ? "Stale · " : ""}${gmpUpdatedText(ipo.gmp.capturedAt, now)} · ${ipo.gmp.sourceCount} source${ipo.gmp.sourceCount === 1 ? "" : "s"}`
+      : "No GMP observation captured";
+  return (
+    <dl className="catalogue-facts">
+      <div><dt>Price</dt><dd>₹{ipo.priceBandLow}–₹{ipo.priceBandHigh}</dd></div>
+      <div><dt>Lot / minimum</dt><dd>{ipo.lotSize} · {fmtINR(ipo.lotSize * ipo.priceBandHigh)}</dd></div>
+      <div><dt>Issue size</dt><dd>{fmtCr(ipo.issueSizeCr)}</dd></div>
+      <div className="catalogue-gmp"><dt>{ipo.status === "LISTED" ? "Listed" : "GMP · unofficial"}</dt><dd>{gmpValue}<small>{gmpContext}</small></dd></div>
+      <div className="catalogue-demand"><dt>Demand</dt><dd>{subSummary(ipo)}</dd></div>
+    </dl>
   );
 }
 
@@ -1426,22 +1597,6 @@ function CompareTable({
   );
 }
 
-const CAL_EVENT_TYPES = [
-  { key: "opens", label: "Opens", dateKey: "openDate" as const },
-  { key: "closes", label: "Closes", dateKey: "closeDate" as const },
-  { key: "lists", label: "Lists", dateKey: "listingDate" as const },
-];
-
-type CalEvent = { ipo: BoardIpo; type: string; label: string };
-
-// Keying by the ISO string's own local calendar day (not a UTC slice)
-// matches how fmtDate/fmtDateShort already render these same dates
-// elsewhere on the site — the grid and the label always agree.
-function localDayKey(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 function CalendarView({
   ipos,
   boardFilter,
@@ -1457,24 +1612,27 @@ function CalendarView({
   onPrevMonth: () => void;
   onNextMonth: () => void;
 }) {
-  const eventsByDay = useMemo(() => {
-    const map: Record<string, CalEvent[]> = {};
-    for (const ipo of ipos) {
-      for (const t of CAL_EVENT_TYPES) {
-        const iso = ipo[t.dateKey] as string;
-        if (!iso) continue;
-        const key = localDayKey(iso);
-        (map[key] ??= []).push({ ipo, type: t.key, label: t.label });
-      }
-    }
-    return map;
-  }, [ipos]);
+  const eventsByDay = useMemo(() => lifecycleEventsByDay(ipos), [ipos]);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   const year = month.getFullYear();
   const m = month.getMonth();
   const firstWeekday = new Date(year, m, 1).getDay();
   const daysInMonth = new Date(year, m + 1, 0).getDate();
-  const todayKey = localDayKey(new Date(now).toISOString());
+  const todayKey = marketDayKey(now);
+  const monthPrefix = `${year}-${String(m + 1).padStart(2, "0")}`;
+  const activeSelectedDay = selectedDay?.startsWith(monthPrefix) ? selectedDay : null;
+  const monthEvents = useMemo(
+    () => Object.entries(eventsByDay)
+      .filter(([dayKey]) => dayKey.startsWith(monthPrefix))
+      .flatMap(([, events]) => events)
+      .sort((a, b) => a.timestamp - b.timestamp || a.ipo.companyName.localeCompare(b.ipo.companyName)),
+    [eventsByDay, monthPrefix],
+  );
+  const agendaEvents = activeSelectedDay
+    ? eventsByDay[activeSelectedDay] ?? []
+    : monthEvents.filter((event) => event.dayKey >= todayKey).slice(0, 12);
+  const fallbackAgendaEvents = activeSelectedDay || agendaEvents.length > 0 ? agendaEvents : monthEvents.slice(-12);
 
   const cells: (number | null)[] = [];
   for (let i = 0; i < firstWeekday; i++) cells.push(null);
@@ -1500,6 +1658,7 @@ function CalendarView({
       <div className="calendar-legend">
         <span className="cal-legend-item"><span className="cal-dot cal-opens" /> Opens</span>
         <span className="cal-legend-item"><span className="cal-dot cal-closes" /> Closes</span>
+        <span className="cal-legend-item"><span className="cal-dot cal-allotment" /> Allotment</span>
         <span className="cal-legend-item"><span className="cal-dot cal-lists" /> Lists</span>
       </div>
       <div className="calendar-actions">
@@ -1525,8 +1684,16 @@ function CalendarView({
           const key = `${year}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
           const dayEvents = eventsByDay[key] ?? [];
           return (
-            <div key={i} className={"cal-cell" + (key === todayKey ? " cal-today" : "")}>
-              <div className="cal-daynum">{d}</div>
+            <div key={i} className={"cal-cell" + (key === todayKey ? " cal-today" : "") + (key === activeSelectedDay ? " cal-selected" : "")}>
+              <button
+                type="button"
+                className="cal-daynum"
+                aria-label={`Show ${dayEvents.length} IPO event${dayEvents.length === 1 ? "" : "s"} for ${key}`}
+                aria-pressed={key === activeSelectedDay}
+                onClick={() => setSelectedDay((current) => current === key ? null : key)}
+              >
+                {d}
+              </button>
               {dayEvents.map((e, idx) => (
                 <a
                   key={idx}
@@ -1546,6 +1713,35 @@ function CalendarView({
           No IPO dates to show yet.
         </p>
       )}
+      <section className="calendar-agenda" aria-labelledby="calendar-agenda-title">
+        <div className="calendar-agenda-head">
+          <div>
+            <p className="board-kicker">Date-wise details</p>
+            <h2 id="calendar-agenda-title">
+              {activeSelectedDay
+                ? new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" }).format(new Date(`${activeSelectedDay}T00:00:00+05:30`))
+                : `Next dates in ${monthLabel}`}
+            </h2>
+          </div>
+          {activeSelectedDay && <button type="button" className="btn btn-ghost" onClick={() => setSelectedDay(null)}>Show next dates</button>}
+        </div>
+        <div className="calendar-agenda-list">
+          {fallbackAgendaEvents.map((event) => (
+            <div className="calendar-agenda-event" key={`${event.ipo.id}-${event.type}-${event.dayKey}`}>
+              <div className={`calendar-event-label cal-${event.type}`}>
+                <span>{event.label}</span>
+                <time dateTime={event.dayKey}>{fmtDate(event.iso)}</time>
+              </div>
+              <CatalogueRow ipo={event.ipo} now={now} event={event} />
+            </div>
+          ))}
+          {fallbackAgendaEvents.length === 0 && (
+            <StatePanel title={activeSelectedDay ? "No IPO milestones on this date" : "No upcoming milestones in this month"}>
+              Choose another date or month. Early filings without final dates remain in IPO Pipeline.
+            </StatePanel>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
