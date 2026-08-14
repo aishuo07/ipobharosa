@@ -1,6 +1,6 @@
 # Implementation Plan: launch readiness and date-wise IPO experience
 
-Status: approved by the product owner on 15 August 2026; PR 1 implementation in progress.
+Status: approved by the product owner on 15 August 2026; PR 1 is live and PR 2 is in implementation.
 
 ## Outcome
 
@@ -157,7 +157,7 @@ The two-hour cycle will finish after:
 prepare -> candidate verification -> published drift -> GMP -> subscription -> finalize
 ```
 
-It may enqueue missing filing documents, but it will not synchronously download every PDF.
+The independent worker discovers missing filing documents from persisted official URLs; the two-hour cycle never downloads their PDFs.
 
 ### 2. Use the daily filing workflow as a bounded queue worker
 
@@ -226,7 +226,7 @@ Financial coverage can continue after private beta, but unverified figures must 
 
 ### Required before public beta
 
-- [ ] PR 1 merged and Production-smoked.
+- [x] PR 1 merged and Production-smoked.
 - [ ] PR 2 merged and three scheduled cycles green.
 - [ ] Admin queue has no unexplained critical drift/conflict.
 - [ ] Terms, Privacy, Disclaimer and correction contact are public.
@@ -257,7 +257,11 @@ Financial coverage can continue after private beta, but unverified figures must 
 - [x] Write this implementation plan.
 - [x] Obtain explicit approval for this plan.
 - [x] Implement PR 1 on a fresh branch from current `main`.
-- [ ] Validate PR 1 in Preview and merge after review.
+- [x] Validate PR 1 in Preview and merge after review.
+- [x] Remove PDF downloads from the two-hour ingestion checkpoint path.
+- [x] Add the separately locked, bounded filing-evidence worker with persisted per-document backoff.
+- [x] Pass PR 2 local tests, typecheck, lint, build and Prisma validation.
+- [ ] Validate PR 2 in Preview, merge and observe three scheduled ingestion cycles.
 - [ ] Implement and prove PR 2.
 - [ ] Implement PR 3 code work and complete owner DNS/domain actions.
 - [ ] Run the real-user beta checklist and record evidence.

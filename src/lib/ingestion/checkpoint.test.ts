@@ -11,6 +11,11 @@ describe("ingestion checkpoint", () => {
     expect(readCheckpoint(saved)).toEqual(saved);
   });
 
+  it("keeps a legacy filings checkpoint readable so the new runner can skip it", () => {
+    const saved = { ...initialCheckpoint(), stage: "filings" as const, cursor: 12, attempts: 2 };
+    expect(readCheckpoint(saved)).toEqual(saved);
+  });
+
   it("rejects incompatible checkpoint shapes safely", () => {
     expect(readCheckpoint({ version: 99, stage: "gmp" })).toEqual(initialCheckpoint());
   });
