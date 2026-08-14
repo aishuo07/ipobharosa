@@ -4,7 +4,9 @@ import { withTransientRetries } from "@/lib/ingestion/source-operation";
 import { syncDocument } from "./workflow";
 
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
-const FETCH_TIMEOUT_MS = 45_000;
+// The route has a 60-second hard ceiling. Two bounded attempts leave enough
+// time for response validation, persistence, and guaranteed lock release.
+const FETCH_TIMEOUT_MS = 20_000;
 
 export type FilingCapture = {
   sha256: string;
@@ -23,7 +25,7 @@ export async function downloadFilingEvidence(sourceUrl: string): Promise<FilingC
     });
     if (!result.ok) throw new Error(`filing download: HTTP ${result.status}`);
     return result;
-  });
+  }, { maxAttempts: 2 });
   const contentLength = Number(response.headers.get("content-length") ?? 0);
   if (contentLength > MAX_PDF_BYTES) throw new Error(`filing exceeds ${MAX_PDF_BYTES} byte safety limit`);
   const bytes = Buffer.from(await response.arrayBuffer());

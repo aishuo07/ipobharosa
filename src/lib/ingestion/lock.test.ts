@@ -65,7 +65,7 @@ describe("ingestion lock", () => {
   it("treats a stale lock (crashed run that never released) as re-acquirable", async () => {
     await acquireIngestionLock("crashed-run");
     // Simulate time passing well past the staleness threshold without a release.
-    row!.runningSince = new Date(Date.now() - 20 * 60 * 1000);
+    row!.runningSince = new Date(Date.now() - 3 * 60 * 1000);
     expect(await acquireIngestionLock("recovery-run")).toBe(true);
   });
 

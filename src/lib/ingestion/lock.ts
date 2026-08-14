@@ -1,10 +1,9 @@
 import { prisma } from "@/lib/prisma";
 
 const LOCK_ID = "singleton";
-// Generous relative to actual runtime (a full 40-candidate run takes
-// ~15s) — this only exists to auto-recover from a run that crashed
-// without releasing the lock, not to bound normal operation.
-const STALE_AFTER_MS = 10 * 60 * 1000;
+// A route invocation has a hard 60-second ceiling. Anything still locked after
+// two minutes cannot be live work and is safe for the next caller to recover.
+const STALE_AFTER_MS = 2 * 60 * 1000;
 
 /**
  * A single well-known row as a mutex. Acquiring is one conditional
