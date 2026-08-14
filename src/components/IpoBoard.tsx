@@ -8,7 +8,9 @@ import {
   boardFilterLabel,
   boardFilterQuery,
   filterIposByBoard,
+  filterIposByStatus,
   type BoardFilter,
+  type StatusFilter,
 } from "@/lib/board-filter";
 import { SegmentedTabs, StatePanel, TabButton, TextInput } from "@/components/ui";
 import { googleCalendarSubscriptionUrl } from "@/lib/calendar";
@@ -32,7 +34,8 @@ import {
   timeUntil,
 } from "@/lib/board-helpers";
 
-const TAB_DEFS: { key: BoardIpo["status"]; label: string }[] = [
+const TAB_DEFS: { key: StatusFilter; label: string }[] = [
+  { key: "ALL", label: "All IPOs" },
   { key: "OPEN", label: "Open Now" },
   { key: "UPCOMING", label: "Upcoming" },
   { key: "CLOSED", label: "Awaiting Allotment" },
@@ -63,7 +66,7 @@ export default function IpoBoard({
   watchlistedIds?: string[];
   onSignOut?: () => Promise<void>;
 }) {
-  const [tab, setTab] = useState<BoardIpo["status"]>("OPEN");
+  const [tab, setTab] = useState<StatusFilter>("ALL");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dtab, setDtab] = useState<DTab>("overview");
   const [watching, setWatching] = useState<Record<string, boolean>>(() =>
@@ -136,7 +139,7 @@ export default function IpoBoard({
         .sort((a, b) => a.companyName.localeCompare(b.companyName));
     }
 
-    const filtered = boardIpos.filter((i) => i.status === tab);
+    const filtered = filterIposByStatus(boardIpos, tab);
     if (tab === "OPEN") {
       return [...filtered].sort(
         (a, b) => new Date(a.closeDate).getTime() - new Date(b.closeDate).getTime(),
@@ -157,7 +160,7 @@ export default function IpoBoard({
     setDtab("overview");
   }
 
-  function changeTab(key: BoardIpo["status"]) {
+  function changeTab(key: StatusFilter) {
     setTab(key);
     setSelectedId(null);
   }
@@ -266,7 +269,7 @@ export default function IpoBoard({
             {view === "board" && (
               <SegmentedTabs label="IPO status">
                 {TAB_DEFS.map((t) => {
-                  const count = boardIpos.filter((i) => i.status === t.key).length;
+                  const count = filterIposByStatus(boardIpos, t.key).length;
                   return (
                     <TabButton
                       key={t.key}

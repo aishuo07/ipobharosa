@@ -4,6 +4,7 @@ import {
   boardFilterLabel,
   boardFilterQuery,
   filterIposByBoard,
+  filterIposByStatus,
   parseBoardFilter,
 } from "./board-filter";
 
@@ -61,5 +62,20 @@ describe("board filters", () => {
     expect(boardFilterLabel("SME")).toBe("SME");
     expect(boardFilterQuery("ALL")).toBe("");
     expect(boardFilterQuery("SME")).toBe("?board=SME");
+  });
+
+  it("shows every published IPO in the default ALL status view", () => {
+    const open = makeIpo("open", "MAINBOARD");
+    const upcoming = { ...makeIpo("upcoming", "SME"), status: "UPCOMING" as const };
+    const closed = { ...makeIpo("closed", "MAINBOARD"), status: "CLOSED" as const };
+
+    expect(filterIposByStatus([open, upcoming, closed], "ALL").map((ipo) => ipo.id)).toEqual([
+      "open",
+      "upcoming",
+      "closed",
+    ]);
+    expect(filterIposByStatus([open, upcoming, closed], "UPCOMING").map((ipo) => ipo.id)).toEqual([
+      "upcoming",
+    ]);
   });
 });
