@@ -1,11 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdminEmail } from "@/lib/admin";
 import { validateApprovalInput, validateRejectionInput } from "@/lib/admin-review";
 import { officialCorrectionData } from "@/lib/admin-correction";
+import { retryOfficialVerificationNow } from "@/lib/discovery/retry-operation";
+import { toIpoSlug } from "@/lib/ipo-slug";
 
 async function requireAdmin(): Promise<string> {
   const session = await auth();
@@ -64,6 +67,33 @@ function requiredReason(formData: FormData): string {
   const reason = String(formData.get("reason") ?? "").trim();
   if (reason.length < 10 || reason.length > 500) throw new Error("Provide a correction reason between 10 and 500 characters");
   return reason;
+}
+
+function requiredIpoId(formData: FormData): string {
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id || id.length > 100) throw new Error("A valid IPO ID is required");
+  return id;
+}
+
+export async function retryOfficialVerification(formData: FormData): Promise<never> {
+  const performedBy = await requireAdmin();
+  const id = requiredIpoId(formData);
+  const result = await retryOfficialVerificationNow(id, performedBy);
+
+  revalidatePath("/admin");
+  revalidatePath("/");
+  revalidatePath("/api/calendar");
+  revalidatePath("/watchlist");
+
+  const params = new URLSearchParams({ retry: result.status.toLowerCase() });
+  if (result.status === "COMPLETED") {
+    params.set("outcome", result.result.outcome.toLowerCase());
+    if (result.result.company) {
+      params.set("company", result.result.company);
+      revalidatePath(`/ipo/${toIpoSlug(result.result.company)}`);
+    }
+  }
+  redirect(`/admin?${params.toString()}`);
 }
 
 export async function acceptOfficialCorrection(formData: FormData) {

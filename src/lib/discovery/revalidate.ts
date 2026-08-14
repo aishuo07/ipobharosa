@@ -80,29 +80,23 @@ export function nextOfficialRetryAt(attempts: number, now = new Date()): Date {
   return new Date(now.getTime() + delayMs);
 }
 
-/**
- * Revalidates the least-recently-touched unpublished candidate. Every outcome
- * updates the row, so repeated bounded calls naturally rotate through the
- * queue without holding a large ID list in the ingestion checkpoint.
- */
-export async function revalidateOldestCandidate(): Promise<RevalidationResult> {
-  const now = new Date();
-  const candidate = await prisma.ipo.findFirst({
-    where: {
-      publicationState: { in: ["DRAFT", "QUARANTINED"] },
-      OR: [{ officialNextAttemptAt: null }, { officialNextAttemptAt: { lte: now } }],
-    },
-    select: candidateSelect,
-    orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
-  });
-  if (!candidate) return { company: null, outcome: "EMPTY", reasons: [] };
+export function nextOfficialConflictCheckAt(now = new Date()): Date {
+  return new Date(now.getTime() + 24 * 60 * 60 * 1_000);
+}
 
+async function revalidateCandidate(candidate: RevalidationCandidate): Promise<RevalidationResult> {
+  const now = new Date();
   const facts = candidateAsFacts(candidate);
   if (!facts) {
     const reason = "stored candidate is missing required core facts";
     await prisma.ipo.update({
       where: { id: candidate.id },
-      data: { publicationState: "QUARANTINED", quarantineReason: reason },
+      data: {
+        publicationState: "QUARANTINED",
+        quarantineReason: reason,
+        officialLastAttemptAt: now,
+        officialNextAttemptAt: nextOfficialConflictCheckAt(now),
+      },
     });
     return { company: candidate.company.name, outcome: "INVALID", reasons: [reason] };
   }
@@ -133,7 +127,7 @@ export async function revalidateOldestCandidate(): Promise<RevalidationResult> {
         officialCheckAttempts: decision.decision === "RETRY" ? candidate.officialCheckAttempts + 1 : 0,
         officialNextAttemptAt: decision.decision === "RETRY"
           ? nextOfficialRetryAt(candidate.officialCheckAttempts + 1, now)
-          : null,
+          : decision.decision === "EXCEPTION" ? nextOfficialConflictCheckAt(now) : null,
         quarantineReason: decision.decision === "EXCEPTION"
           ? decision.reasons.join("; ")
           : decision.decision === "RETRY" ? candidate.quarantineReason : null,
@@ -180,4 +174,32 @@ export async function revalidateOldestCandidate(): Promise<RevalidationResult> {
   });
 
   return { company: candidate.company.name, outcome, reasons: decision.reasons };
+}
+
+export async function revalidateCandidateById(id: string): Promise<RevalidationResult> {
+  const candidate = await prisma.ipo.findFirst({
+    where: { id, publicationState: { in: ["DRAFT", "QUARANTINED"] } },
+    select: candidateSelect,
+  });
+  if (!candidate) return { company: null, outcome: "EMPTY", reasons: [] };
+  return revalidateCandidate(candidate);
+}
+
+/**
+ * Revalidates the least-recently-touched unpublished candidate. Every outcome
+ * updates the row, so repeated bounded calls naturally rotate through the
+ * queue without holding a large ID list in the ingestion checkpoint.
+ */
+export async function revalidateOldestCandidate(): Promise<RevalidationResult> {
+  const now = new Date();
+  const candidate = await prisma.ipo.findFirst({
+    where: {
+      publicationState: { in: ["DRAFT", "QUARANTINED"] },
+      OR: [{ officialNextAttemptAt: null }, { officialNextAttemptAt: { lte: now } }],
+    },
+    select: candidateSelect,
+    orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
+  });
+  if (!candidate) return { company: null, outcome: "EMPTY", reasons: [] };
+  return revalidateCandidate(candidate);
 }
