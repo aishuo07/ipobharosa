@@ -1,4 +1,202 @@
-# Research: IPO ingestion reliability, provenance, drift detection, and financial evidence
+# Research: official-source coverage, richer IPO facts, and clearer verification
+
+## 2026-08-14: Production coverage audit and second-exchange investigation
+
+### Outcome first
+
+The high pending count is not evidence that 30 records are all wrong. It is primarily an architecture limitation: the automatic term verifier calls only NSE. A read-only Production audit and live official-source checks found:
+
+- Current Production state: **31 verified, 30 pending, 3 needs review** (64 complete public records).
+- Sunshine Pictures moved from pending to verified during this investigation after its next scheduled NSE retry succeeded. This confirms the existing retry path works when NSE actually covers the issue.
+- Of the 33 records still not verified, the BSE current + historical catalogues identify **18 public issues**:
+  - **13 actual IPOs** that NSE does not cover.
+  - **4 FPOs** currently presented as IPO candidates.
+  - **1 InvIT** currently presented as an IPO candidate.
+- A BSE detail dry-run over the 13 actual IPOs found:
+  - **10 exact matches** across the current material facts with no code changes.
+  - **2 harmless registrar-name representation differences** that can be resolved deterministically (`Bigshare` vs `Big Share`; `MUFG Intime India` vs its former name `Link Intime India`, confirmed by the registrar and exchange notices).
+  - **1 genuine candidate-vs-BSE conflict** (Dhaval Packaging: price band and minimum application quantity differ); this must remain a review exception.
+- Therefore the realistic first-pass result is **up to 12 additional automatically verified IPOs**, one BSE-backed conflict, five non-IPO public issues removed from the IPO trust count, and the remainder explicitly labelled as outside current exchange coverage rather than generically “pending”.
+
+No Production rows were changed by this audit.
+
+### Root cause in the current code
+
+```text
+fetchOfficialIpoEvidence(company)
+  -> NseOfficialSource.findEvidence(company)
+     -> NSE current catalogue
+     -> NSE historical catalogue
+     -> NSE detail
+```
+
+- `src/lib/discovery/official/index.ts:1-8` hard-codes one `NseOfficialSource`; there is no provider registry or fallback.
+- `src/lib/discovery/official/nse.ts:5-6` uses the official NSE current and historical catalogues.
+- `src/lib/discovery/official/nse.ts:87-120` normalizes only ten material fields even though NSE detail exposes many more official fields.
+- `src/lib/discovery/official/types.ts:3-38` models one evidence source and only the ten publication-gate fields.
+- `src/lib/discovery/official/consensus.ts:51-86` makes an all-or-nothing decision against that one source. `NOT_FOUND` becomes a retry with no evidence capture.
+- `src/lib/discovery/revalidate.ts:110-115` also records all source health as NSE, so the public/admin system cannot say “not on NSE, BSE check pending”.
+- `src/lib/public-verification.ts:67-75` collapses all drafts into the same generic pending message.
+- `src/lib/board-data.ts:138-147` deliberately passes null check timestamps into the public verification mapper; the UI cannot show the real last/next check despite the database columns existing.
+
+### Official source inventory
+
+#### NSE — structured current/historical issue data
+
+Official entry point: `https://www.nseindia.com/market-data/all-upcoming-issues-ipo`
+
+The existing adapter already uses NSE's public structured data. A live issue-detail response contains materially more than the app retains:
+
+- symbol, issue type and issue period;
+- price range, face value, tick size, bid lot and minimum order quantity;
+- issue-size narrative with fresh issue, OFS, employee reservation and anchor portion;
+- retail/employee maximum application amount and employee discount;
+- QIB/NIB maximum quantity;
+- book-running lead managers, registrar, sponsor banks and UPI cut-off;
+- RHP, ratio/basis-of-price, anchor allocation, bidding-centre and form links;
+- category-level live demand/subscription data and update timestamps.
+
+The response is already official and structured; most of these values need deterministic parsing, not PDF/OCR.
+
+#### BSE — essential second exchange, especially for SME coverage
+
+Official pages:
+
+- Live/current public issues: `https://www.bseindia.com/markets/PublicIssues/IPOIssues?id=1&Type=P`
+- Historical public issues: `https://www.bseindia.com/markets/PublicIssues/IPOIssues?id=2&Type=P`
+- Issue summary/document index: `https://www.bseindia.com/markets/PublicIssues/Issuesummary`
+
+BSE's own Angular application calls public endpoints on `api.bseindia.com`. The catalogue identifies issue type (`IPO`, `FPO`, `InvITs`, etc.), board/platform, price, dates, status, security code and IPO number. The per-issue detail supplies:
+
+- security type and symbol;
+- issue period and issue size in shares;
+- price band advertisement and official prospectus/GID;
+- face value, tick size, market lot and minimum bid quantity;
+- maximum QIB/NII quantities;
+- lead/co-lead managers, registrar and sponsor bank;
+- corrigenda, anchor details and exchange notices;
+- BSE and cumulative demand schedules.
+
+This is enough to verify the same ten publication-gate fields as NSE and to add useful application facts with direct official links.
+
+#### SEBI — existence and filing authority, not a final-term substitute
+
+- RHP catalogue: `https://www.sebi.gov.in/sebiweb/home/HomeAction.do?doListing=yes&sid=3&smid=11&ssid=15`
+- DRHP catalogue: `https://www.sebi.gov.in/sebiweb/home/HomeAction.do?doListing=yes&sid=3&smid=10&ssid=15`
+
+`src/lib/discovery/official/sebi-catalogue.ts:18-32,53-80` already captures filing stage, date, landing page and document URL. The Production audit linked only three of the remaining 33 records to SEBI filings. A DRHP/RHP proves that a filing exists, but the catalogue itself does not provide final price, dates, lot or board. SEBI should strengthen document provenance and the pipeline view; it should not independently auto-verify final application terms.
+
+### BSE transport constraint
+
+The BSE API intermittently emits response headers with leading whitespace. Node/Undici's normal `fetch` rejects those responses before JSON parsing, while a standards-tolerant client receives valid JSON. A same-origin `www.bseindia.com` proxy is not available.
+
+If BSE is integrated, the relaxed parser must be isolated to a tiny fixed-host client with all of these controls:
+
+```text
+host allowlist: api.bseindia.com only
+method: GET only
+redirects: disabled
+timeout: 15 seconds
+response size: <= 5 MB
+Accept-Encoding: identity
+JSON content required
+bounded retry/backoff
+no caller-controlled path or query keys
+```
+
+Do not weaken parsing for the application's generic HTTP client.
+
+### Verification policy
+
+```text
+candidate facts
+  -> query NSE and BSE catalogues
+  -> reject/category-route non-IPO issue types before trust scoring
+  -> normalize each official provider independently
+  -> compare provider facts field by field
+
+one complete official exchange match
+  -> auto-publish (same trust bar as today)
+
+NSE + BSE both found and agree
+  -> auto-publish with two-source evidence
+
+official exchange sources disagree
+  -> needs-review incident; never majority-vote or overwrite silently
+
+official exchange source found but candidate differs
+  -> needs-review unless the difference is a proven deterministic legal-name alias
+
+SEBI filing only / no final exchange entry
+  -> show filing evidence and explicit coverage reason; retry later
+
+no official source
+  -> show collected values as provisional, with last/next check; never call verified
+```
+
+Secondary sites remain discovery/GMP sources and never override exchange/SEBI evidence.
+
+### Safe text normalization
+
+The existing comparison (`src/lib/discovery/official/consensus.ts:30-40`) handles legal suffixes but misses:
+
+- accidental whitespace joins: `KFin TechnologiesLimited`;
+- whitespace variants: `Bigshare` vs `Big Share`;
+- verified legal renames: `Link Intime India` -> `MUFG Intime India`.
+
+Use a small audited alias registry for known legal renames and conservative token normalization. Do not use fuzzy edit-distance matching for registrars or lead managers; it could merge unrelated entities.
+
+### Richer public data contract
+
+Keep publication-gate facts separate from enrichment. The following can be displayed when captured from a structured official source:
+
+| Group | Data points | Trust/display rule |
+|---|---|---|
+| Application | face value, market lot, minimum bid quantity, minimum investment, max retail amount, employee discount, UPI cut-off | Official source + checked timestamp |
+| Issue | symbol, issue type, issue size shares, fresh/OFS narrative, market timings | Exact source field; do not derive unsupported values |
+| Participants | registrar, BRLM/co-BRLM, sponsor banks | Normalized display name plus original official value |
+| Documents | RHP/prospectus, price-band ad, corrigendum, anchor allocation, ratios/basis | Direct official links |
+| Demand | QIB/NII/retail/employee subscription, total subscription, exchange update time | Separate live snapshot; never label GMP |
+| Financials | revenue, PAT, EPS, assets, net worth, borrowings | Existing official-document + page-citation workflow only |
+
+The financial pipeline remains intentionally stricter. `src/lib/financials/workflow.ts:17-29,121-137` routes parser output to review because parser confidence is not semantic proof. Exchange term APIs improve IPO coverage but do not remove fiscal-year/unit/scope ambiguity from financial statements.
+
+### Recommended architecture
+
+```text
+OfficialSourceRegistry
+  +-- NSE adapter (normal fetch)
+  +-- BSE adapter (isolated bounded transport)
+  +-- SEBI filing adapter (document/existence evidence)
+
+Provider results
+  -> issue-type guard
+  -> normalized field evidence
+  -> cross-provider consensus
+  -> append-only captures/comparisons
+  -> current trust projection
+
+Public detail
+  -> verification score: e.g. 10/10 core fields matched
+  -> provider chips: NSE / BSE / SEBI filing
+  -> each field: value, status, source link, checked time
+  -> explicit hold reason + next retry
+  -> richer official issue facts and documents
+```
+
+### Key risks and controls
+
+1. **FPO/InvIT contamination:** issue type must be checked before an IPO is auto-published. Existing misclassified records need a no-write classification report before correction.
+2. **BSE malformed headers:** use only the isolated client described above and fail closed.
+3. **Duplicate catalogue rows:** deduplicate by BSE IPO number/status before issuer matching.
+4. **Provider disagreement:** becomes an incident, never silent official-source precedence.
+5. **False name aliases:** only explicit, test-covered legal aliases; no general fuzzy matching.
+6. **Schema rollout:** any normalized enrichment/evidence columns must be additive, migrated before code writes, and public reads must retain compatibility fallback.
+7. **Source load:** cache catalogues once per run and bound detail concurrency.
+
+---
+
+# Prior research: IPO ingestion reliability, provenance, drift detection, and financial evidence
 
 ## 2026-08-14 extension: public visibility for unverified IPOs
 

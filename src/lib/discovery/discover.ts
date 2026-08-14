@@ -6,8 +6,8 @@ import { validateIpoFacts } from "./validate";
 import type { IpoFacts, IpoListingCandidate } from "./types";
 import { fetchOfficialIpoEvidence } from "./official";
 import { decidePublication } from "./official/consensus";
+import { recordOfficialEvidenceHealth } from "./official/health";
 import { officialAutoPublishEnabled, persistOfficialDecision, persistOfficialIncident } from "./official/persistence";
-import { recordSourceFailure, recordSourceSuccess } from "@/lib/ingestion/source-operation";
 
 // Processing candidates a few at a time, rather than either fully
 // sequential (slow — this can be dozens of network round-trips on the
@@ -54,6 +54,7 @@ export type DiscoverySummary = {
   autoPublished: number;
   draftsCreated: number;
   quarantined: number;
+  rejectedWrongType: number;
   fetchFailed: { companyName: string; error: string }[];
   dbErrors: { companyName: string; error: string }[];
   queueCapped: boolean;
@@ -64,6 +65,7 @@ type CandidateOutcome =
   | { kind: "autoPublished" }
   | { kind: "draftCreated" }
   | { kind: "quarantined" }
+  | { kind: "rejectedWrongType" }
   | { kind: "fetchFailed"; companyName: string; error: string }
   | { kind: "dbError"; companyName: string; error: string };
 
@@ -118,20 +120,18 @@ async function processCandidate(candidate: IpoListingCandidate): Promise<Candida
   }
 
   const officialResult = await fetchOfficialIpoEvidence(facts.companyName);
-  if (officialResult.status === "UNAVAILABLE") {
-    await recordSourceFailure("nse:ipo-evidence", "NSE", "ipo-evidence", officialResult.reason);
-  } else {
-    await recordSourceSuccess("nse:ipo-evidence", "NSE", "ipo-evidence");
-  }
+  await recordOfficialEvidenceHealth(officialResult);
   const decision = decidePublication(facts, officialResult);
   if (decision.decision === "RETRY") {
     return { kind: "fetchFailed", companyName: candidate.companyName, error: decision.reasons.join("; ") };
   }
 
   const now = new Date();
-  const shouldPublish = decision.decision === "AUTO_PUBLISH" && officialAutoPublishEnabled();
-  const publicationState = decision.decision === "EXCEPTION" ? "QUARANTINED" : shouldPublish ? "PUBLISHED" : "DRAFT";
-  const officialFacts = decision.evidence!.facts;
+  const wrongIssueType = decision.issueType !== null && decision.issueType !== undefined && decision.issueType !== "IPO";
+  const shouldPublish = !wrongIssueType && decision.decision === "AUTO_PUBLISH" && officialAutoPublishEnabled();
+  const publicationState = wrongIssueType ? "REJECTED" : decision.decision === "EXCEPTION" ? "QUARANTINED" : shouldPublish ? "PUBLISHED" : "DRAFT";
+  const officialFacts = decision.evidence?.facts ?? facts;
+  const officialSources = [...new Set((decision.attempts ?? []).map((attempt) => attempt.source.toLowerCase()))];
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -160,11 +160,12 @@ async function processCandidate(candidate: IpoListingCandidate): Promise<Candida
           publicationState,
           autoPublished: shouldPublish,
           quarantineReason: decision.decision === "EXCEPTION" ? decision.reasons.join("; ") : null,
-          discoveredFrom: ["ipowatch", decision.evidence!.source.toLowerCase()],
+          officialIssueType: decision.issueType ?? null,
+          discoveredFrom: ["ipowatch", ...officialSources],
           discoveredAt: now,
           reviewedAt: shouldPublish ? now : null,
           officialLastAttemptAt: now,
-          officialLastSuccessAt: now,
+          officialLastSuccessAt: decision.evidence ? now : null,
         },
       });
       const filingDocuments = [
@@ -180,7 +181,7 @@ async function processCandidate(candidate: IpoListingCandidate): Promise<Candida
       ].filter((document): document is NonNullable<typeof document> => document !== null);
       if (filingDocuments.length > 0) await tx.document.createMany({ data: filingDocuments });
       await persistOfficialDecision(tx, ipo.id, decision);
-      if (decision.decision === "EXCEPTION") {
+      if (decision.decision === "EXCEPTION" && decision.evidence) {
         await persistOfficialIncident(tx, ipo.id, "CONFLICT", decision);
       }
       if (shouldPublish) {
@@ -190,7 +191,7 @@ async function processCandidate(candidate: IpoListingCandidate): Promise<Candida
             entityId: ipo.id,
             action: "auto-publish",
             performedBy: "discovery-pipeline",
-            note: "all material IPO fields matched the captured NSE evidence",
+            note: `all material IPO fields matched captured official evidence from ${(decision.coverage?.providersFound ?? [decision.evidence?.source ?? "official exchange"]).join(" + ")}`,
           },
         });
       }
@@ -199,7 +200,9 @@ async function processCandidate(candidate: IpoListingCandidate): Promise<Candida
     return { kind: "dbError", companyName: candidate.companyName, error: (e as Error).message };
   }
 
-  return shouldPublish ? { kind: "autoPublished" } : publicationState === "DRAFT" ? { kind: "draftCreated" } : { kind: "quarantined" };
+  return wrongIssueType
+    ? { kind: "rejectedWrongType" }
+    : shouldPublish ? { kind: "autoPublished" } : publicationState === "DRAFT" ? { kind: "draftCreated" } : { kind: "quarantined" };
 }
 
 /**
@@ -218,6 +221,7 @@ export async function runDiscovery(): Promise<DiscoverySummary> {
     autoPublished: 0,
     draftsCreated: 0,
     quarantined: 0,
+    rejectedWrongType: 0,
     fetchFailed: [],
     dbErrors: [],
     queueCapped: false,
@@ -298,6 +302,7 @@ export async function runDiscovery(): Promise<DiscoverySummary> {
     if (outcome.kind === "autoPublished") summary.autoPublished++;
     else if (outcome.kind === "draftCreated") summary.draftsCreated++;
     else if (outcome.kind === "quarantined") summary.quarantined++;
+    else if (outcome.kind === "rejectedWrongType") summary.rejectedWrongType++;
     else if (outcome.kind === "fetchFailed") summary.fetchFailed.push(outcome);
     else summary.dbErrors.push(outcome);
 

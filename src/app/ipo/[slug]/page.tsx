@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getBoardIpoBySlug } from "@/lib/board-data";
+import { getBoardIpoBySlug, type BoardIpo } from "@/lib/board-data";
 import {
   DocumentsPanel,
   FinancialsPanel,
@@ -110,6 +110,7 @@ export default async function IpoDetailPage({
 
         <nav className="ipo-detail-nav" aria-label="IPO detail sections">
           <a href="#overview">Overview</a>
+          <a href="#application-facts">Application facts</a>
           <a href="#subscription">Subscription</a>
           <a href="#gmp">GMP</a>
           <a href="#financials">Financials</a>
@@ -137,13 +138,25 @@ export default async function IpoDetailPage({
             <ProvenanceGroup title="IPO facts" sources={ipo.provenance.discovery} />
             <ProvenanceGroup title="GMP · unofficial" sources={ipo.provenance.gmp} />
             <ProvenanceGroup title="Subscription" sources={ipo.provenance.subscription ? [ipo.provenance.subscription] : []} />
-            <ProvenanceGroup title="Official filings" sources={ipo.documents.map((doc) => ({ name: doc.label, url: doc.url, note: doc.docType.toUpperCase() }))} />
+            <ProvenanceGroup title="Official filings" sources={[
+              ...ipo.documents.map((doc) => ({ name: doc.label, url: doc.url, note: doc.docType.toUpperCase() })),
+              ...(ipo.provenance.officialDocuments ?? []).map((doc) => ({ name: doc.label, url: doc.url, note: `${doc.source} · ${doc.kind}` })),
+            ]} />
           </div>
+          {(ipo.provenance.sourceChecks?.length ?? 0) > 0 && <div className="source-checks" aria-label="Latest official source checks">
+            {ipo.provenance.sourceChecks?.map((check) => <div className="source-check" key={`${check.source}-${check.checkedAt}`}>
+              <Badge tone={check.status === "FOUND" ? "positive" : check.status === "UNAVAILABLE" ? "warning" : "info"}>{check.source}</Badge>
+              <strong>{sourceCheckLabel(check.status)}</strong>
+              <small>{check.reason ?? `Checked ${new Date(check.checkedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}`}</small>
+              {check.url && <a href={check.url} target="_blank" rel="noopener noreferrer">Open source ↗</a>}
+            </div>)}
+          </div>}
           {ipo.provenance.officialFields.length > 0 && <div className="table-wrap provenance-fields">
             <table className="dates">
-              <thead><tr><th>IPO field</th><th>Official value</th><th>Verified from</th><th>Checked</th></tr></thead>
+              <thead><tr><th>IPO field</th><th>Status</th><th>Official value</th><th>Verified from</th><th>Checked</th></tr></thead>
               <tbody>{ipo.provenance.officialFields.map((field) => <tr key={`${field.field}-${field.url}`}>
                 <td>{fieldLabel(field.field)}</td>
+                <td><Badge tone={field.status === "MATCH" ? "positive" : field.status === "CONFLICT" ? "critical" : "warning"}>{field.status === "MATCH" ? "Matched" : field.status === "CONFLICT" ? "Conflict" : "Missing"}</Badge></td>
                 <td>{field.value}</td>
                 <td><a href={field.url} target="_blank" rel="noopener noreferrer">{field.source} ↗</a></td>
                 <td>{new Date(field.checkedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</td>
@@ -155,6 +168,9 @@ export default async function IpoDetailPage({
         <div className="ipo-detail-sections">
           <DetailSection id="overview" eyebrow="Decision essentials" title="Overview">
             <OverviewPanel ipo={ipo} now={now} watching={false} />
+          </DetailSection>
+          <DetailSection id="application-facts" eyebrow="Official exchange details" title="Application facts" tone="official">
+            <ApplicationFacts facts={ipo.provenance.applicationFacts ?? []} />
           </DetailSection>
           <DetailSection id="subscription" eyebrow="Demand" title="Subscription">
             <SubscriptionPanel ipo={ipo} />
@@ -181,6 +197,22 @@ export default async function IpoDetailPage({
 
 function fieldLabel(field: string): string {
   return field.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^\w/, (letter) => letter.toUpperCase());
+}
+
+function sourceCheckLabel(status: string): string {
+  if (status === "FOUND") return "Official record found";
+  if (status === "NOT_FOUND") return "No matching issue found";
+  if (status === "WRONG_ISSUE_TYPE") return "Different issue type";
+  return "Temporarily unavailable";
+}
+
+function ApplicationFacts({ facts }: { facts: NonNullable<BoardIpo["provenance"]["applicationFacts"]> }) {
+  if (!facts?.length) return <p className="official-empty">Official application details have not been captured yet. Core IPO terms above remain visible with their current verification state.</p>;
+  return <div className="application-facts-grid">{facts.map((fact) => <a href={fact.url} target="_blank" rel="noopener noreferrer" key={`${fact.label}-${fact.source}`}>
+    <span>{fact.label}</span>
+    <strong>{fact.value}</strong>
+    <small>{fact.source} ↗</small>
+  </a>)}</div>;
 }
 
 function ProvenanceGroup({ title, sources }: { title: string; sources: { name: string; url: string; note: string }[] }) {

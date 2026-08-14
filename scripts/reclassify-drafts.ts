@@ -85,7 +85,7 @@ async function main() {
     },
     orderBy: { discoveredAt: "desc" },
   });
-  console.error(`[dry-run] loaded ${drafts.length} candidate(s); loading NSE catalogue`);
+  console.error(`[dry-run] loaded ${drafts.length} candidate(s); checking enabled official sources`);
   const report: Array<{ company: string; decision: string; reasons: string[] }> = [];
 
   for (const [index, draft] of drafts.entries()) {
@@ -97,17 +97,25 @@ async function main() {
     }
     const official = await fetchOfficialIpoEvidence(draft.company.name);
     const decision = decidePublication(facts, official);
-    report.push({ company: draft.company.name, decision: decision.decision, reasons: decision.reasons });
+    const wrongIssueType = decision.issueType !== null && decision.issueType !== undefined && decision.issueType !== "IPO";
+    report.push({
+      company: draft.company.name,
+      decision: wrongIssueType ? `WRONG_TYPE_${decision.issueType}` : decision.decision,
+      reasons: decision.reasons,
+    });
 
     if (!apply) continue;
     await prisma.$transaction(async (tx) => {
       await tx.ipo.update({
         where: { id: draft.id },
         data: {
-          publicationState: decision.decision === "AUTO_PUBLISH" ? "PUBLISHED" : decision.decision === "EXCEPTION" ? "QUARANTINED" : "DRAFT",
-          autoPublished: decision.decision === "AUTO_PUBLISH",
-          reviewedAt: decision.decision === "AUTO_PUBLISH" ? new Date() : draft.reviewedAt,
-          quarantineReason: decision.decision === "EXCEPTION" ? decision.reasons.join("; ") : null,
+          publicationState: wrongIssueType
+            ? "REJECTED"
+            : decision.decision === "AUTO_PUBLISH" ? "PUBLISHED" : decision.decision === "EXCEPTION" ? "QUARANTINED" : "DRAFT",
+          autoPublished: !wrongIssueType && decision.decision === "AUTO_PUBLISH",
+          reviewedAt: !wrongIssueType && decision.decision === "AUTO_PUBLISH" ? new Date() : draft.reviewedAt,
+          officialIssueType: decision.issueType ?? undefined,
+          quarantineReason: !wrongIssueType && decision.decision === "EXCEPTION" ? decision.reasons.join("; ") : null,
           ...(decision.evidence ? {
             board: decision.evidence.facts.board!,
             priceBandLow: decision.evidence.facts.priceBandLow!,
@@ -122,14 +130,14 @@ async function main() {
         },
       });
       await persistOfficialDecision(tx, draft.id, decision);
-      if (decision.decision === "AUTO_PUBLISH") {
+      if (!wrongIssueType && decision.decision === "AUTO_PUBLISH") {
         await tx.correctionLog.create({
           data: {
             entityType: "Ipo",
             entityId: draft.id,
             action: "auto-publish",
             performedBy: "official-revalidation",
-            note: "all material IPO fields matched captured NSE evidence",
+            note: `all material IPO fields matched captured official evidence from ${(decision.coverage?.providersFound ?? []).join(" + ")}`,
           },
         });
       }

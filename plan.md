@@ -1,110 +1,174 @@
-# Implementation Plan: Show every complete IPO with an explicit verification state
+# Implementation Plan: multi-source official verification and richer IPO evidence
 
-Status: approved by the product owner on 2026-08-14; implementation in progress.
+Status: approved by product owner; implementation in progress.
 
 ## Approach
 
-Stop treating visibility and verification as the same thing. Complete IPO records will be visible regardless of verification outcome, while the UI, SEO, calendar, comparison and source panels consistently communicate whether the facts passed automated official verification.
+Add BSE as a first-class official exchange source beside NSE, keep SEBI as authoritative filing/document evidence, and replace the single generic “pending” explanation with a field-level verification report. Enrich the public IPO page from structured official exchange fields without weakening the existing rule for financial statements.
 
-No database migration is required. `publicationState` remains the authoritative trust state and `REJECTED` records remain private.
+The first release targets the largest verified uplift with bounded risk: BSE current/historical catalogue + issue detail, conservative entity aliases, issue-type classification, multi-provider evidence, and clear public provenance. It does not auto-extract financial statements from PDFs.
 
 ## Changes required
 
-### 1. Split public visibility from verified-only reads
+### 1. Introduce a provider registry and multi-source result
 
-**File:** `src/lib/board-data.ts`
+**Files:** `src/lib/discovery/official/index.ts`, `src/lib/discovery/official/types.ts`, new `src/lib/discovery/official/registry.ts`
 
-- Add a typed `verification` object to `BoardIpo`: `VERIFIED | PENDING | NEEDS_REVIEW`, label, explanation, checked time and safe issue summary.
-- Extract a pure mapper from `PublicationState` to the public trust contract.
-- Add `getPublicIpos()` for `PUBLISHED`, `DRAFT`, and `QUARANTINED` rows that have every required core IPO field.
-- Keep `getVerifiedIpos()` for `PUBLISHED` only.
-- Make slug lookup use the public set so pending/review pages are accessible.
-- Never expose `REJECTED` or incomplete records as term-complete IPO cards.
+- Replace the hard-coded NSE singleton with a registry of official providers.
+- Fetch catalogues once per ingestion run, bound detail concurrency, and return provider-specific `FOUND | NOT_FOUND | UNAVAILABLE | WRONG_ISSUE_TYPE` results.
+- Keep each provider's evidence independent so NSE/BSE disagreement is observable.
+- Extend source types to `NSE | BSE | SEBI` and preserve a direct source URL per field.
 
-### 2. Make trust state unavoidable on the board
+Key shape:
 
-**Files:** `src/components/IpoBoard.tsx`, `src/app/globals.css`, `src/lib/board-filter.ts`
+```ts
+type OfficialEvidenceBundle = {
+  evidence: OfficialIpoEvidence[];
+  attempts: Array<{
+    source: OfficialSourceName;
+    status: "FOUND" | "NOT_FOUND" | "UNAVAILABLE" | "WRONG_ISSUE_TYPE";
+    reason: string | null;
+  }>;
+};
+```
 
-- Add a compact verification filter: All data, Verified, Pending, Needs review.
-- Default to All data so current coverage is visible.
-- Add a trust badge and one-line explanation on every card.
-- Add a prominent explanation in the selected detail panel.
-- Add verification state as the first trust row in Compare.
-- Update empty states and counts so “pending” is not described as missing.
-- Keep lifecycle status visually separate from data verification status.
+### 2. Add a bounded BSE official adapter
 
-### 3. Add a clear trust banner and accurate metadata on detail pages
+**Files:** new `src/lib/discovery/official/bse-client.ts`, new `src/lib/discovery/official/bse.ts`
 
-**File:** `src/app/ipo/[slug]/page.tsx`
+- Read BSE current and historical public-issue catalogues used by BSE's own web application.
+- Deduplicate by `IPO_NO`, then match issuer names conservatively.
+- Reject/category-route anything whose official type is not `IPO`; specifically report FPO and InvIT rather than leaving them in a generic retry loop.
+- Fetch issue detail and normalize the ten existing material fields.
+- Capture non-material enrichments: symbol, issue type, issue-size shares, face value, market lot, minimum bid, maximum bid quantities, sponsor banks, UPI cut-off, price-band ad, official prospectus, corrigendum, anchor allocation and exchange notices.
+- Implement a fixed-host GET-only HTTPS client because BSE's response headers are malformed for normal Undici parsing. Enforce host, path allowlist, timeout, response-size ceiling, no redirects, identity encoding and JSON validation.
 
-- Render a full-width trust banner below the hero.
-- For pending records, state that values were collected but automated official verification is pending and may change.
-- For conflicts, state that source values disagree and the record requires review.
-- Preserve field-level source links and matched official fields.
-- Add `robots: noindex, follow` for pending/conflicting pages; verified pages remain indexable.
-- Avoid the phrase “verified” for sections that only contain unverified candidate facts.
+### 3. Expand NSE normalization to retain structured enrichment
 
-### 4. Carry verification state into calendars and preserve safe indexing
+**File:** `src/lib/discovery/official/nse.ts`
 
-**Files:** `src/app/page.tsx`, `src/app/sitemap.ts`, `src/app/api/calendar/route.ts`
+- Keep the existing publication-gate values unchanged.
+- Normalize already-present NSE fields for face value, issue type, symbol, minimum order, retail/employee limits, employee discount, market timings, sponsor banks, UPI cut-off and official document links.
+- Keep live bid/subscription data as a timestamped demand snapshot rather than mixing it with static facts.
+- Preserve the raw payload for audit and direct official field URLs.
 
-- Homepage, calendar, and single-IPO calendar downloads use `getPublicIpos()`.
-- Every calendar event includes a short trust suffix in the title—`[Verified]`, `[Verification pending]`, or `[Needs review]`—and a full warning plus source/detail link in the description.
-- Calendar events retain the verification state even after leaving IPOBharosa, so Google Calendar/Apple Calendar users are not shown an uncertain date without context.
-- Sitemap uses `getIndexableIpos()` and excludes pending/conflicting pages; those detail pages also return `noindex, follow` metadata.
-- Google Calendar subscription and `.ics` exports include every complete IPO, with verified/pending/review labels.
+### 4. Make consensus provider-aware and safe
 
-### 5. Tests and release verification
+**Files:** `src/lib/discovery/official/consensus.ts`, `src/lib/discovery/official/normalization.ts`
 
-**Files:** board-data/filter/calendar/metadata tests and smoke tooling as appropriate
+- Compare candidate-to-provider and provider-to-provider field values.
+- Auto-publish when at least one complete official exchange record matches and no second found provider contradicts it.
+- Route any NSE/BSE disagreement or real candidate conflict to one deduplicated incident.
+- Add conservative whitespace normalization and an explicit registrar alias table for verified legal renames. No fuzzy matching.
+- Permit BSE official prospectus URLs in the RHP/Prospectus evidence guard.
+- Return a verification coverage summary: matched/missing/conflicting material fields and providers checked.
 
-- Unit-test publication-to-trust mapping and verify that rejected/incomplete IPOs stay private.
-- Test verification filtering and mixed-state comparison labels.
-- Test all three calendar trust labels and verify pending/conflicting descriptions warn that dates may change.
-- Test that sitemap remains verified-only.
-- Run lint, full tests, TypeScript/Production build and preview smoke.
-- Verify on preview at 360/390/768/1024/1440 widths.
-- Merge, deploy, and confirm Production shows all complete records with accurate verified/pending/review counts.
+### 5. Persist normalized evidence and source-attempt reasons
 
-### 6. Make the official filing pipeline easier to understand
+**Files:** `prisma/schema.prisma`, additive migration, `src/lib/discovery/official/persistence.ts`
 
-**Files:** `src/lib/discovery/filing-catalogue.ts`, `src/components/IpoBoard.tsx`, `src/app/globals.css`
+- Add normalized evidence/enrichment JSON to `OfficialEvidenceCapture`; raw payload remains append-only.
+- Persist source attempts even when a provider returns not-found/unavailable so the UI/admin dashboard can explain coverage accurately.
+- Store issue type separately from IPO lifecycle status to prevent FPO/InvIT contamination.
+- Keep migrations additive and retain code-first/schema-later compatibility fallbacks on public reads.
 
-- Enrich each filing card with `Filing only`, `Verification pending`, or `Available on board` status based on its linked IPO.
-- Show DRHP/RHP and linked/awaiting summary counts above the grid.
-- Add a direct IPOBharosa detail link when a filing is linked to a visible IPO.
-- Retain SEBI source/document links, filing date, and concise explanation of what is still missing.
-- Keep one newest/highest-stage entry per issuer to avoid duplicate noise.
+### 6. Route existing Production records safely
 
-## Safety constraints
+**Files:** `src/lib/discovery/discover.ts`, `src/lib/discovery/revalidate.ts`, one read-only audit script under `scripts/`
 
-- Visibility does not change `publicationState` and does not auto-approve anything.
-- Pending/conflicting records cannot be described as application-ready or officially verified.
-- Calendar may include every complete IPO only when every exported event carries its verification label and warning.
-- Sitemap remains verified-only; pending/conflicting detail pages remain `noindex`.
-- Missing core facts are represented in the SEBI filing pipeline, not fabricated as zero-valued IPO terms.
-- `REJECTED` records never become public.
+- Record source health per provider instead of labelling every check NSE.
+- Use the multi-source bundle during discovery and retry revalidation.
+- Run a no-write report for all 33 current non-verified records before enabling writes.
+- Expected initial routing from current data:
+  - 10 exact BSE matches immediately eligible;
+  - up to 2 more eligible after deterministic registrar alias normalization;
+  - Dhaval Packaging stays needs-review for material price/lot conflict;
+  - 4 FPOs and 1 InvIT removed from the IPO verification queue and reported separately;
+  - remaining no-exchange matches stay provisional with explicit coverage reason.
+- Do not bulk-correct conflicts or category changes without the dry-run output being attached to the PR.
+
+### 7. Make verification understandable to users
+
+**Files:** `src/lib/public-verification.ts`, `src/lib/board-data.ts`, `src/app/ipo/[slug]/page.tsx`, `src/components/IpoBoard.tsx`, `src/app/globals.css`
+
+- Show a compact score such as `10/10 core facts matched` and provider chips (`NSE`, `BSE`, `SEBI filing`).
+- Show each material field with status, official value, direct source link and checked time.
+- Replace generic pending text with specific safe reasons:
+  - `Not listed in NSE; BSE check scheduled`
+  - `Official filing found; final exchange terms not published yet`
+  - `Price band and lot size differ across sources`
+- Expose real `officialLastAttemptAt` and `officialNextAttemptAt` through the public select with migration compatibility fallback.
+- Add a structured “Application facts” section for the richer official fields and “Official documents” links.
+- Keep all pending/review pages `noindex`; only fully verified IPOs remain sitemap/indexable.
+
+### 8. Improve subscription clarity from official demand data
+
+**Files:** new official-demand normalizer plus existing subscription ingestion/display modules
+
+- Prefer timestamped NSE/BSE official category-level demand when present.
+- Keep Sahi as secondary corroboration/fallback and label it accordingly.
+- Never mix demand/subscription with GMP; show exchange timestamp and source link.
+- Open a conflict incident if official exchange totals disagree beyond deterministic rounding rules.
+
+### 9. Preserve strict financial verification
+
+**Files:** no publication-policy change in `src/lib/financials/workflow.ts`; UI copy only if needed
+
+- Continue publishing financials only from immutable official documents with fiscal year, scope, unit and page citation.
+- Do not claim exchange issue metadata verifies revenue/PAT/EPS.
+- Show the official RHP/Prospectus link when financials are unavailable and say exactly what is pending.
+
+## Testing strategy
+
+- BSE client: host/path rejection, GET-only behavior, timeout, size limit, invalid JSON, malformed-header compatibility, current/historical caching.
+- BSE parser: mainboard, SME, fixed price, missing optional fields, minimum bid vs market lot, official links.
+- Issue-type guard: IPO accepted; FPO/InvIT/rights/buyback rejected or separately classified.
+- Provider consensus: NSE only, BSE only, both agree, both conflict, one unavailable, both unavailable.
+- Normalization: KFin spacing, Bigshare spacing, MUFG/Link Intime legal alias, unrelated near-match rejection.
+- Persistence: append-only captures, source attempts, field sources, normalized enrichment, incident deduplication.
+- Public contract: score, specific pending reasons, last/next check, source links, noindex rules.
+- Production dry-run fixture: exact expected counts and named conflict/category lists.
+- Full suite: Prisma validate/migration smoke, lint, unit/integration tests, Production build, preview smoke and responsive checks at 360/390/768/1024/1440.
+
+## Release sequence
+
+1. Create a fresh `codex/` branch from latest `origin/main`.
+2. Implement migration + adapters + tests behind `BSE_OFFICIAL_SOURCE_ENABLED=false`.
+3. Deploy preview, run fixtures and no-write Production audit.
+4. Review exact eligible/conflict/wrong-type lists in PR evidence.
+5. Merge additive migration and code.
+6. Apply Production migration.
+7. Enable BSE source with auto-publish still disabled; run one no-write/held cycle.
+8. Verify captures, source health and public labels.
+9. Enable existing official auto-publish gate and process a bounded batch.
+10. Confirm new verified/pending/review/type counts and watch alerts for one full ingestion cycle.
 
 ## Rollback
 
-Revert the application PR. No schema or Production data rollback is necessary because the change is read/render-only.
+- Disable `BSE_OFFICIAL_SOURCE_ENABLED`; registry returns to NSE-only without a code rollback.
+- New columns/tables are additive and can remain unused.
+- Revert UI/adapter commit if required. Append-only evidence remains audit history.
+- No rollback ever deletes evidence or silently reverts a human correction.
 
 ## Todo
 
-- [x] Add trust contract and pure state mapper.
-- [x] Add public-complete and verified-only query paths.
-- [x] Add verification filter, card badge and selected-detail warning.
-- [x] Add compare verification row.
-- [x] Add detail-page trust banner and noindex rules.
-- [x] Add trust-labelled events for every complete IPO to ICS/Google Calendar.
-- [x] Keep sitemap verified-only.
-- [x] Add pipeline stage/coverage counts and linked IPO navigation.
-- [x] Add unit/integration coverage.
-- [x] Run full local verification.
-- [ ] Create preview PR and perform responsive/trust-state checks.
-- [ ] Merge and deploy.
-- [ ] Verify exact Production counts and public rendering.
+- [DONE] Create fresh branch from latest main.
+- [DONE] Add BSE bounded transport and fixtures.
+- [DONE] Add BSE catalogue/detail adapter.
+- [DONE] Expand NSE enrichment normalization.
+- [DONE] Implement source registry and provider-aware consensus.
+- [DONE] Add conservative legal-alias normalization.
+- [DONE] Add additive evidence/source-attempt migration.
+- [DONE] Update discovery/revalidation/source health.
+- [DONE] Add issue-type routing and audit report.
+- [DONE] Add field-level verification and richer official facts UI.
+- [DONE] Add official demand normalization.
+- [DONE] Add unit/integration tests and run all local quality gates.
+- [ ] Confirm the clean-database migration smoke in CI (local Docker daemon was unavailable).
+- [DONE] Run no-write Production audit and attach exact evidence.
+- [ ] Create preview PR and verify responsive behavior.
+- [ ] Merge, migrate, feature-flag enable and monitor one full cycle.
 
 ## Open questions
 
-None. The requested behavior and pipeline enhancement map cleanly to existing database states without weakening verification.
+None required for implementation. The safety defaults are: one complete official exchange source can verify an IPO; any official-source conflict fails closed; SEBI filing-only evidence does not verify final terms; non-IPO issue types do not count as IPOs.

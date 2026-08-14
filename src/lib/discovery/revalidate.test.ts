@@ -140,4 +140,18 @@ describe("automatic official revalidation", () => {
     expect(mocks.fetchEvidence).not.toHaveBeenCalled();
     expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ publicationState: "QUARANTINED" }) }));
   });
+
+  it("removes an officially classified FPO from the IPO queue", async () => {
+    mocks.fetchEvidence.mockResolvedValue({
+      evidence: [],
+      attempts: [{ source: "BSE", status: "WRONG_ISSUE_TYPE", reason: "BSE classifies this as FPO, not IPO", issueType: "FPO", sourceUrl: "https://api.bseindia.com/detail" }],
+    });
+
+    const result = await revalidateOldestCandidate();
+
+    expect(result.outcome).toBe("WRONG_TYPE");
+    expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ publicationState: "REJECTED", officialIssueType: "FPO" }),
+    }));
+  });
 });

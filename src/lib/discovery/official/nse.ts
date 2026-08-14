@@ -1,5 +1,5 @@
-import { issuerNamesMatch, normalizeIssuerName, parseIndianDate, parseInteger, parsePriceBand, splitManagers } from "./normalization";
-import type { OfficialEvidenceResult, OfficialIpoEvidence, OfficialIpoSource } from "./types";
+import { extractHttpsUrl, issuerNamesMatch, normalizeIssuerName, parseDecimal, parseIndianDate, parseInteger, parsePriceBand, splitManagers } from "./normalization";
+import type { OfficialDemandSnapshot, OfficialDocument, OfficialEvidenceResult, OfficialIpoEnrichment, OfficialIpoEvidence, OfficialIpoSource } from "./types";
 import { withTransientRetries } from "@/lib/ingestion/source-operation";
 
 const CATALOGUE_URL = "https://www.nseindia.com/api/all-upcoming-issues?category=ipo";
@@ -41,6 +41,11 @@ type NseDetail = {
   issueInfo?: {
     dataList?: Array<{ title?: string | null; value?: string | null }>;
   };
+  bidDetails?: Array<{
+    category?: string | null;
+    noOfTime?: string | number | null;
+    srNo?: string | null;
+  }>;
 };
 
 function cleanValue(value: string | null | undefined): string | null {
@@ -54,6 +59,39 @@ function detailMap(detail: NseDetail): Map<string, string> {
       .filter((row): row is { title: string; value?: string | null } => Boolean(row.title))
       .map((row) => [row.title.trim().toLowerCase(), cleanValue(row.value) ?? ""]),
   );
+}
+
+function documentKind(title: string): OfficialDocument["kind"] {
+  if (/red herring prospectus/i.test(title)) return "RHP";
+  if (/prospectus/i.test(title)) return "PROSPECTUS";
+  if (/price band/i.test(title)) return "PRICE_BAND";
+  if (/corrigendum|addendum/i.test(title)) return "CORRIGENDUM";
+  if (/anchor/i.test(title)) return "ANCHOR";
+  return "OTHER";
+}
+
+function officialDocuments(values: Map<string, string>): OfficialDocument[] {
+  const documents: OfficialDocument[] = [];
+  for (const [title, value] of values) {
+    const url = extractHttpsUrl(value);
+    if (!url || documents.some((document) => document.url === url)) continue;
+    if (!/prospectus|ratio|basis|anchor|bidding center|application form|security parameter|corrigendum|addendum/i.test(title)) continue;
+    documents.push({ label: title.replace(/^./, (letter) => letter.toUpperCase()), url, kind: documentKind(title) });
+  }
+  return documents;
+}
+
+function demandSnapshot(detail: NseDetail, sourceUrl: string, capturedAt: Date): OfficialDemandSnapshot | null {
+  const rows = detail.bidDetails ?? [];
+  const find = (pattern: RegExp, topLevel?: string) => rows.find((row) => pattern.test(row.category ?? "") && (!topLevel || row.srNo === topLevel));
+  const multiple = (row: typeof rows[number] | undefined) => parseDecimal(row?.noOfTime);
+  const qibX = multiple(find(/^Qualified Institutional Buyers/i, "1"));
+  const niiX = multiple(find(/^Non Institutional Investors$/i, "2"));
+  const retailX = multiple(find(/^Retail Individual Investors/i, "3"));
+  const employeeX = multiple(find(/^Employees$/i, "4"));
+  const totalX = multiple(find(/^Total$/i));
+  if ([qibX, niiX, retailX, employeeX, totalX].every((value) => value === null)) return null;
+  return { qibX, niiX, retailX, employeeX, totalX, capturedAt, sourceUrl };
 }
 
 export function selectNseIssue(rows: NseCatalogueIssue[], companyName: string): NseCatalogueIssue | null {
@@ -113,11 +151,31 @@ export function parseNseDetail(issue: NseCatalogueIssue, detail: NseDetail, capt
     leadManagers: splitManagers(values.get("book running lead managers")),
     rhpUrl,
   };
+  const documents = officialDocuments(values);
+  const enrichment: OfficialIpoEnrichment = {
+    issueType: "IPO",
+    symbol: cleanValue(values.get("symbol") ?? issue.symbol),
+    faceValue: parseDecimal(values.get("face value")),
+    issueSizeShares: null,
+    marketLot: bidLot,
+    minimumBidQuantity: parseInteger(values.get("minimum order quantity")) ?? minimumApplicationQuantity,
+    maximumRetailAmount: parseInteger(values.get("maximum subscription amount for retail investor")),
+    maximumEmployeeAmount: parseInteger(values.get("maximum subscription amount for eligible employee")),
+    maximumQibQuantity: parseInteger(values.get("maximum bid quantity for qib investors")),
+    maximumNiiQuantity: parseInteger(values.get("maximum bid quantity for nib investors")),
+    employeeDiscount: cleanValue(values.get("discount")),
+    issueSizeDescription: cleanValue(values.get("issue size")),
+    marketTimings: cleanValue(values.get("ipo market timings")),
+    upiMandateCutoff: cleanValue(values.get("cut-off time for upi mandate confirmation")),
+    sponsorBanks: splitManagers(values.get("sponsor bank")),
+    documents,
+    demand: demandSnapshot(detail, sourceUrl, capturedAt),
+  };
   const fieldSources = Object.fromEntries(
     Object.entries(facts).filter(([, value]) => value !== null && (!Array.isArray(value) || value.length > 0)).map(([field]) => [field, sourceUrl]),
   );
 
-  return { source: "NSE", sourceUrl, capturedAt, facts, fieldSources, raw: { issue, detail } };
+  return { source: "NSE", sourceUrl, capturedAt, facts, enrichment, fieldSources, raw: { issue, detail } };
 }
 
 async function getJson<T>(url: string, fetchImpl: typeof fetch): Promise<T> {

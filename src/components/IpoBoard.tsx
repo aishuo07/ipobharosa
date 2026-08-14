@@ -760,9 +760,13 @@ export function VerificationNotice({ ipo }: { ipo: BoardIpo }) {
       <VerificationBadge ipo={ipo} />
       <div>
         <strong>{ipo.verification.label}</strong>
+        {ipo.verification.coverageLabel && <span className="verification-coverage">{ipo.verification.coverageLabel}</span>}
         <p>{ipo.verification.issueSummary ?? ipo.verification.description}</p>
+        {(ipo.verification.providers?.length ?? 0) > 0 && <div className="verification-providers" aria-label="Official providers checked">
+          {ipo.verification.providers?.map((provider) => <span key={provider}>{provider}</span>)}
+        </div>}
         {ipo.verification.checkedAt && <small>Last checked {new Date(ipo.verification.checkedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</small>}
-        {!ipo.verification.checkedAt && ipo.verification.nextCheckAt && <small>Next automated check scheduled</small>}
+        {ipo.verification.nextCheckAt && <small>Next check {new Date(ipo.verification.nextCheckAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</small>}
       </div>
     </div>
   );
@@ -1001,6 +1005,10 @@ export function SubscriptionPanel({ ipo }: { ipo: BoardIpo }) {
           <div className="sub-val">{c.value.toFixed(1)}x</div>
         </div>
       ))}
+      <p className="subscription-source">
+        Source: <a href={s.sourceUrl ?? ipo.provenance.subscription?.url ?? "#"} target="_blank" rel="noopener noreferrer">{s.sourceName ?? ipo.provenance.subscription?.name ?? "captured subscription table"} ↗</a>
+        {" · "}Captured {new Date(s.capturedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+      </p>
     </>
   );
 }

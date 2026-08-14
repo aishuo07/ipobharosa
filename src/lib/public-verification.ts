@@ -12,6 +12,8 @@ export type PublicVerification = {
   checkedAt: string | null;
   nextCheckAt: string | null;
   issueSummary: string | null;
+  coverageLabel?: string | null;
+  providers?: string[];
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -50,9 +52,21 @@ export function publicVerificationFromPublicationState(input: {
   officialLastAttemptAt: Date | null;
   officialNextAttemptAt: Date | null;
   quarantineReason: string | null;
+  officialContext?: {
+    matchedFields: number;
+    materialFields: number;
+    providers: string[];
+    attempts: { source: string; status: string; reason: string | null }[];
+  };
 }): PublicVerification | null {
   const checkedAt = input.officialLastAttemptAt?.toISOString() ?? null;
   const nextCheckAt = input.officialNextAttemptAt?.toISOString() ?? null;
+  const coverageLabel = input.officialContext?.materialFields
+    ? `${input.officialContext.matchedFields}/${input.officialContext.materialFields} core facts matched`
+    : null;
+  const providers = input.officialContext?.providers ?? [];
+  const unavailable = input.officialContext?.attempts.filter((attempt) => attempt.status === "UNAVAILABLE") ?? [];
+  const notFound = input.officialContext?.attempts.filter((attempt) => attempt.status === "NOT_FOUND") ?? [];
   if (input.publicationState === "REJECTED") return null;
   if (input.publicationState === "PUBLISHED") return {
     state: "VERIFIED",
@@ -63,16 +77,24 @@ export function publicVerificationFromPublicationState(input: {
     checkedAt,
     nextCheckAt: null,
     issueSummary: null,
+    coverageLabel,
+    providers,
   };
   if (input.publicationState === "DRAFT") return {
     state: "PENDING",
     label: "Automated verification pending",
     shortLabel: "Pending verification",
     calendarLabel: "Verification pending",
-    description: "These terms were collected from the linked public source but have not completed automated official verification. Values and dates may change.",
+    description: unavailable.length
+      ? `${humanList(unavailable.map((attempt) => attempt.source))} was temporarily unavailable. The evidence is retained and an automatic retry is scheduled.`
+      : notFound.length
+        ? `Final offer terms were not found in ${humanList(notFound.map((attempt) => attempt.source))} during the latest check. The record remains provisional and will be retried.`
+        : "These terms were collected from the linked public source but have not completed automated official verification. Values and dates may change.",
     checkedAt,
     nextCheckAt,
     issueSummary: null,
+    coverageLabel,
+    providers,
   };
   return {
     state: "NEEDS_REVIEW",
@@ -83,5 +105,7 @@ export function publicVerificationFromPublicationState(input: {
     checkedAt,
     nextCheckAt,
     issueSummary: safeIssueSummary(input.quarantineReason),
+    coverageLabel,
+    providers,
   };
 }
