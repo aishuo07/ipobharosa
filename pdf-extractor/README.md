@@ -3,7 +3,9 @@
 This local Python tool produces review candidates from an official RHP/DRHP.
 It is **not** a source of truth and it never publishes financial values.
 
-The worker locates explicit summary/restated profit-and-loss statements and
+The worker accepts direct PDFs and bounded official exchange ZIP archives,
+selects the requested RHP/DRHP deterministically, then locates explicit
+summary/restated profit-and-loss statements and
 submits only rows carrying an explicit unit, fiscal period, scope, page, and
 audit status. Unsupported layouts fail closed. Every submitted candidate is
 routed to the human review queue; extraction never publishes values.

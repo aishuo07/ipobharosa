@@ -13,9 +13,8 @@ from urllib.parse import urlparse
 import hashlib
 from io import BytesIO
 from pypdf import PdfReader
+from filing_archive import MAX_DOWNLOAD_BYTES, extract_filing_pdf_bytes
 from targeted import extract_from_pages
-
-MAX_PDF_BYTES = 100 * 1024 * 1024
 
 # Financial metric keywords
 METRICS_MAP = {
@@ -151,12 +150,12 @@ def extract_from_pdf(pdf_url: str, ipo_id: str, doc_type: str) -> Dict[str, Any]
                 "issues": [f"Failed to fetch PDF: HTTP {response.status_code}"]
             }
 
-        content_type = response.headers.get("content-type", "").lower()
-        pdf_bytes = response.content
-        if "pdf" not in content_type and not pdf_bytes.startswith(b"%PDF"):
-            raise ValueError(f"Source did not return a PDF (content-type: {content_type or 'unknown'})")
-        if len(pdf_bytes) > MAX_PDF_BYTES:
-            raise ValueError("PDF exceeds the 100 MB extraction limit")
+        download_bytes = response.content
+        if len(download_bytes) > MAX_DOWNLOAD_BYTES:
+            raise ValueError("Filing download exceeds the 50 MB safety limit")
+        pdf_bytes, archive_entry = extract_filing_pdf_bytes(download_bytes, doc_type)
+        if archive_entry:
+            print(f"📦 Selected {archive_entry} from official ZIP")
 
         document_sha256 = hashlib.sha256(pdf_bytes).hexdigest()
 
@@ -194,7 +193,8 @@ def extract_from_pdf(pdf_url: str, ipo_id: str, doc_type: str) -> Dict[str, Any]
                 "sourceUrl": pdf_url,
                 "documentType": doc_type,
                 "sha256": document_sha256,
-                "pageCount": page_count
+                "pageCount": page_count,
+                "archiveEntry": archive_entry
             }
         }
 
