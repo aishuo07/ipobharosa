@@ -77,3 +77,5 @@
 - Final mutually exclusive routing: 12 auto-publish eligible, 13 retry, 3 material conflicts, 4 FPO, 1 InvIT.
 - Fixed BSE extended-close-date parsing after the first audit exposed an appended extension note for G.V. Electricals; added a regression test and reran the full audit.
 - Attached the exact named evidence in `docs/reports/2026-08-14-official-source-no-write-audit.md`.
+- Vercel branch preview was Ready and repository smoke checks passed; board/detail pages had no horizontal overflow at 360, 390, 768, 1024 and 1440 px.
+- Preserved the official NSE `totalX` demand value. Public cards/panels now use that weighted exchange total when available and explicitly call the old arithmetic fallback a category average instead of mislabelling it as overall subscription.

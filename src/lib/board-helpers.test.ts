@@ -90,7 +90,7 @@ describe("subSummary", () => {
       subscription: { qibX: 3, niiX: 6, retailX: 3, employeeX: null, capturedAt: "2026-08-01T00:00:00.000Z" },
     });
     // (3 + 6 + 3) / 3 = 4.0
-    expect(subSummary(ipo)).toBe("3.0x retail · 4.0x overall");
+    expect(subSummary(ipo)).toBe("3.0x retail · 4.0x category avg");
   });
 
   it("averages over 4 categories when an employee quota is present", () => {
@@ -98,7 +98,14 @@ describe("subSummary", () => {
       subscription: { qibX: 4, niiX: 8, retailX: 4, employeeX: 4, capturedAt: "2026-08-01T00:00:00.000Z" },
     });
     // (4 + 8 + 4 + 4) / 4 = 5.0
-    expect(subSummary(ipo)).toBe("4.0x retail · 5.0x overall");
+    expect(subSummary(ipo)).toBe("4.0x retail · 5.0x category avg");
+  });
+
+  it("uses the exchange-reported total instead of averaging categories", () => {
+    const ipo = makeIpo({
+      subscription: { qibX: 4, niiX: 8, retailX: 4, employeeX: 4, totalX: 6.7, capturedAt: "2026-08-01T00:00:00.000Z" },
+    });
+    expect(subSummary(ipo)).toBe("4.0x retail · 6.7x overall");
   });
 });
 

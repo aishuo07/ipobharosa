@@ -981,14 +981,15 @@ export function SubscriptionPanel({ ipo }: { ipo: BoardIpo }) {
   if (s.employeeX !== null) {
     cats.push({ key: "employee", label: "Employee", title: "Employee reservation", value: s.employeeX, color: "var(--cat-employee)" });
   }
-  const overall = (cats.reduce((sum, c) => sum + c.value, 0) / cats.length).toFixed(1);
+  const categoryAverage = cats.reduce((sum, c) => sum + c.value, 0) / cats.length;
+  const overall = s.totalX ?? categoryAverage;
   const maxScale = 20;
 
   return (
     <>
       <div className="sub-overall">
-        <span className="big">{overall}x</span>
-        <span className="lbl">overall subscription</span>
+        <span className="big">{overall.toFixed(1)}x</span>
+        <span className="lbl">{s.totalX !== null && s.totalX !== undefined ? "overall subscription" : "category average · official total unavailable"}</span>
       </div>
       <p className="section-label">By category</p>
       {cats.map((c) => (

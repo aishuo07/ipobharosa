@@ -38,6 +38,7 @@ export type BoardIpo = {
     niiX: number | null;
     retailX: number | null;
     employeeX: number | null;
+    totalX?: number | null;
     capturedAt: string;
     sourceName?: string;
     sourceUrl?: string;
@@ -210,6 +211,7 @@ function enrichmentProjection(enrichment: unknown, source: string, sourceUrl: st
       niiX: toNumOrNull(demand.niiX),
       retailX: toNumOrNull(demand.retailX),
       employeeX: toNumOrNull(demand.employeeX),
+      totalX: toNumOrNull(demand.totalX),
       capturedAt,
       sourceName: `${source} official demand`,
       sourceUrl: demandSourceUrl,
@@ -226,6 +228,7 @@ function shapeIpo(ipo: IpoWithRelations, officialProvenance?: OfficialProvenance
     niiX: toNumOrNull(storedSubscription.niiX),
     retailX: toNumOrNull(storedSubscription.retailX),
     employeeX: toNumOrNull(storedSubscription.employeeX),
+    totalX: null,
     capturedAt: storedSubscription.capturedAt.toISOString(),
     sourceName: "Sahi (exchange-attributed)",
     sourceUrl: `https://www.sahi.com/blogs/${slug}-ipo-gmp-today`,

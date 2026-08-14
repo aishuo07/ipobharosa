@@ -166,7 +166,8 @@ type OfficialEvidenceBundle = {
 - [DONE] Add unit/integration tests and run all local quality gates.
 - [ ] Confirm the clean-database migration smoke in CI (local Docker daemon was unavailable).
 - [DONE] Run no-write Production audit and attach exact evidence.
-- [ ] Create preview PR and verify responsive behavior.
+- [DONE] Deploy the branch preview and verify board/detail responsiveness at 360/390/768/1024/1440 without horizontal overflow.
+- [ ] Create the PR (GitHub CLI/browser authentication required).
 - [ ] Merge, migrate, feature-flag enable and monitor one full cycle.
 
 ## Open questions
