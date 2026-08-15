@@ -74,10 +74,41 @@ export function formatMarketDate(
   return new Intl.DateTimeFormat("en-IN", { ...options, timeZone: MARKET_TIME_ZONE }).format(date);
 }
 
-function dayKeyOffset(dayKey: string, days: number): string {
+export function marketDayOffset(dayKey: string, days: number): string {
   const [year, month, day] = dayKey.split("-").map(Number);
   const shifted = new Date(Date.UTC(year, month - 1, day + days));
   return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}-${String(shifted.getUTCDate()).padStart(2, "0")}`;
+}
+
+export type DateLedgerGroup<T extends ChronologyIpo = ChronologyIpo> = {
+  dayKey: string;
+  events: IpoCalendarEvent<T>[];
+};
+
+/**
+ * Groups current and future lifecycle events for the homepage ledger.
+ * Today is deliberately returned even when it has no milestones so the first
+ * question on the page never disappears on quiet market days.
+ */
+export function dateLedgerGroups<T extends ChronologyIpo>(
+  ipos: readonly T[],
+  now: number,
+  horizonDays: number | null = 7,
+): DateLedgerGroup<T>[] {
+  const today = marketDayKey(now);
+  const lastDay = horizonDays === null ? null : marketDayOffset(today, horizonDays);
+  const eventsByDay = lifecycleEventsByDay(ipos);
+  const futureEvents = Object.values(eventsByDay)
+    .flat()
+    .filter((event) => event.dayKey >= today && (lastDay === null || event.dayKey <= lastDay));
+  const sorted = sortCalendarAgendaEvents(futureEvents, now);
+  const groups: DateLedgerGroup<T>[] = [{ dayKey: today, events: [] }];
+  for (const event of sorted) {
+    const existing = groups.find((group) => group.dayKey === event.dayKey);
+    if (existing) existing.events.push(event);
+    else groups.push({ dayKey: event.dayKey, events: [event] });
+  }
+  return groups;
 }
 
 export function sortCalendarAgendaEvents<T extends ChronologyIpo>(
@@ -99,7 +130,7 @@ export function calendarEventTimingLabel(event: IpoCalendarEvent, now: number): 
   const today = marketDayKey(now);
   const timing = event.dayKey === today
     ? "today"
-    : event.dayKey === dayKeyOffset(today, 1)
+    : event.dayKey === marketDayOffset(today, 1)
       ? "tomorrow"
       : `on ${formatMarketDate(event.iso, { day: "numeric", month: "short", year: "numeric" })}`;
   const label = event.type === "lists" ? "Listing" : event.type === "allotment" ? "Allotment" : event.label;

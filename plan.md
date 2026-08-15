@@ -429,6 +429,93 @@ security or public commitments.
 7. Resolve branch-protection enforcement through repository plan/visibility or
    maintain documented PR-only process control until then.
 
+## PR 9A — date-first homepage ledger
+
+### Approach
+
+Make the user's primary IPO question—“what happens today and next?”—the default
+root experience. Reuse the existing lifecycle event, verification and calendar
+contracts. Do not change the database, ingestion rules or public trust labels.
+
+### 1. Add a dedicated homepage date ledger
+
+**Files:** `src/components/IpoBoard.tsx`, `src/lib/ipo-chronology.ts`
+
+- Add a `dates` public view and make it the stable default.
+- Keep the existing Board/All IPOs views for deeper exploration and comparison.
+- Always render a Today group, even with zero milestones.
+- Follow Today with chronological future groups; default window is the next
+  seven market days with an All dates expansion.
+- Add a compact seven-day date strip so a user can jump directly to a date.
+- Reuse `lifecycleEventsByDay`, `marketDayKey`,
+  `sortCalendarAgendaEvents` and `calendarEventTimingLabel`; do not implement a
+  second date model.
+
+### 2. Render a decision-grade colour-coded table
+
+**File:** `src/components/IpoBoard.tsx`
+
+Desktop columns:
+
+1. lifecycle event and exact date;
+2. company, Mainboard/SME and verification state;
+3. price band, lot and minimum investment;
+4. GMP value/percentage, confidence and freshness, explicitly unofficial;
+5. retail/overall demand or honest pending state;
+6. contextual action: official allotment check when applicable, otherwise full
+   details and sources.
+
+Rows use the IPO's current public verification state; unverified values remain
+visible but clearly labelled. Allotment links use the existing registrar helper
+and never imply allotment is available when it is not.
+
+### 3. Apply the existing design system responsively
+
+**File:** `src/app/globals.css`
+
+- Today date band: green tint/border and stronger heading.
+- Opens: green/teal pill; Closes: amber; Allotment: violet/orange; Listing: blue.
+- Neutral white surfaces, restrained borders and tabular numbers.
+- Sticky desktop column header only when it does not obscure group labels.
+- Under 760 px, rows become two-column stacked records with the action full
+  width; no page-level horizontal overflow.
+- Maintain keyboard focus, table semantics on desktop, readable touch targets
+  and reduced-motion compatibility.
+
+### 4. Keep calendar sync secondary but reachable
+
+**File:** `src/components/IpoBoard.tsx`
+
+- Put “Add all dates” beside the date-ledger heading.
+- Keep the full month Calendar view for browsing/selecting a day.
+- Keep the verified live ICS URL and the explicit Google desktop fallback.
+
+### Test strategy
+
+- Pure tests for Today-empty, Today-with-events, next-seven-day filtering,
+  chronological grouping and event priority.
+- Component/build gates ensure the stable server timestamp remains required.
+- Preview browser checks at 390, 768, 1024 and 1440 px.
+- Verify: no hydration warning, no horizontal overflow, Today is first, all four
+  colours have text labels, Mainboard/SME filters work, allotment action goes to
+  the registrar, detail links work and calendar feed remains valid.
+- Production smoke only after PR checks and Preview evidence pass.
+
+### Rollback
+
+Revert PR 9A. No schema, source data, auth, ingestion or migration state changes
+are involved.
+
+### Todo
+
+- [x] Add date-window/grouping tests.
+- [x] Build the Today-first homepage ledger and seven-day strip.
+- [x] Build the semantic desktop table and mobile record layout.
+- [x] Wire filters, contextual allotment/detail actions and calendar controls.
+- [x] Run full test/lint/type/build gates.
+- [ ] Verify responsive Preview and hydration/accessibility behaviour.
+- [ ] Merge and smoke-test the exact Production commit.
+
 ## Standard gate for every PR
 
 ```bash

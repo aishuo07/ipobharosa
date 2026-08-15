@@ -408,3 +408,102 @@ release. The defensible order is:
 4. UI/admin design-system consolidation and responsive evidence;
 5. filing/financial coverage expansion with explicit source provenance;
 6. owner-operated domain, email, restore and real-user launch gates.
+
+## Homepage date-ledger research — 15 August 2026
+
+### Product intent
+
+The current root experience still makes the user choose between card browsing
+and a separate calendar. That is backwards for the dominant first question:
+“What is happening in IPOs today, and what happens next?” The homepage should
+answer that immediately and use company exploration as a secondary workflow.
+
+### Existing implementation
+
+- `src/components/IpoBoard.tsx:70-100` defaults `PublicView` to `board`, so the
+  card grid—not the date workflow—owns the first viewport.
+- `src/components/IpoBoard.tsx:260-292` exposes Board, Dates, All IPOs and IPO
+  Pipeline as peer tabs. The date experience therefore remains hidden until a
+  user discovers and selects it.
+- `src/components/IpoBoard.tsx:382-462` renders the card board first and the
+  `CalendarView` only as the final view branch.
+- `src/components/IpoBoard.tsx:1595-1780` already provides the correct data
+  primitives: India-market day keys, event sorting, today-first grouping,
+  Mainboard/SME filtering, per-IPO calendar links and verified/unverified row
+  details. The homepage change should reuse these contracts rather than create
+  another date interpretation.
+- `src/app/globals.css:534-542` already defines the green Today group treatment,
+  but the current agenda uses large catalogue cards rather than a scannable
+  market table.
+
+Current data supports the required row without a schema change: company,
+Mainboard/SME, verification state, event type/date, price band, lot/minimum,
+issue size, GMP freshness/confidence, demand, registrar and detail/source links
+are already present on `BoardIpo` or derived by existing helpers.
+
+### Current market patterns reviewed
+
+- IPO Watch leads with the live market state and a “week ahead” grouped by day.
+  It is excellent for answering what opens/closes next, but the weekly list is
+  too sparse for a decision surface: https://www.ipowatch.co/
+- GMP IPO Watch provides the familiar dense table—IPO, price band, bidding
+  period, listing date, GMP and action—with status/type filters. It scans well,
+  but does not organize the main table around lifecycle dates:
+  https://www.gmpipowatch.in/ipo-list/all
+- ForgeUp puts subscription, GMP, allotment status/date, listing date and docs
+  into one table. This covers the right jobs but becomes visually overloaded:
+  https://forgeup.in/ipo/
+- IPORise uses a simpler calendar table with Mainboard/SME segmentation, while
+  allotment checking is a separate control: https://www.iporise.com/calendar
+- Upstox prioritizes open/upcoming status, price range, issue size and apply
+  state in mobile-friendly cards. It is action-oriented but not source- or
+  verification-oriented: https://upstox.com/ipo/current-ipo/
+
+### Design conclusion
+
+The IPOBharosa homepage should combine IPO Watch's date-first hierarchy with a
+compact financial table, while retaining IPOBharosa's differentiation: visible
+verification, source transparency and honest GMP labelling.
+
+```text
+Today: 15 Aug · 0 milestones · 4 open IPOs
+[Today] [Next 7 days] [All dates]     [All | Mainboard | SME]
+
+TODAY — green date band
+No milestone today; markets are closed. 4 IPOs remain open.
+
+MON 17 AUG — 8 milestones
+Event       IPO / evidence       Price + lot      GMP       Demand      Action
+Closes      Credent · SME        ₹179–189         —         11.2x       Details
+Allotment   Behari · Mainboard   ₹271–285         ₹79       81.6x       Check
+Listing     Dhoot · Mainboard    ₹829–871         ₹259      0.2x        Details
+```
+
+Today is always present, including a calm empty state when there is no
+milestone. Upcoming sections follow chronologically. A green group tint marks
+the actual market day; event pills retain distinct meanings: open/green,
+close/amber, allotment/violet-orange and listing/blue. This avoids using green
+for every semantic state while still making “today” unmistakable.
+
+Desktop uses a semantic table. Mobile turns each table row into a compact
+stacked record under the same date band—no horizontal scroll. The full month
+calendar and subscription controls remain available as a secondary Calendar
+view, not the homepage itself.
+
+### Implemented contract
+
+- The root now defaults to a dedicated `dates` view while Explore, All IPOs,
+  Calendar and IPO Pipeline remain one click away.
+- `dateLedgerGroups` owns the Today-always-present and seven-day/all-upcoming
+  grouping contract; it reuses the same lifecycle event records as the ICS and
+  month calendar.
+- Desktop renders a semantic six-column table. At mobile widths the same table
+  elements become labelled stacked records, preserving content without page
+  overflow.
+- Each row exposes type, verification, price/lot/minimum, honest GMP freshness,
+  demand and a source/detail action. Allotment events use a known registrar's
+  public status portal when available and never fabricate an allotment result.
+- The implementation adds no schema, ingestion, auth or source-policy change.
+- Local validation passed 268 tests, lint, TypeScript and the optimized Next.js
+  build. Real-data responsive validation must run on Vercel Preview because the
+  sandboxed local web process cannot reach the hosted database.
