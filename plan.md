@@ -1,133 +1,435 @@
-# Implementation Plan: launch readiness and date-wise IPO experience
+# IPOBharosa production-closure plan
 
-Status: approved by the product owner on 15 August 2026; PR 1–3 are live, and the official ZIP filing path is under review in PR 4.
+Date: 15 August 2026
+Status: research and planning complete; implementation awaits explicit owner approval.
 
 ## Outcome
 
-Before a wider public launch, IPOBharosa will have:
+Move IPOBharosa from a credible private beta to a defensible Production beta by
+closing correctness, ingestion, monitoring, UI and operational gaps in small,
+reviewable releases. Existing public data will remain available throughout.
 
-- a clear date-wise **All IPOs** view with major issue details;
-- a calendar that exposes detailed events without overcrowding its month grid;
-- a two-hour ingestion cycle that is not blocked by slow filing PDFs;
-- honest, visible boundaries between complete IPOs, early filings and verification exceptions;
-- environment-driven canonical links and a testable email/domain readiness path;
-- Preview evidence and one real-user beta checklist before Production launch.
-
-No IPO or financial value will be invented to make the catalogue look fuller.
-
-## Release strategy
-
-Use small pull requests against `main`. Each PR gets CI, isolated Vercel Preview, responsive/browser verification and explicit review before merge.
+The release principle is:
 
 ```text
-PR 1  Date-wise All IPOs + calendar agenda
-PR 2  Ingestion critical-path repair
-PR 3  Domain/email/canonical readiness
-PR 4  Safe official ZIP filing acquisition and extraction
-Task  Real-user beta proof + launch checklist
-Track Financial document/extraction coverage
+truth before polish -> correct signals before dashboards -> Preview before merge
+-> exact commit in Production -> observe real scheduled cycles
 ```
 
-## PR 1 — Date-wise All IPOs catalogue and calendar agenda
+No release will invent a missing value, turn publication into proof of
+verification, or auto-publish financial extraction that lacks reliable source,
+page, period, unit and scope evidence.
 
-### 1. Extract reusable chronology helpers
+## Current baseline
 
-**New file:** `src/lib/ipo-chronology.ts`
+Already live:
 
-Add pure functions for:
+- date-wise All IPOs and calendar agenda;
+- filing/PDF work removed from the two-hour ingestion critical path;
+- site-origin/email readiness contract;
+- bounded official ZIP acquisition;
+- strict official financial-summary extraction;
+- 65 IPO records in the latest completed market cycle;
+- 100 official filing entries, 29 linked;
+- 47 GMP snapshots and 14 subscription snapshots in the latest run;
+- nine official financial candidates queued in the latest financial run;
+- zero known Production dependency vulnerabilities.
 
-- deterministic local-day keys;
-- lifecycle events for open, close, allotment and listing;
-- next meaningful lifecycle event;
-- chronological sorting and month/date grouping;
-- status/verification/board filter composition.
+Not yet Production-ready:
 
-Do not duplicate date logic inside React components.
+- server/client dates can disagree and cause hydration failure;
+- lifecycle can remain “Awaiting allotment” after listing;
+- a published row can appear Verified without matching source evidence;
+- provider non-coverage is counted like provider failure;
+- independent health monitoring and baseline browser headers are absent;
+- responsive/accessibility evidence is incomplete;
+- domain/email, restore rehearsal and real-user beta proof remain open.
 
-### 2. Add the All IPOs view
+## Release sequence
 
-**File:** `src/components/IpoBoard.tsx`
+Each release starts from current `origin/main`, gets its own `codex/` branch and
+PR, passes CI and Vercel Preview, and is merged only after its acceptance evidence
+is reviewed.
 
-Extend the top-level view contract to:
+```text
+PR 6  Public correctness, trust-contract and date-board hotfix
+PR 7  Ingestion outcome taxonomy and source-health accuracy
+PR 8  Independent Production health and browser hardening
+PR 9  Public/admin design-system and responsive-accessibility closure
+PR 10 Official-source and financial-coverage expansion
+Task  Domain, email, restore and real-user launch gates
+```
+
+## PR 6 — public correctness and trust-contract hotfix
+
+Priority: P0. Migration-free and data-preserving.
+
+### 1. One market-date contract
+
+**Files:** `src/lib/ipo-chronology.ts`, `src/lib/board-helpers.ts`, IPO detail and
+calendar consumers.
+
+- Add shared date-only parsing/formatting using `Asia/Kolkata` explicitly.
+- Make server and client consume the same helper.
+- Never derive a market date by formatting a UTC instant in the runtime's local
+  timezone.
+- Keep timestamps as timestamps; use market-day helpers only for IPO lifecycle
+  dates.
+
+### 2. Separate lifecycle from listing performance
+
+**Files:** `src/lib/ipo-status.ts`, `src/lib/board-helpers.ts`, chronology tests.
+
+- Derive lifecycle from open, close, allotment and listing dates.
+- Once listing day has passed, display `Listed` even when listing price is absent.
+- Display listing performance separately as `Listing price pending`.
+- Preserve the stored enum initially; this PR changes effective public state,
+  not historical rows.
+
+### 3. Make verification claims evidence-bound
+
+**Files:** `src/lib/public-verification.ts`, `src/lib/board-data.ts`, verification
+badges/copy.
+
+- Treat publication state and verification state independently.
+- `VERIFIED` requires the configured official core fields, provider/source URL
+  and successful comparison evidence.
+- A published row with missing evidence remains public but says
+  `Published · source evidence incomplete`.
+- A real conflict says `Needs review`; a temporary official-source problem says
+  `Verification retrying`.
+- Show checked fields and clickable official sources when available.
+- Do not downgrade already proven records whose current captures satisfy the
+  contract.
+
+### 4. Fix misleading or incorrect actions
+
+**Files:** `src/components/IpoBoard.tsx`, `src/app/ipo/[slug]/page.tsx`,
+`src/lib/calendar.ts`, login page.
+
+- Remove “open the filing below” when there is no filing link.
+- Make the detail-page Google Calendar action actually scope to that IPO, or
+  clearly relabel it as the All IPOs calendar.
+- Make the IPO brand/logo on login a Home link and retain a safe return path.
+
+### 4a. Make the calendar/date board operationally useful
+
+**Files:** `src/components/IpoBoard.tsx`, `src/lib/ipo-chronology.ts`,
+`src/app/globals.css`, calendar tests.
+
+- Put all events occurring today at the top of the calendar agenda.
+- Give Opens, Closes, Allotment and Listing distinct accessible colour/tone
+  treatments; colour is never the only signal because every card also carries
+  an explicit event label.
+- Use plain labels such as `Opens today`, `Closes today`, `Allotment today` and
+  `Listing today`.
+- Within today, use lifecycle order: close, allotment, listing, open; then order
+  IPOs consistently by company name.
+- Place future events below today in ascending date order with `Tomorrow` or the
+  exact market date.
+- When a calendar day is selected, show that day's complete agenda; otherwise
+  show a continuous Today + Upcoming date board rather than only a small slice
+  from the current month.
+- Calendar subscription/download failures must surface as real error responses;
+  the Google subscription URL and `.ics` route must use the same event set.
+
+### 5. Correct card interaction semantics
+
+**File:** `src/components/IpoBoard.tsx`.
+
+- Remove `role="button"` from the full card.
+- Use a normal detail link for card navigation.
+- Keep watchlist and compare as sibling controls with their own labels.
+- Preserve click/touch usability without nested interactive semantics.
+
+### Tests
+
+1. the same ISO value renders the same IPO date under UTC and Asia/Kolkata;
+2. server markup and client first render have identical date text;
+3. a closed IPO past listing day becomes Listed without listing price;
+4. absent listing price shows pending performance, not awaiting allotment;
+5. publication without source match is not Verified;
+6. official matched core fields with provider/source URL are Verified;
+7. conflict and retry states remain distinct;
+8. missing filing renders no dead filing CTA;
+9. per-IPO calendar link includes the IPO scope;
+10. cards contain no nested button-like composite.
+11. today events appear before all future events;
+12. today event labels and tones distinguish open/close/allotment/listing;
+13. future events sort chronologically across month boundaries;
+14. selected-day agenda contains every event on that day;
+15. calendar feed and visible date-board event contracts agree.
+
+### Preview acceptance
+
+- No hydration warnings on Board, All IPOs, Calendar or two detail pages.
+- Dates agree in the header, overview, calendar and ICS.
+- Verification wording agrees with the displayed evidence.
+- Keyboard-only detail, compare, watchlist and login/Home journeys work.
+- Check 360, 390, 768, 1024 and 1440 px.
+
+### Rollback
+
+Revert PR 6. It has no schema mutation and does not rewrite source evidence.
+
+## PR 7 — ingestion outcome taxonomy and source-health accuracy
+
+Priority: P0/P1. Prefer an additive code contract; use existing flexible run
+summary storage where possible.
+
+### 1. Typed adapter result
+
+**Files:** GMP/subscription adapter contracts, adapters, `src/lib/gmp/ingest.ts`,
+`src/lib/ingestion/run-cycle.ts`.
+
+Replace boolean/exception ambiguity with:
 
 ```ts
-type PublicView = "board" | "catalogue" | "pipeline" | "calendar";
+type ProviderResult<T> =
+  | { kind: "VALUE"; value: T }
+  | { kind: "NOT_YET_AVAILABLE"; reason: string }
+  | { kind: "NOT_COVERED"; reason: string }
+  | { kind: "ERROR"; category: "timeout" | "http" | "parse" | "unknown"; retryable: boolean };
 ```
 
-The new **All IPOs** view will:
+- 404/missing company page -> `NOT_COVERED` when provider semantics confirm it.
+- valid page without a published datum -> `NOT_YET_AVAILABLE`.
+- timeout/429/5xx -> retryable `ERROR`.
+- unexpected markup/invalid value -> parser `ERROR`.
+- Only `ERROR` affects outage/degraded source health.
 
-- show complete public IPO records only;
-- default to upcoming/current lifecycle dates first;
-- allow newest/oldest opening-date sorting;
-- reuse Mainboard/SME, lifecycle, verification and search filters;
-- show exact filtered result counts;
-- render a dense table-like layout on desktop and stacked summary cards on mobile;
-- link every row to the existing full detail page;
-- support watchlist and single-IPO calendar actions.
+### 2. Bound market-data windows
 
-Major fields:
+- GMP refresh: upcoming/open and a documented limited post-listing window.
+- Subscription refresh: open plus a limited close/finalisation window.
+- Do not retry historical listed IPOs forever because listing price is missing.
+- Keep an admin `Retry now` action for a specific IPO/provider exception.
+
+### 3. Make retries and cooldown real
+
+**File:** `src/lib/ingestion/source-operation.ts` and call sites.
+
+- Use `withTransientRetries` for timeouts, 429 and 5xx only.
+- Honour persisted `nextRetryAt` before a new attempt.
+- Apply longer cooldown to deterministic access/parse failures.
+- Reset consecutive failures after a successful probe.
+- Deduplicate the same open conflict/incident during cooldown.
+
+### 4. Honest source health and run summaries
+
+Per source and total, publish:
 
 ```text
-Company + sector        Board + status + verification
-Open -> close           Allotment + listing
-Price band              Lot + minimum investment
-Issue size              GMP + freshness/agreement
-Subscription summary    Evidence/detail/calendar actions
+value | not_yet_available | not_covered | error
+success rate among attempted covered records
+last success | consecutive errors | next retry | degraded reason
 ```
 
-Add a short boundary note: “All IPOs contains issues with complete public terms; early DRHP/RHP filings remain in IPO Pipeline.”
+- Set `degraded` from documented error-rate/consecutive-error thresholds.
+- Keep coverage gaps visible without paging them as outages.
+- Add exact IPO/provider/error category to admin drill-down.
 
-### 3. Upgrade Calendar without overloading cells
+### 5. Better alerts
 
-**Files:** `src/components/IpoBoard.tsx`, `src/app/globals.css`
+- Alert on complete outage, sustained high error rate, stale last-success and
+  published-data drift.
+- Do not alert merely because a provider does not cover an IPO.
+- Keep GitHub workflow failure as an independent signal until email is proven.
 
-- Add allotment to the visual legend and grid events.
-- Make dates selectable with button semantics and visible focus state.
-- Add a detailed agenda below the grid for the selected day; when no date is selected, show the month’s next events.
-- Agenda cards reuse the catalogue’s major-detail summary.
-- Preserve Google live subscription and ICS download.
-- Keep Mainboard/SME filter behaviour consistent across grid, agenda and calendar links.
-- On small screens, keep the grid scannable and put all details in the agenda, never inside tiny cells.
+### Tests
 
-### 4. Clarify public counts
+1. 404/missing company page is not provider outage;
+2. valid empty table is not-yet-available;
+3. timeout/5xx increments source errors and retries with bounds;
+4. parser regression degrades the provider after threshold;
+5. persisted cooldown prevents repeated calls;
+6. successful probe resets error streak;
+7. subscription stops after its finalisation window;
+8. old closed/listed IPO is not polled forever;
+9. duplicate conflict does not create a new incident each cycle;
+10. run summary totals reconcile exactly to attempted records.
 
-**File:** `src/components/IpoBoard.tsx`
+### Production acceptance
 
-Explain the three inventory levels in plain language:
+- Run no-write comparison against the latest 65-record inventory.
+- Review the before/after classification for every former “failure”.
+- Merge and observe three consecutive scheduled cycles.
+- No unexplained `ERROR`; value/no-data/non-coverage totals reconcile.
+- GMP and subscription snapshots continue advancing.
 
-- tracked issuers;
-- official filings;
-- complete IPO pages.
+### Rollback
 
-Do not present 105 tracked issuers as 105 ready-to-apply IPOs.
+Revert the adapter/result release. Preserve all existing observations and
+incidents; do not delete historical run summaries.
 
-### 5. Styling and accessibility
+## PR 8 — independent Production health and browser hardening
 
-**File:** `src/app/globals.css`
+Priority: P1. Migration-free.
 
-- Use the existing IPOBharosa design tokens and primitives.
-- Preserve the clean white/orange professional visual system.
-- Add restrained 120–180 ms hover/focus transitions and respect `prefers-reduced-motion`.
-- Use semantic headings, tables/lists, buttons and `aria-current`/`aria-selected` where appropriate.
-- Ensure touch targets are at least 44 px for primary mobile actions.
-- No horizontal overflow at 360, 390, 768, 1024 or 1440 CSS pixels.
+### 1. Health evaluator and endpoint
 
-### 6. Tests and Preview acceptance
+**New files:** `src/lib/health.ts`, `src/app/api/health/route.ts`.
 
-**New/updated files:** `src/lib/ipo-chronology.test.ts`, component/static-render tests where practical, calendar tests and smoke script.
+Read-only checks:
 
-Required cases:
+- application/build responds;
+- database can complete a bounded read;
+- public catalogue is non-empty;
+- latest completed successful market ingestion is no older than five hours;
+- latest filing/financial worker timestamp is exposed as informational health;
+- open critical published-data drift count is zero.
 
-1. local-date grouping is timezone-safe;
-2. open/close/allotment/listing events are ordered deterministically;
-3. Mainboard/SME, status and verification filters compose correctly;
-4. missing GMP/subscription produces explicit pending text, not zero or fabricated data;
-5. verified/pending/needs-review rows retain their labels and source links;
-6. calendar agenda and ICS use the same event contract;
-7. keyboard and mobile layouts work;
-8. existing Board, Compare, Pipeline and Detail remain unchanged.
+Return bounded JSON, `Cache-Control: no-store`, HTTP 200 for healthy and 503 for
+degraded. Never expose credentials, raw payloads or exception text.
 
-Run:
+### 2. Independent GitHub monitor
+
+**New file:** `.github/workflows/production-health.yml`.
+
+- Run every 15 minutes and on manual dispatch.
+- Retry only transient transport errors.
+- Require valid JSON and healthy state.
+- Five-minute timeout and read-only permissions.
+- Keep this independent of Resend.
+
+### 3. Baseline security headers
+
+**Files:** `src/lib/security-headers.ts`, `next.config.ts`.
+
+- disable `x-powered-by`;
+- `X-Content-Type-Options: nosniff`;
+- `X-Frame-Options: DENY`;
+- `Referrer-Policy: strict-origin-when-cross-origin`;
+- restricted camera, microphone, geolocation, payment and USB permissions.
+
+Do not enforce CSP in this PR. Capture a report-only CSP after Auth and Next.js
+asset requirements are measured.
+
+### 4. Fix smoke semantics
+
+Update `scripts/smoke-preview.mjs` to call `/api/health` instead of treating an
+admin extraction route as health. Continue to prove unauthenticated mutation and
+admin routes remain closed.
+
+### Tests and acceptance
+
+- recent, stale, missing and exact five-hour boundary cases;
+- DB exception returns bounded 503 without internal text;
+- empty catalogue is degraded;
+- required headers present once;
+- Preview root/detail/login/health all respond correctly;
+- Production monitor is green after exact-commit deployment.
+
+### Rollback
+
+Revert PR 8 or disable only the monitor if the threshold is noisy. No data or
+schema rollback is needed.
+
+## PR 9 — UI/design-system and admin workflow closure
+
+Priority: P1/P2. No feature rewrite.
+
+### 1. Public responsive pass
+
+- Use existing white/orange IPOBharosa tokens and components.
+- Make view/filter overflow obvious on small screens; no hidden controls.
+- Keep 44 px touch targets and visible keyboard focus.
+- Add consistent loading, empty, retrying and error states.
+- Keep verification badges paired with plain-language explanation and clickable
+  source links.
+- Ensure Board, All IPOs, Pipeline, Calendar and Detail use one spacing/type/
+  badge/button system.
+- Respect `prefers-reduced-motion`; transitions remain restrained (120–180 ms).
+
+### 2. Admin information architecture
+
+Separate operational work into:
+
+```text
+Needs attention | Retrying | Source health | Financial evidence | History
+```
+
+- Present exact reason and next action.
+- Add `Retry now` only for retryable items.
+- Group manual financial fields by source, period/scope, value/unit and decision.
+- Show source URL, page/table, extracted value, prior published value and
+  confidence together.
+- Keep actor and reason on approve/reject/correct operations.
+- Replace page-specific inline styles with shared design primitives.
+
+### 3. Browser/accessibility evidence
+
+- Fresh Preview at 360, 390, 768, 1024 and 1440 px.
+- No body overflow or clipped primary action.
+- Keyboard navigation and focus order.
+- Screen-reader names for filters, cards, calendar dates and admin controls.
+- Dark mode is not added unless designed and tested end to end.
+
+### Tests and rollback
+
+Add component/contract tests for state labels and semantic controls; record
+screenshots for the supported breakpoints. Revert PR 9 without touching data.
+
+## PR 10 — official-source and financial-coverage expansion
+
+Priority: P1 product coverage, but never at the expense of evidence quality.
+
+### 1. Filing linkage and coverage
+
+- Reconcile the 100-entry filing catalogue with the 29 currently linked records.
+- Match using issuer identity plus document type/date; never name-only blind
+  merges.
+- Show tracked issuers, official filings and complete IPO pages as separate
+  inventory levels.
+- Expose clickable exchange/SEBI/registrar source URLs and capture timestamp.
+
+### 2. Financial pipeline
+
+- Improve document acquisition/checksum coverage.
+- Locate the correct audited/consolidated/standalone financial tables.
+- Extract metric, value, unit, fiscal period, scope, audit/restatement status,
+  source URL, page and table label.
+- Reject ambiguous year/unit/scope automatically into the exception queue.
+- Publish only immutable accepted revisions; never overwrite history.
+- Alert if a newer official filing contradicts a published value.
+
+### 3. Coverage reporting
+
+Per IPO expose:
+
+```text
+official terms: verified | retrying | conflict | unavailable
+filing: linked | candidate | unavailable
+financials: published | awaiting evidence | review required | unsupported layout
+GMP/subscription: source coverage and freshness
+```
+
+### Acceptance
+
+- all automated links have deterministic evidence;
+- every remaining unlinked/deferred record has one exact reason;
+- financial candidates show full provenance;
+- no auto-published ambiguous financial value;
+- public UI never confuses missing data with zero.
+
+## Owner-operated launch tasks
+
+These are not hidden inside code PRs because they change external accounts,
+security or public commitments.
+
+1. Buy/select custom domain; connect Vercel and verify DNS.
+2. Verify Resend sender domain; set `SITE_URL`, `NEXT_PUBLIC_SITE_URL` and enable
+   user email only after delivery proof.
+3. Publish approved Terms, Privacy, Disclaimer and correction/support contact.
+4. Rotate Production DB credentials into sensitive environment variables during
+   a controlled window.
+5. Run and time a backup restore/read rehearsal.
+6. Complete one external user journey: Google login -> browse/filter -> detail
+   evidence -> watchlist -> calendar -> reminder -> remove/unsubscribe.
+7. Resolve branch-protection enforcement through repository plan/visibility or
+   maintain documented PR-only process control until then.
+
+## Standard gate for every PR
 
 ```bash
 npm run lint
@@ -137,156 +439,47 @@ npm run build
 npx prisma validate
 ```
 
-Preview verification:
+Also run affected Python tests, migration tests when schema changes exist,
+Preview smoke, responsive browser checks and exact-commit Production smoke.
+Never run a destructive Production migration. Any future additive migration gets
+a backup, no-write Preview validation and explicit migration approval.
 
-- 360, 390, 768, 1024 and 1440 px;
-- All/Mainboard/SME;
-- verified/pending/needs-review;
-- search and empty results;
-- calendar month navigation, date selection, Google subscription and ICS;
-- at least one full detail/source-link journey.
+## Final Production-beta exit criteria
 
-## PR 2 — Ingestion critical-path repair
-
-### 1. Remove filing downloads from the two-hour cycle
-
-**Files:** `src/lib/ingestion/run-cycle.ts`, `.github/workflows/ingest.yml`
-
-The two-hour cycle will finish after:
-
-```text
-prepare -> candidate verification -> published drift -> GMP -> subscription -> finalize
-```
-
-The independent worker discovers missing filing documents from persisted official URLs; the two-hour cycle never downloads their PDFs.
-
-### 2. Use the daily filing workflow as a bounded queue worker
-
-**Files:** `.github/workflows/financial-extraction.yml`, `pdf-extractor/worker.py`, financial document queue/service files.
-
-- Process a bounded number of documents per run.
-- Persist attempt count, last error and next retry.
-- Exponential backoff for timeouts/5xx.
-- Long cooldown for deterministic 403/406 until the source URL changes or an admin retries.
-- Never block GMP/subscription refresh.
-- Report `documents queued/downloaded/failed`, `candidates proposed` and `figures published`; a green job with zero candidates remains visible as zero output.
-
-### 3. Acceptance
-
-- Three consecutive scheduled two-hour cycles complete successfully.
-- One bad/slow filing host cannot fail the market-data cycle.
-- A failed document stays retryable and visible in admin.
-- GMP/subscription timestamps advance even when documents fail.
-- No duplicate documents, observations or published financials.
-
-## PR 3 — Domain, email and canonical readiness
-
-### Code work
-
-- Introduce one validated `SITE_URL`/`NEXT_PUBLIC_SITE_URL` contract.
-- Replace hard-coded Vercel URLs in calendar, reminders, alerts, robots and sitemap.
-- Add an email feature flag/readiness check that requires Resend key, verified sender configuration and site URL before exposing email sign-in/reminder claims.
-- Keep Google sign-in available.
-- Add a safe admin health summary showing configuration presence, never secret values.
-- Add Terms, Privacy, Disclaimer and Corrections/Support links/pages before broad launch.
-
-### Owner actions
-
-- Buy/select the custom domain.
-- Connect the domain in Vercel.
-- add and verify Resend DNS records;
-- provide the final sender address;
-- approve legal/disclaimer copy.
-
-### Acceptance
-
-- custom domain serves the reviewed Production commit;
-- canonical/sitemap/robots/calendar/email links use the custom domain;
-- Google login succeeds;
-- one real email reaches a consented inbox;
-- one watchlist reminder reaches the same user and duplicate delivery is prevented;
-- unsubscribe/remove-watchlist path works;
-- Vercel alias remains a redirect or safe fallback.
-
-## Financial-data track
-
-Financials remain visible only when backed by immutable approved records. The current workflow’s zero-candidate result is not launch-complete.
-
-Next measurable steps:
-
-1. improve official document acquisition and checksums;
-2. identify the exact financial statement pages/table headers;
-3. extract value, unit, fiscal year, scope and audit/restatement status;
-4. route ambiguous/OCR cases to review;
-5. publish only accepted immutable revisions with source URL and page number;
-6. expose coverage metrics: documents available, extraction attempted, candidates, approved figures and unsupported cases.
-
-Financial coverage can continue after private beta, but unverified figures must stay explicitly unavailable.
-
-### PR 4 — official exchange ZIP filings
-
-- Accept direct official PDFs and official exchange ZIP downloads.
-- Bound compressed download size, expanded PDF size, archive entry count and total expanded PDF bytes.
-- Select RHP versus DRHP deterministically and fail closed on ambiguous archives.
-- Hash the extracted PDF bytes so capture and Python extraction produce the same immutable evidence checksum.
-- Return source format, selected archive entry and a bounded failure reason from the worker.
-- Exercise the same rules in TypeScript and Python tests before Production execution.
-
-## Final launch checklist
-
-### Required before public beta
-
-- [x] PR 1 merged and Production-smoked.
-- [x] PR 2 merged; one Production cycle is green without filing work on the critical path.
-- [ ] Two additional ingestion cycles complete the three-cycle acceptance window.
-- [ ] Admin queue has no unexplained critical drift/conflict.
-- [ ] Terms, Privacy, Disclaimer and correction contact are public.
-- [ ] Google auth and one real watchlist/calendar journey pass.
-- [ ] Backup/restore procedure is rehearsed.
-
-### Required before marketing/wider launch
-
-- [ ] Custom domain active.
-- [ ] Resend domain verified and real reminder E2E passed.
-- [ ] Error/availability monitoring and alert ownership confirmed.
-- [ ] One external beta user completes the full journey without help.
-- [ ] Public inventory counts and verification-state explanations are understandable.
-- [ ] Financial coverage is reported honestly; no guessed values are exposed.
-
-## Rollback
-
-- PR 1 has no migration; revert it if navigation or rendering regresses.
-- PR 2 preserves the document queue and removes slow work from the hot path; revert the workflow change without deleting evidence rows.
-- PR 3 keeps the Vercel URL as fallback; domain cutover can be reversed through DNS/alias configuration.
-- All database changes must be additive, backed up and Preview-tested. No destructive migration belongs in these releases.
+- [ ] PR 6 correctness contract live; no hydration/date/verification contradiction.
+- [ ] PR 7 live; three scheduled cycles reconcile typed outcomes.
+- [ ] PR 8 live; health monitor and security headers verified.
+- [ ] PR 9 responsive/accessibility evidence accepted.
+- [ ] Critical official-source conflicts are zero or explicitly held.
+- [ ] Financial coverage is honest and fully provenance-linked.
+- [ ] Custom domain and real email/reminder journey pass.
+- [ ] Terms/Privacy/Disclaimer/correction path are public.
+- [ ] Restore rehearsal passes within the accepted recovery target.
+- [ ] One external beta user completes the journey without operator help.
 
 ## Todo
 
-- [x] Audit live UI and data boundaries.
-- [x] Audit recent ingestion and financial workflow evidence.
-- [x] Audit configured environment names and domain presence.
-- [x] Write this implementation plan.
-- [x] Obtain explicit approval for this plan.
-- [x] Implement PR 1 on a fresh branch from current `main`.
-- [x] Validate PR 1 in Preview and merge after review.
-- [x] Remove PDF downloads from the two-hour ingestion checkpoint path.
-- [x] Add the separately locked, bounded filing-evidence worker with persisted per-document backoff.
-- [x] Pass PR 2 local tests, typecheck, lint, build and Prisma validation.
-- [x] Validate PR 2 in Preview and merge.
-- [x] Run one Production ingestion cycle successfully (run 31836766490: complete in 1m55s; 47 GMP and 14 subscription snapshots written while legacy PDF failures were bypassed).
-- [ ] Observe two more scheduled ingestion cycles to complete the three-cycle acceptance window.
-- [x] Implement the validated site-origin contract, canonical metadata, configurable workflow URLs and honest user-email readiness gate.
-- [x] Add non-secret site/email readiness to the admin dashboard and pass PR 3 local gates (40 files, 255 tests).
-- [x] Validate PR 3 in Preview, merge and smoke Production (root, login, sitemap, robots and calendar all 200).
-- [x] Keep user email hidden until a custom domain and Resend sender are verified; Google remains available.
-- [x] Add bounded ZIP extraction to both the capture worker and Python financial extractor with matching selection rules.
-- [x] Validate and merge PR 4; Production capture run 31875606474 captured 1 document and safely deferred 29 source-access failures.
-- [x] Run financial extraction 31876030478: 10 official filings scanned, 0 submitted, 10 safely skipped; confirmed summary-layout detection is the blocker.
-- [x] Extend the strict parser for the observed official consolidated/standalone summary-table layout; validate six Revenue/PAT rows against the real Indo-MIM RHP before rerunning extraction.
-- [ ] Merge PR 5 and rerun the Production financial extraction workflow.
-- [ ] Complete owner DNS/domain actions and enable email only after verification.
-- [ ] Run the real-user beta checklist and record evidence.
+- [x] Audit current Production code, UI routes and trust boundaries.
+- [x] Audit current GMP, subscription, filing and financial run evidence.
+- [x] Audit auth, environment, domain, security and monitoring boundaries.
+- [x] Write the expanded production-closure plan.
+- [x] Obtain explicit approval for this expanded plan.
+- [x] Implement and validate PR 6. (Local/CI gates and desktop/mobile Preview browser evidence complete; Production smoke follows merge.)
+- [ ] Implement and observe PR 7 for three Production cycles.
+- [ ] Implement and validate PR 8.
+- [ ] Implement and validate PR 9.
+- [ ] Implement PR 10 in bounded coverage slices.
+- [ ] Complete owner-operated launch tasks and sign off Production beta.
 
 ## Approval checkpoint
 
-Implementation starts only after the product owner explicitly approves this written plan. Approval covers PR 1 and PR 2 code work. Domain purchase, DNS changes, public email enablement and legal publication remain separate explicit owner actions because they affect external systems and public commitments.
+No implementation starts until the owner explicitly says:
+
+```text
+Production closure plan approved
+```
+
+Approval authorises the code work in PRs 6–10 one bounded PR at a time. It does
+not authorise domain purchase, billing/plan changes, public email enablement,
+credential rotation, destructive database work or public legal publication;
+those remain explicit owner actions.

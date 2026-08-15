@@ -159,6 +159,19 @@ describe("effectiveStatus", () => {
     );
     expect(status).toBe("open");
   });
+
+  it("uses the listing date even when ingestion has not stored a listing price", () => {
+    const status = effectiveStatus(makeIpo({
+      status: "CLOSED",
+      listingDate: "2026-07-31T00:00:00.000Z",
+      listingPrice: null,
+    }), now);
+    expect(status).toBe("listed-pending");
+  });
+
+  it("does not classify a stored LISTED row without price as a loss", () => {
+    expect(effectiveStatus(makeIpo({ status: "LISTED", listingPrice: null }), now)).toBe("listed-pending");
+  });
 });
 
 describe("gmpPct", () => {
@@ -173,6 +186,7 @@ describe("badgeText", () => {
     expect(badgeText("closing-soon")).toBe("Closing soon");
     expect(badgeText("upcoming")).toBe("Upcoming");
     expect(badgeText("closed")).toBe("Awaiting allotment");
+    expect(badgeText("listed-pending")).toBe("Listed · Price pending");
     expect(badgeText("listed-gain")).toBe("Listed · Gain");
     expect(badgeText("listed-loss")).toBe("Listed · Loss");
   });

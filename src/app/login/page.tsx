@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { AuthError } from "next-auth";
 import { auth, signIn } from "@/auth";
 import { safeRedirectPath } from "@/lib/auth-redirect";
@@ -19,7 +20,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   return (
     <div className="wrap" style={{ maxWidth: 400, paddingTop: 64 }}>
-      <span className="wordmark">IPOBharosa</span>
+      <Link href="/" className="wordmark" aria-label="Go to IPOBharosa home">IPOBharosa</Link>
       <p className="section-label" style={{ marginTop: 24, marginBottom: 16 }}>
         {redirectTo.startsWith("/admin") ? "Sign in to continue to admin" : "Sign in to save a watchlist"}
       </p>
@@ -90,6 +91,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           ? "Watchlist reminders are available for saved IPOs."
           : "Email sign-in and reminders will appear after the sender domain is fully verified."}
       </p>
+      <Link href="/" className="legal-back" style={{ display: "inline-block", marginTop: 16 }}>← Back to IPO board</Link>
     </div>
   );
 }

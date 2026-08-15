@@ -43,9 +43,14 @@ describe("IPO calendar export", () => {
   });
 
   it("builds Google Calendar subscription links for all and board-specific feeds", () => {
+    expect(googleCalendarSubscriptionUrl()).toContain("https://calendar.google.com/calendar/render?cid=");
     expect(decodeURIComponent(googleCalendarSubscriptionUrl())).toContain(`${resolveSiteUrl()}/api/calendar`);
     expect(decodeURIComponent(googleCalendarSubscriptionUrl("MAINBOARD"))).toContain("/api/calendar?board=MAINBOARD");
     expect(decodeURIComponent(googleCalendarSubscriptionUrl("SME"))).toContain("/api/calendar?board=SME");
     expect(buildIcs([ipo], "SME")).toContain("X-WR-CALNAME:IPOBharosa — SME");
+  });
+
+  it("creates a truly IPO-scoped Google Calendar subscription", () => {
+    expect(decodeURIComponent(googleCalendarSubscriptionUrl("ALL", "test-ipo"))).toContain("/api/calendar?ipo=test-ipo");
   });
 });

@@ -284,6 +284,7 @@ a, button { font-family: inherit; }
 .card.status-closing-soon { border-left-color: var(--warning); }
 .card.status-closed { border-left-color: var(--ink-faint); }
 .card.status-upcoming { border-left-color: var(--cat-qib); }
+.card.status-listed-pending { border-left-color: var(--cat-qib); }
 .card.selected.status-open, .card.selected.status-closing-soon,
 .card.selected.status-closed, .card.selected.status-upcoming { border-left-color: var(--accent); }
 
@@ -298,6 +299,7 @@ a, button { font-family: inherit; }
 .badge-closed { background: var(--surface-2); color: var(--ink-muted); border: 1px solid var(--border); }
 .badge-listed-gain { background: var(--good-tint); color: var(--good); }
 .badge-listed-loss { background: var(--critical-tint); color: var(--critical); }
+.badge-listed-pending { background: color-mix(in srgb, var(--cat-qib) 12%, transparent); color: var(--cat-qib); }
 .board-tag {
   font-family: var(--font-mono); font-size: 10px; color: var(--ink-faint);
   border: 1px solid var(--border); padding: 2px 6px; border-radius: 2px;
@@ -336,6 +338,11 @@ a, button { font-family: inherit; }
 .verification-notice small { display: block; margin-top: 5px; color: var(--ink-faint); font: 10.5px/1.4 var(--font-mono); }
 
 .card-name { font-family: var(--font-display); font-size: 22px; line-height: 1.08; font-weight: 700; letter-spacing: -.015em; text-wrap: balance; }
+.card-name-link { color: inherit; text-decoration: none; }
+.card-name-link:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.card-quick-view { border: 0; background: transparent; color: var(--accent); padding: 8px 0 0; font: 700 12px/1.2 var(--font-body); cursor: pointer; text-align: left; }
+.card-quick-view:hover { text-decoration: underline; text-underline-offset: 3px; }
+.card-name-link:focus-visible, .card-quick-view:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 35%, transparent); outline-offset: 3px; }
 
 @media (max-width: 760px) {
   .board-intro { grid-template-columns: 1fr; gap: var(--space-5); padding-top: 38px; }
@@ -455,6 +462,9 @@ a, button { font-family: inherit; }
   max-width: 720px; margin: 10px auto 18px; color: var(--ink-muted);
   font-size: 12.5px; line-height: 1.55; text-align: center;
 }
+.calendar-sync-note p { margin: 0; }
+.calendar-sync-note p + p { margin-top: 6px; }
+.calendar-sync-note output:not(:empty) { display: block; margin-top: 7px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
 
 /* ---------- official filing pipeline ---------- */
 .filing-pipeline { margin-top: 4px; }
@@ -521,6 +531,15 @@ a, button { font-family: inherit; }
 .calendar-agenda-head { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .calendar-agenda-head h2 { margin: 0; font: 700 clamp(24px, 4vw, 36px)/1.08 var(--font-display); letter-spacing: -.025em; }
 .calendar-agenda-list { display: grid; gap: 14px; }
+.calendar-agenda-day { display: grid; gap: 12px; }
+.calendar-agenda-day + .calendar-agenda-day { margin-top: 12px; }
+.calendar-agenda-day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.calendar-agenda-day-head h3 { margin: 0; font: 700 20px/1.1 var(--font-display); }
+.calendar-agenda-day-head span { color: var(--ink-muted); font: 700 11px/1.2 var(--font-mono); text-transform: uppercase; letter-spacing: .06em; }
+.calendar-agenda-day.is-today { padding: 16px; border: 1px solid color-mix(in srgb, var(--good) 35%, var(--border)); border-radius: var(--radius-lg); background: var(--good-tint); }
+.calendar-agenda-day.is-today .calendar-agenda-day-head { border-color: color-mix(in srgb, var(--good) 30%, var(--border)); }
+.calendar-agenda-day.is-today .calendar-agenda-day-head h3 { color: var(--good); }
+.calendar-agenda-day-events { display: grid; gap: 14px; }
 .calendar-agenda-event { display: grid; grid-template-columns: 135px minmax(0, 1fr); gap: 14px; align-items: start; }
 .calendar-event-label { display: grid; gap: 5px; padding: 11px 12px; border-radius: var(--radius-md); color: white; }
 .calendar-event-label.cal-opens { background: var(--good); }

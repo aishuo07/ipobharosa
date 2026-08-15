@@ -1,5 +1,6 @@
 import type { BoardIpo } from "@/lib/board-data";
-import { boardFilterLabel, boardFilterQuery, type BoardFilter } from "@/lib/board-filter";
+import { boardFilterLabel, type BoardFilter } from "@/lib/board-filter";
+import { marketDayKey } from "@/lib/ipo-chronology";
 import { resolveSiteUrl } from "@/lib/site-url";
 
 const SITE_URL = resolveSiteUrl();
@@ -13,8 +14,7 @@ type CalendarEvent = {
 };
 
 function compactDate(iso: string): string {
-  const date = new Date(iso);
-  return `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, "0")}${String(date.getUTCDate()).padStart(2, "0")}`;
+  return marketDayKey(iso).replaceAll("-", "");
 }
 
 function nextDay(iso: string): string {
@@ -44,7 +44,7 @@ export function ipoCalendarEvents(ipo: BoardIpo): CalendarEvent[] {
   }] : []);
 }
 
-export function buildIcs(ipos: BoardIpo[], board: BoardFilter = "ALL"): string {
+export function buildIcs(ipos: BoardIpo[], board: BoardFilter = "ALL", calendarName?: string): string {
   const events = ipos.flatMap(ipoCalendarEvents).map((event) => [
     "BEGIN:VEVENT",
     `UID:${escapeIcs(event.uid)}`,
@@ -62,7 +62,7 @@ export function buildIcs(ipos: BoardIpo[], board: BoardFilter = "ALL"): string {
     "PRODID:-//IPOBharosa//IPO Calendar//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
-    `X-WR-CALNAME:${escapeIcs(`IPOBharosa — ${boardFilterLabel(board)}`)}`,
+    `X-WR-CALNAME:${escapeIcs(`IPOBharosa — ${calendarName ?? boardFilterLabel(board)}`)}`,
     "X-WR-CALDESC:Live IPO dates with source-backed details at IPOBharosa",
     ...events,
     "END:VCALENDAR",
@@ -70,7 +70,14 @@ export function buildIcs(ipos: BoardIpo[], board: BoardFilter = "ALL"): string {
   ].join("\r\n");
 }
 
-export function googleCalendarSubscriptionUrl(board: BoardFilter = "ALL"): string {
-  const feedUrl = `${SITE_URL}/api/calendar${boardFilterQuery(board)}`;
-  return `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(feedUrl)}`;
+export function calendarFeedUrl(board: BoardFilter = "ALL", ipoSlug?: string): string {
+  const params = new URLSearchParams();
+  if (board !== "ALL") params.set("board", board);
+  if (ipoSlug) params.set("ipo", ipoSlug);
+  const query = params.toString();
+  return `${SITE_URL}/api/calendar${query ? `?${query}` : ""}`;
+}
+
+export function googleCalendarSubscriptionUrl(board: BoardFilter = "ALL", ipoSlug?: string): string {
+  return `https://calendar.google.com/calendar/render?cid=${encodeURIComponent(calendarFeedUrl(board, ipoSlug))}`;
 }

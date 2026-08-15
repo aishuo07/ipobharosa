@@ -68,7 +68,13 @@ export function publicVerificationFromPublicationState(input: {
   const unavailable = input.officialContext?.attempts.filter((attempt) => attempt.status === "UNAVAILABLE") ?? [];
   const notFound = input.officialContext?.attempts.filter((attempt) => attempt.status === "NOT_FOUND") ?? [];
   if (input.publicationState === "REJECTED") return null;
-  if (input.publicationState === "PUBLISHED") return {
+  const hasCompleteEvidence = Boolean(
+    input.officialContext
+    && input.officialContext.materialFields > 0
+    && input.officialContext.matchedFields >= input.officialContext.materialFields
+    && providers.length > 0,
+  );
+  if (input.publicationState === "PUBLISHED" && hasCompleteEvidence) return {
     state: "VERIFIED",
     label: "Automated verification passed",
     shortLabel: "Verified",
@@ -76,6 +82,18 @@ export function publicVerificationFromPublicationState(input: {
     description: "Core IPO terms matched an official exchange source. Source links and checked values are available below.",
     checkedAt,
     nextCheckAt: null,
+    issueSummary: null,
+    coverageLabel,
+    providers,
+  };
+  if (input.publicationState === "PUBLISHED") return {
+    state: "PENDING",
+    label: "Published · source evidence incomplete",
+    shortLabel: "Evidence incomplete",
+    calendarLabel: "Evidence incomplete",
+    description: "This IPO page is published, but the current record does not contain enough official field-level evidence to claim automated verification. Treat the terms as provisional while evidence is recovered.",
+    checkedAt,
+    nextCheckAt,
     issueSummary: null,
     coverageLabel,
     providers,

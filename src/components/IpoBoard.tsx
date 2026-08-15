@@ -15,12 +15,15 @@ import {
   type VerificationFilter,
 } from "@/lib/board-filter";
 import { Badge, SegmentedTabs, StatePanel, TabButton, TextInput } from "@/components/ui";
-import { googleCalendarSubscriptionUrl } from "@/lib/calendar";
+import { calendarFeedUrl, googleCalendarSubscriptionUrl } from "@/lib/calendar";
 import {
+  calendarEventTimingLabel,
   chronologyAnchor,
+  formatMarketDate,
   groupIposByChronology,
   lifecycleEventsByDay,
   marketDayKey,
+  sortCalendarAgendaEvents,
   type CatalogueSort,
   type IpoCalendarEvent,
 } from "@/lib/ipo-chronology";
@@ -31,6 +34,7 @@ import {
   effectiveStatus,
   fmtCr,
   fmtDate,
+  fmtDateTime,
   fmtDateShort,
   fmtINR,
   gmpPct,
@@ -100,6 +104,10 @@ export default function IpoBoard({
   const trackedIssuerCount = useMemo(
     () => new Set([...ipos.map((ipo) => ipo.companyName.toLowerCase()), ...filings.map((entry) => entry.companyName.toLowerCase())]).size,
     [ipos, filings],
+  );
+  const todayEventCount = useMemo(
+    () => lifecycleEventsByDay(ipos)[marketDayKey(now)]?.length ?? 0,
+    [ipos, now],
   );
 
   async function toggleWatch(ipoId: string) {
@@ -262,6 +270,13 @@ export default function IpoBoard({
           </TabButton>
           <TabButton
             type="button"
+            active={view === "calendar"}
+            onClick={() => changeView("calendar")}
+          >
+            Dates <span className="n">{todayEventCount} today</span>
+          </TabButton>
+          <TabButton
+            type="button"
             active={view === "catalogue"}
             onClick={() => changeView("catalogue")}
           >
@@ -276,13 +291,6 @@ export default function IpoBoard({
               IPO Pipeline <span className="n">{filings.length}</span>
             </TabButton>
           )}
-          <TabButton
-            type="button"
-            active={view === "calendar"}
-            onClick={() => changeView("calendar")}
-          >
-            Calendar
-          </TabButton>
         </SegmentedTabs>
         {(view === "board" || view === "catalogue" || view === "calendar") && (
           <SegmentedTabs label="IPO type">
@@ -718,7 +726,7 @@ function Card({
     );
   } else if (ipo.status === "UPCOMING") {
     footRight = `Opens ${fmtDateShort(ipo.openDate)}`;
-  } else if (ipo.status === "CLOSED") {
+  } else if (es === "closed") {
     footRight = `Allotment ${fmtDateShort(ipo.allotmentDate)}`;
   } else {
     footRight = `Listed ${fmtDateShort(ipo.listingDate)}`;
@@ -726,7 +734,7 @@ function Card({
 
   const gainPct = listingGainPct(ipo);
   const gmpBlock =
-    ipo.status === "LISTED" && gainPct !== null ? (
+    es.startsWith("listed-") && gainPct !== null ? (
       <span className={"gmp-value " + (gainPct >= 0 ? "up" : "down")}>
         {gainPct >= 0 ? "+" : ""}
         {gainPct.toFixed(1)}% on debut
@@ -743,7 +751,7 @@ function Card({
     );
 
   const gmpLabel =
-    ipo.status === "LISTED" ? (
+    es.startsWith("listed-") ? (
       "Listing gain"
     ) : (
       <abbr title="Grey Market Premium — unofficial, unregulated dealer-street pricing. Not exchange-verified.">
@@ -752,18 +760,7 @@ function Card({
     );
 
   return (
-    <div
-      className={"card status-" + es + (selected ? " selected" : "")}
-      role="button"
-      tabIndex={0}
-      onClick={onSelect}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onSelect();
-        }
-      }}
-    >
+    <article className={"card status-" + es + (selected ? " selected" : "")}>
       <div className="card-top">
         <span className={"badge badge-" + es}>{badgeText(es)}</span>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -773,10 +770,7 @@ function Card({
             className="card-watch-btn"
             aria-label={watching ? "Remove from watchlist" : "Add to watchlist"}
             aria-pressed={watching}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleWatch();
-            }}
+            onClick={onToggleWatch}
           >
             {watching ? "★" : "☆"}
           </button>
@@ -787,7 +781,7 @@ function Card({
         <span>{ipo.verification.issueSummary ?? ipo.verification.description}</span>
       </div>
       <div>
-        <div className="card-name">{ipo.companyName}</div>
+        <a className="card-name card-name-link" href={`/ipo/${ipo.slug}`}>{ipo.companyName}</a>
         <div className="card-sector">{ipo.sector}</div>
       </div>
       <div className="card-stats">
@@ -826,7 +820,6 @@ function Card({
       </div>
       <label
         className={"card-compare" + (compareDisabled ? " disabled" : "")}
-        onClick={(e) => e.stopPropagation()}
         title={compareDisabled ? "Compare up to 3 IPOs at a time" : undefined}
       >
         <input
@@ -837,7 +830,10 @@ function Card({
         />
         Compare
       </label>
-    </div>
+      <button type="button" className="card-quick-view" onClick={onSelect} aria-expanded={selected}>
+        {selected ? "Close quick view" : "Quick view"}
+      </button>
+    </article>
   );
 }
 
@@ -936,8 +932,8 @@ export function VerificationNotice({ ipo }: { ipo: BoardIpo }) {
         {(ipo.verification.providers?.length ?? 0) > 0 && <div className="verification-providers" aria-label="Official providers checked">
           {ipo.verification.providers?.map((provider) => <span key={provider}>{provider}</span>)}
         </div>}
-        {ipo.verification.checkedAt && <small>Last checked {new Date(ipo.verification.checkedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</small>}
-        {ipo.verification.nextCheckAt && <small>Next check {new Date(ipo.verification.nextCheckAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</small>}
+        {ipo.verification.checkedAt && <small>Last checked {fmtDateTime(ipo.verification.checkedAt)}</small>}
+        {ipo.verification.nextCheckAt && <small>Next check {fmtDateTime(ipo.verification.nextCheckAt)}</small>}
       </div>
     </div>
   );
@@ -1179,7 +1175,7 @@ export function SubscriptionPanel({ ipo }: { ipo: BoardIpo }) {
       ))}
       <p className="subscription-source">
         Source: <a href={s.sourceUrl ?? ipo.provenance.subscription?.url ?? "#"} target="_blank" rel="noopener noreferrer">{s.sourceName ?? ipo.provenance.subscription?.name ?? "captured subscription table"} ↗</a>
-        {" · "}Captured {new Date(s.capturedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+        {" · "}Captured {fmtDateTime(s.capturedAt)}
       </p>
     </>
   );
@@ -1270,11 +1266,8 @@ function GmpTrendChart({ points }: { points: { value: number; capturedAt: string
             fill={i === pts.length - 1 ? "var(--accent)" : "var(--surface-2)"}
             stroke="var(--accent)"
             strokeWidth={1}
-          >
-            <title>
-              {fmtDateShort(points[i].capturedAt)} — ₹{p[2]}
-            </title>
-          </circle>
+            aria-label={`${fmtDateShort(points[i].capturedAt)} — ₹${p[2]}`}
+          />
         ))}
         <text
           x={last[0]}
@@ -1400,7 +1393,9 @@ export function FinancialsPanel({ ipo }: { ipo: BoardIpo }) {
     return (
       <>
         <StatePanel title="Financial figures are being verified">
-          We have not published revenue, profit or balance-sheet figures without page-level filing evidence. Open the official filing below while verification is pending.
+          {filings.length > 0
+            ? "We have not published revenue, profit or balance-sheet figures without page-level filing evidence. Open the official filing below while verification is pending."
+            : "We have not published revenue, profit or balance-sheet figures without page-level filing evidence. An official filing link has not been captured yet."}
         </StatePanel>
         {filings.length > 0 && <div className="doc-list" style={{ marginTop: 12 }}>
           {filings.map((document) => <a key={document.url} className="doc-row" href={document.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
@@ -1433,7 +1428,7 @@ export function FinancialsPanel({ ipo }: { ipo: BoardIpo }) {
             <span className="doc-copy">
               <span className="doc-name">{year.fiscalYear} · {source.metrics.map((metric) => metric.replace("_", " ")).join(", ")}</span>
               <span className="doc-source">
-                Reviewed {new Date(source.verificationDate).toLocaleDateString("en-IN")}
+                Reviewed {fmtDate(source.verificationDate)}
                 {source.pageNumber ? ` · page ${source.pageNumber}` : ""}
               </span>
             </span>
@@ -1614,6 +1609,7 @@ function CalendarView({
 }) {
   const eventsByDay = useMemo(() => lifecycleEventsByDay(ipos), [ipos]);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
 
   const year = month.getFullYear();
   const m = month.getMonth();
@@ -1622,17 +1618,31 @@ function CalendarView({
   const todayKey = marketDayKey(now);
   const monthPrefix = `${year}-${String(m + 1).padStart(2, "0")}`;
   const activeSelectedDay = selectedDay?.startsWith(monthPrefix) ? selectedDay : null;
-  const monthEvents = useMemo(
-    () => Object.entries(eventsByDay)
-      .filter(([dayKey]) => dayKey.startsWith(monthPrefix))
-      .flatMap(([, events]) => events)
-      .sort((a, b) => a.timestamp - b.timestamp || a.ipo.companyName.localeCompare(b.ipo.companyName)),
-    [eventsByDay, monthPrefix],
-  );
-  const agendaEvents = activeSelectedDay
-    ? eventsByDay[activeSelectedDay] ?? []
-    : monthEvents.filter((event) => event.dayKey >= todayKey).slice(0, 12);
-  const fallbackAgendaEvents = activeSelectedDay || agendaEvents.length > 0 ? agendaEvents : monthEvents.slice(-12);
+  const agendaEvents = useMemo(() => {
+    const events = activeSelectedDay
+      ? eventsByDay[activeSelectedDay] ?? []
+      : Object.values(eventsByDay).flat().filter((event) => event.dayKey >= todayKey);
+    return sortCalendarAgendaEvents(events, now);
+  }, [activeSelectedDay, eventsByDay, now, todayKey]);
+  const agendaGroups = useMemo(() => {
+    const groups: { dayKey: string; events: IpoCalendarEvent<BoardIpo>[] }[] = [];
+    for (const event of agendaEvents) {
+      const current = groups.at(-1);
+      if (current?.dayKey === event.dayKey) current.events.push(event);
+      else groups.push({ dayKey: event.dayKey, events: [event] });
+    }
+    return groups;
+  }, [agendaEvents]);
+  const feedUrl = calendarFeedUrl(boardFilter);
+
+  async function copyCalendarFeed() {
+    try {
+      await navigator.clipboard.writeText(feedUrl);
+      setCopyStatus("copied");
+    } catch {
+      setCopyStatus("failed");
+    }
+  }
 
   const cells: (number | null)[] = [];
   for (let i = 0; i < firstWeekday; i++) cells.push(null);
@@ -1668,11 +1678,15 @@ function CalendarView({
         <a className="ui-button ui-button-secondary" href={`/api/calendar${boardFilterQuery(boardFilter)}`}>
           Download {boardFilterLabel(boardFilter)} dates (.ics)
         </a>
+        <button type="button" className="ui-button ui-button-secondary" onClick={copyCalendarFeed}>
+          Copy live calendar URL
+        </button>
       </div>
-      <p className="calendar-sync-note">
-        This is a live calendar subscription. New and changed dates update automatically on Google&apos;s refresh schedule.
-        Every event links back here for current details and sources.
-      </p>
+      <div className="calendar-sync-note">
+        <p>This is a live calendar subscription. New and changed dates update automatically on Google&apos;s refresh schedule. Every event links back here for current details and sources.</p>
+        <p>Google only allows adding a calendar URL from its desktop website. If the Google button does not add it automatically, use Other calendars → From URL and paste the copied link.</p>
+        <output aria-live="polite">{copyStatus === "copied" ? "Calendar URL copied." : copyStatus === "failed" ? `Copy failed. Use this URL: ${feedUrl}` : ""}</output>
+      </div>
       <div className="calendar-grid calendar-dow">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
           <div key={d}>{d}</div>
@@ -1720,24 +1734,45 @@ function CalendarView({
             <h2 id="calendar-agenda-title">
               {activeSelectedDay
                 ? new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" }).format(new Date(`${activeSelectedDay}T00:00:00+05:30`))
-                : `Next dates in ${monthLabel}`}
+                : "Today and upcoming IPO dates"}
             </h2>
+            {!activeSelectedDay && <p>Today&apos;s milestones appear first. Future opening, closing, allotment and listing dates follow chronologically.</p>}
           </div>
-          {activeSelectedDay && <button type="button" className="btn btn-ghost" onClick={() => setSelectedDay(null)}>Show next dates</button>}
+          {activeSelectedDay && <button type="button" className="btn btn-ghost" onClick={() => setSelectedDay(null)}>Show today + upcoming</button>}
         </div>
         <div className="calendar-agenda-list">
-          {fallbackAgendaEvents.map((event) => (
-            <div className="calendar-agenda-event" key={`${event.ipo.id}-${event.type}-${event.dayKey}`}>
-              <div className={`calendar-event-label cal-${event.type}`}>
-                <span>{event.label}</span>
-                <time dateTime={event.dayKey}>{fmtDate(event.iso)}</time>
-              </div>
-              <CatalogueRow ipo={event.ipo} now={now} event={event} />
-            </div>
-          ))}
-          {fallbackAgendaEvents.length === 0 && (
-            <StatePanel title={activeSelectedDay ? "No IPO milestones on this date" : "No upcoming milestones in this month"}>
-              Choose another date or month. Early filings without final dates remain in IPO Pipeline.
+          {agendaGroups.map((group) => {
+            const first = group.events[0];
+            const isToday = group.dayKey === todayKey;
+            const firstTiming = calendarEventTimingLabel(first, now);
+            const heading = isToday
+              ? "Today"
+              : firstTiming.endsWith("tomorrow")
+                ? "Tomorrow"
+                : formatMarketDate(first.iso, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+            return (
+              <section className={`calendar-agenda-day${isToday ? " is-today" : ""}`} key={group.dayKey} aria-labelledby={`agenda-${group.dayKey}`}>
+                <div className="calendar-agenda-day-head">
+                  <h3 id={`agenda-${group.dayKey}`}>{heading}</h3>
+                  <span>{group.events.length} milestone{group.events.length === 1 ? "" : "s"}</span>
+                </div>
+                <div className="calendar-agenda-day-events">
+                  {group.events.map((event) => (
+                    <div className={`calendar-agenda-event${isToday ? " is-today" : ""}`} key={`${event.ipo.id}-${event.type}-${event.dayKey}`}>
+                      <div className={`calendar-event-label cal-${event.type}`}>
+                        <span>{calendarEventTimingLabel(event, now)}</span>
+                        <time dateTime={event.dayKey}>{fmtDate(event.iso)}</time>
+                      </div>
+                      <CatalogueRow ipo={event.ipo} now={now} event={event} />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+          {agendaEvents.length === 0 && (
+            <StatePanel title={activeSelectedDay ? "No IPO milestones on this date" : "No upcoming IPO milestones"}>
+              Choose another date. Early filings without final dates remain in IPO Pipeline.
             </StatePanel>
           )}
         </div>

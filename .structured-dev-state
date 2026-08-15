@@ -1,3 +1,3 @@
 phase=implementation
-checkpoint=pr5-local-gates-passed-preview-next
-feature=official-financial-summary-layouts
+checkpoint=pr6-public-correctness-calendar-ready-to-merge
+feature=production-readiness-ui-ingestion-operations

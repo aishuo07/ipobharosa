@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   if (slug && selected.length === 0) return new Response("IPO not found", { status: 404 });
   const filename = slug ?? (board === "ALL" ? "ipobharosa-ipo-dates" : `ipobharosa-${board.toLowerCase()}-ipo-dates`);
 
-  return new Response(buildIcs(selected, board), {
+  return new Response(buildIcs(selected, board, slug ? selected[0]?.companyName : undefined), {
     headers: {
       "Content-Type": "text/calendar; charset=utf-8",
       "Content-Disposition": `inline; filename="${filename}.ics"`,

@@ -2,16 +2,35 @@ import { describe, expect, it } from "vitest";
 import { publicVerificationFromPublicationState } from "./public-verification";
 
 describe("public IPO verification state", () => {
-  it("maps published records to a clear verified contract", () => {
+  it("maps published records with complete official evidence to a verified contract", () => {
     expect(publicVerificationFromPublicationState({
       publicationState: "PUBLISHED",
       officialLastAttemptAt: new Date("2026-08-14T10:00:00Z"),
       officialNextAttemptAt: null,
       quarantineReason: null,
+      officialContext: {
+        matchedFields: 10,
+        materialFields: 10,
+        providers: ["NSE"],
+        attempts: [],
+      },
     })).toMatchObject({
       state: "VERIFIED",
       label: "Automated verification passed",
       checkedAt: "2026-08-14T10:00:00.000Z",
+    });
+  });
+
+  it("does not call a published record verified when its source evidence is missing", () => {
+    expect(publicVerificationFromPublicationState({
+      publicationState: "PUBLISHED",
+      officialLastAttemptAt: null,
+      officialNextAttemptAt: null,
+      quarantineReason: null,
+    })).toMatchObject({
+      state: "PENDING",
+      label: "Published · source evidence incomplete",
+      shortLabel: "Evidence incomplete",
     });
   });
 
