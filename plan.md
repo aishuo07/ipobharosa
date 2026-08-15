@@ -280,7 +280,10 @@ Financial coverage can continue after private beta, but unverified figures must 
 - [x] Validate PR 3 in Preview, merge and smoke Production (root, login, sitemap, robots and calendar all 200).
 - [x] Keep user email hidden until a custom domain and Resend sender are verified; Google remains available.
 - [x] Add bounded ZIP extraction to both the capture worker and Python financial extractor with matching selection rules.
-- [ ] Validate and merge PR 4, then rerun filing capture and financial extraction in Production.
+- [x] Validate and merge PR 4; Production capture run 31875606474 captured 1 document and safely deferred 29 source-access failures.
+- [x] Run financial extraction 31876030478: 10 official filings scanned, 0 submitted, 10 safely skipped; confirmed summary-layout detection is the blocker.
+- [x] Extend the strict parser for the observed official consolidated/standalone summary-table layout; validate six Revenue/PAT rows against the real Indo-MIM RHP before rerunning extraction.
+- [ ] Merge PR 5 and rerun the Production financial extraction workflow.
 - [ ] Complete owner DNS/domain actions and enable email only after verification.
 - [ ] Run the real-user beta checklist and record evidence.
 

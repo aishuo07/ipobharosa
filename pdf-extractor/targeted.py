@@ -14,8 +14,8 @@ class Period:
 
 
 UNIT_PATTERNS = (
-    (re.compile(r"(?:₹|rs\.?)\s*(?:in\s+)?million", re.I), "Mn"),
-    (re.compile(r"(?:₹|rs\.?)\s*(?:in\s+)?crore", re.I), "Cr"),
+    (re.compile(r"(?:in\s+)?(?:₹|rs\.?)\s*(?:in\s+)?(?:million|millions|mn)\b", re.I), "Mn"),
+    (re.compile(r"(?:in\s+)?(?:₹|rs\.?)\s*(?:in\s+)?(?:crore|crores|cr)\b", re.I), "Cr"),
 )
 
 PERIOD_PATTERN = re.compile(
@@ -23,9 +23,19 @@ PERIOD_PATTERN = re.compile(
     re.I,
 )
 
+GENERIC_PERIOD_PATTERN = re.compile(
+    r"(?:as\s+(?:at|of)|(?:for\s+the\s+)?(?:financial\s+)?(?:year|period)\s+ended)\s+march\s+31,?\s*(\d{4})",
+    re.I,
+)
+
+SUMMARY_SCOPE_PATTERN = re.compile(r"summary\s+of\s+restated\s+(consolidated|standalone)\b", re.I)
+
 METRIC_ROWS = (
     ("REVENUE", re.compile(r"(?:^|\n)\s*(?:I\.?\s*)?Revenue from operations\s+([^\n]+)", re.I)),
-    ("PAT", re.compile(r"(?:^|\n)\s*(?:VIII\.?\s*)?Profit/\(loss\) for the (?:year|period)[^\n]*?\s+([^\n]+)", re.I)),
+    ("PAT", re.compile(
+        r"(?:^|\n)\s*(?:VIII\.?\s*)?(?:Restated\s+)?Profit(?:/\(loss\))?\s+(?:after tax|for the (?:year|period))[^\n]*?\s+([^\n]+)",
+        re.I,
+    )),
 )
 
 
@@ -37,10 +47,24 @@ def detect_unit(text: str) -> str | None:
 
 
 def extract_periods(text: str) -> list[Period]:
-    return [
+    explicit = [
         Period(fiscal_year=f"31 Mar {year}", scope=scope.title())
         for scope, year in PERIOD_PATTERN.findall(text)
     ]
+    if explicit:
+        return explicit
+    scope_match = SUMMARY_SCOPE_PATTERN.search(text)
+    if not scope_match:
+        return []
+    scope = scope_match.group(1).title()
+    seen: set[str] = set()
+    periods: list[Period] = []
+    for year in GENERIC_PERIOD_PATTERN.findall(text):
+        if year in seen:
+            continue
+        seen.add(year)
+        periods.append(Period(fiscal_year=f"31 Mar {year}", scope=scope))
+    return periods
 
 
 def parse_values(text: str) -> list[str | None]:

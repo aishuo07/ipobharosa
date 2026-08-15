@@ -14,6 +14,17 @@ VIII. Profit/(loss) for the year/period (VI-VII) 1,934.52 1,178.41 (0.09)
 Basic earning per share (₹) 18.31 13.70 (0.90)
 """
 
+INDO_MIM_SAMPLE = """
+SUMMARY OF RESTATED CONSOLIDATED STATEMENT OF PROFIT AND LOSS
+(in ₹ million)
+Particulars As at March 31, 2026 As at March 31, 2025 As at March 31, 2024
+Income
+Revenue from operations 41,929.85 33,295.77 28,703.95
+Other income 1,277.17 443.95 299.87
+Restated profit before tax 7,337.40 5,810.03 4,352.05
+Restated profit for the year 5,335.43 4,237.34 2,837.34
+"""
+
 
 class TargetedExtractionTests(unittest.TestCase):
     def test_detects_explicit_unit_and_period_scope(self):
@@ -39,6 +50,22 @@ class TargetedExtractionTests(unittest.TestCase):
 
     def test_does_not_parse_non_summary_mentions(self):
         self.assertEqual(extract_summary_page("Revenue from operations ₹10 million", 3), [])
+
+    def test_extracts_exchange_rhp_summary_layout_with_shared_scope(self):
+        rows = extract_summary_page(INDO_MIM_SAMPLE, 66)
+        self.assertEqual(len(rows), 6)
+        self.assertEqual(
+            [(row["metric"], row["fiscalYear"], row["scope"], row["rawValue"]) for row in rows],
+            [
+                ("REVENUE", "31 Mar 2026", "Consolidated", "₹41,929.85 Mn"),
+                ("REVENUE", "31 Mar 2025", "Consolidated", "₹33,295.77 Mn"),
+                ("REVENUE", "31 Mar 2024", "Consolidated", "₹28,703.95 Mn"),
+                ("PAT", "31 Mar 2026", "Consolidated", "₹5,335.43 Mn"),
+                ("PAT", "31 Mar 2025", "Consolidated", "₹4,237.34 Mn"),
+                ("PAT", "31 Mar 2024", "Consolidated", "₹2,837.34 Mn"),
+            ],
+        )
+        self.assertTrue(all(row["auditStatus"] == "Restated" and row["pageNumber"] == 66 for row in rows))
 
 
 if __name__ == "__main__":
