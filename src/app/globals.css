@@ -75,6 +75,7 @@
 }
 
 * { box-sizing: border-box; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 html, body { margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
 body {
@@ -454,6 +455,99 @@ a, button { font-family: inherit; }
   .catalogue-row { grid-template-columns: 1fr; gap: 14px; }
   .catalogue-dates, .catalogue-facts { grid-column: auto; grid-row: auto; }
   .catalogue-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* ---------- date-first market ledger ---------- */
+.date-ledger { display: grid; gap: 20px; }
+.date-ledger-hero {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 310px); gap: 28px; align-items: end;
+  padding: 24px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface);
+}
+.date-ledger-hero h2 { margin: 4px 0 8px; font: 700 clamp(27px, 4.5vw, 44px)/1.03 var(--font-display); letter-spacing: -.035em; }
+.date-ledger-hero p:last-child { max-width: 690px; margin: 0; color: var(--ink-muted); font-size: 14px; line-height: 1.6; }
+.date-ledger-summary { display: grid; gap: 7px; padding-left: 20px; border-left: 2px solid var(--good); }
+.date-ledger-summary strong { font: 700 17px/1.25 var(--font-display); }
+.date-ledger-summary span { color: var(--ink-muted); font: 650 11px/1.35 var(--font-mono); }
+.date-ledger-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.date-ledger-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.date-ledger-actions a { text-decoration: none; }
+.date-strip {
+  display: grid; grid-template-columns: repeat(7, minmax(92px, 1fr)); gap: 8px; max-width: 100%;
+}
+.date-strip-day {
+  display: grid; gap: 4px; min-width: 0; padding: 11px 12px; text-align: left; color: var(--ink);
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); cursor: pointer;
+  transition: transform var(--motion-fast) var(--ease-standard), border-color var(--motion-fast), background var(--motion-fast);
+}
+.date-strip-day:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+.date-strip-day span { color: var(--ink-muted); font: 700 10px/1.2 var(--font-mono); text-transform: uppercase; letter-spacing: .06em; }
+.date-strip-day strong { font-size: 14px; }
+.date-strip-day small { color: var(--ink-faint); font-size: 10.5px; }
+.date-strip-day.is-today { border-color: color-mix(in srgb, var(--good) 45%, var(--border)); background: var(--good-tint); }
+.date-strip-day.is-today span, .date-strip-day.is-today strong { color: var(--good); }
+.date-strip-day.is-selected { border-color: var(--trust); box-shadow: 0 0 0 1px var(--trust) inset; }
+.date-ledger-groups { display: grid; gap: 24px; }
+.date-ledger-group { min-width: 0; }
+.date-ledger-group.is-today { padding: 18px; border: 1px solid color-mix(in srgb, var(--good) 35%, var(--border)); border-radius: var(--radius-lg); background: var(--good-tint); }
+.date-ledger-group-head { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 10px; }
+.date-ledger-group-head span { color: var(--accent-strong); font: 700 10.5px/1.2 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+.date-ledger-group-head h3 { margin: 3px 0 0; font: 700 24px/1.08 var(--font-display); }
+.date-ledger-group-head > strong { color: var(--ink-muted); font: 700 10.5px/1.2 var(--font-mono); text-transform: uppercase; letter-spacing: .06em; }
+.date-ledger-group.is-today .date-ledger-group-head span,
+.date-ledger-group.is-today .date-ledger-group-head h3 { color: var(--good); }
+.date-ledger-empty { display: grid; gap: 4px; padding: 18px; border: 1px dashed color-mix(in srgb, var(--good) 35%, var(--border)); border-radius: var(--radius-md); background: color-mix(in srgb, var(--surface) 70%, transparent); }
+.date-ledger-empty span { color: var(--ink-muted); font-size: 13px; }
+.date-ledger-table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.date-ledger-table { width: 100%; min-width: 1020px; border-collapse: collapse; font-size: 12.5px; }
+.date-ledger-table :is(th, td) { padding: 13px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+.date-ledger-table th { color: var(--ink-faint); background: var(--surface-2); font: 700 9.5px/1.3 var(--font-mono); text-transform: uppercase; letter-spacing: .07em; }
+.date-ledger-table tbody tr:last-child td { border-bottom: 0; }
+.date-ledger-table tbody tr { transition: background var(--motion-fast); }
+.date-ledger-table tbody tr:hover { background: color-mix(in srgb, var(--surface-2) 75%, transparent); }
+.date-ledger-table td > strong, .date-ledger-table td > small { display: block; }
+.date-ledger-table td > strong { font: 650 12px/1.45 var(--font-mono); }
+.date-ledger-table td > small { margin-top: 4px; color: var(--ink-faint); font-size: 10.5px; line-height: 1.4; }
+.date-event-pill { display: inline-flex; min-width: 78px; justify-content: center; padding: 5px 8px; border-radius: 999px; color: white; font: 700 10px/1 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+.date-event-pill.cal-opens { background: var(--good); }
+.date-event-pill.cal-closes { background: var(--warning); }
+.date-event-pill.cal-allotment { background: var(--accent); }
+.date-event-pill.cal-lists { background: var(--cat-qib); }
+.date-ledger-company { min-width: 190px; }
+.date-ledger-company > a { color: var(--ink); font: 700 17px/1.12 var(--font-display); text-decoration: none; }
+.date-ledger-company > a:hover { color: var(--accent-strong); text-decoration: underline; text-underline-offset: 3px; }
+.date-ledger-company > div { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.date-ledger-gmp strong { color: var(--good); }
+.date-ledger-row-actions { display: grid; gap: 6px; min-width: 145px; }
+.date-ledger-row-actions .ui-button { min-height: 34px; padding-inline: 10px; font-size: 11.5px; text-decoration: none; }
+
+@media (max-width: 900px) {
+  .date-strip { overflow-x: auto; grid-template-columns: repeat(7, minmax(108px, 1fr)); padding-bottom: 4px; }
+}
+@media (max-width: 700px) {
+  .date-ledger-hero { grid-template-columns: 1fr; gap: 18px; padding: 18px; }
+  .date-ledger-summary { padding: 12px 0 0; border-left: 0; border-top: 2px solid var(--good); }
+  .date-ledger-toolbar, .date-ledger-actions { align-items: stretch; }
+  .date-ledger-actions { width: 100%; }
+  .date-ledger-actions .ui-button { flex: 1; }
+  .date-ledger-group.is-today { padding: 12px; }
+  .date-ledger-group-head { align-items: start; }
+  .date-ledger-table-wrap { overflow: visible; border: 0; background: transparent; }
+  .date-ledger-table { min-width: 0; }
+  .date-ledger-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .date-ledger-table, .date-ledger-table tbody, .date-ledger-table tr, .date-ledger-table td { display: block; width: 100%; }
+  .date-ledger-table tbody { display: grid; gap: 10px; }
+  .date-ledger-table tr { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-card); }
+  .date-ledger-table :is(td, tr:last-child td) { display: grid; grid-template-columns: 105px minmax(0, 1fr); gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .date-ledger-table td::before { content: attr(data-label); color: var(--ink-faint); font: 700 9.5px/1.4 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+  .date-ledger-table td:last-child { border-bottom: 0; }
+  .date-ledger-company { min-width: 0; }
+  .date-ledger-company > div { margin-top: 4px; }
+  .date-ledger-row-actions { min-width: 0; }
+  .date-ledger-row-actions .ui-button { width: 100%; }
+}
+@media (max-width: 430px) {
+  .date-ledger-table :is(td, tr:last-child td) { grid-template-columns: 1fr; gap: 5px; }
+  .date-ledger-table td::before { margin-bottom: 1px; }
 }
 
 /* ---------- calendar ---------- */

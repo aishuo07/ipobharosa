@@ -19,11 +19,13 @@ import { calendarFeedUrl, googleCalendarSubscriptionUrl } from "@/lib/calendar";
 import {
   calendarEventTimingLabel,
   chronologyAnchor,
+  dateLedgerGroups,
   formatMarketDate,
   groupIposByChronology,
   lifecycleEventsByDay,
   marketMonthAnchor,
   marketDayKey,
+  marketDayOffset,
   sortCalendarAgendaEvents,
   type CatalogueSort,
   type IpoCalendarEvent,
@@ -67,7 +69,7 @@ const DTABS: { key: DTab; label: string }[] = [
 ];
 
 type BoardUser = { email: string | null; name: string | null } | null;
-type PublicView = "board" | "catalogue" | "pipeline" | "calendar";
+type PublicView = "dates" | "board" | "catalogue" | "pipeline" | "calendar";
 
 export default function IpoBoard({
   ipos,
@@ -94,7 +96,7 @@ export default function IpoBoard({
   const [query, setQuery] = useState("");
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [showCompare, setShowCompare] = useState(false);
-  const [view, setView] = useState<PublicView>("board");
+  const [view, setView] = useState<PublicView>("dates");
   const [boardFilter, setBoardFilter] = useState<BoardFilter>("ALL");
   const [verificationFilter, setVerificationFilter] = useState<VerificationFilter>("ALL");
   const [calMonth, setCalMonth] = useState(() => marketMonthAnchor(initialNow));
@@ -263,17 +265,24 @@ export default function IpoBoard({
         <SegmentedTabs label="View">
           <TabButton
             type="button"
+            active={view === "dates"}
+            onClick={() => changeView("dates")}
+          >
+            Today & dates <span className="n">{todayEventCount} today</span>
+          </TabButton>
+          <TabButton
+            type="button"
             active={view === "board"}
             onClick={() => changeView("board")}
           >
-            Board
+            Explore
           </TabButton>
           <TabButton
             type="button"
             active={view === "calendar"}
             onClick={() => changeView("calendar")}
           >
-            Dates <span className="n">{todayEventCount} today</span>
+            Calendar
           </TabButton>
           <TabButton
             type="button"
@@ -292,7 +301,7 @@ export default function IpoBoard({
             </TabButton>
           )}
         </SegmentedTabs>
-        {(view === "board" || view === "catalogue" || view === "calendar") && (
+        {(view === "dates" || view === "board" || view === "catalogue" || view === "calendar") && (
           <SegmentedTabs label="IPO type">
             {(["ALL", "MAINBOARD", "SME"] as const).map((filter) => (
               <TabButton
@@ -379,7 +388,14 @@ export default function IpoBoard({
         )}
       </div>
 
-      {view === "board" ? (
+      {view === "dates" ? (
+        <DateLedgerView
+          ipos={boardIpos}
+          boardFilter={boardFilter}
+          now={now}
+          onOpenCalendar={() => changeView("calendar")}
+        />
+      ) : view === "board" ? (
         <>
           <div className="board">
             {list.map((ipo) => (
@@ -484,6 +500,175 @@ export default function IpoBoard({
         </div>
       </footer>
     </div>
+  );
+}
+
+function DateLedgerView({
+  ipos,
+  boardFilter,
+  now,
+  onOpenCalendar,
+}: {
+  ipos: BoardIpo[];
+  boardFilter: BoardFilter;
+  now: number;
+  onOpenCalendar: () => void;
+}) {
+  const [range, setRange] = useState<"WEEK" | "ALL">("WEEK");
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const todayKey = marketDayKey(now);
+  const groups = useMemo(
+    () => dateLedgerGroups(ipos, now, range === "WEEK" ? 7 : null),
+    [ipos, now, range],
+  );
+  const eventsByDay = useMemo(() => lifecycleEventsByDay(ipos), [ipos]);
+  const stripDays = useMemo(
+    () => Array.from({ length: 7 }, (_, index) => marketDayOffset(todayKey, index)),
+    [todayKey],
+  );
+  const visibleGroups = selectedDay
+    ? [{ dayKey: selectedDay, events: eventsByDay[selectedDay] ?? [] }]
+    : groups;
+  const openCount = ipos.filter((ipo) => {
+    const status = effectiveStatus(ipo, now);
+    return status === "open" || status === "closing-soon";
+  }).length;
+  const feedUrl = calendarFeedUrl(boardFilter);
+
+  return (
+    <section className="date-ledger" aria-labelledby="date-ledger-title">
+      <div className="date-ledger-hero">
+        <div>
+          <p className="board-kicker">IPO market timeline</p>
+          <h2 id="date-ledger-title">What is happening today—and next.</h2>
+          <p>
+            Mainboard and SME milestones in one chronological view. GMP is unofficial;
+            verification and source status remain visible on every IPO.
+          </p>
+        </div>
+        <div className="date-ledger-summary" aria-label="Today market summary">
+          <strong>{formatMarketDate(now, { weekday: "long", day: "numeric", month: "long" })}</strong>
+          <span>{eventsByDay[todayKey]?.length ?? 0} milestone{(eventsByDay[todayKey]?.length ?? 0) === 1 ? "" : "s"} today</span>
+          <span>{openCount} IPO{openCount === 1 ? "" : "s"} accepting bids</span>
+        </div>
+      </div>
+
+      <div className="date-ledger-toolbar">
+        <SegmentedTabs label="Date range">
+          <TabButton active={range === "WEEK"} onClick={() => { setRange("WEEK"); setSelectedDay(null); }}>
+            Next 7 days
+          </TabButton>
+          <TabButton active={range === "ALL"} onClick={() => { setRange("ALL"); setSelectedDay(null); }}>
+            All upcoming
+          </TabButton>
+        </SegmentedTabs>
+        <div className="date-ledger-actions">
+          <a className="ui-button ui-button-secondary" href={feedUrl}>Add all dates</a>
+          <button type="button" className="ui-button ui-button-secondary" onClick={onOpenCalendar}>Month calendar</button>
+        </div>
+      </div>
+
+      <div className="date-strip" aria-label="Choose a date">
+        {stripDays.map((dayKey, index) => {
+          const eventCount = eventsByDay[dayKey]?.length ?? 0;
+          return (
+            <button
+              type="button"
+              key={dayKey}
+              className={`date-strip-day${index === 0 ? " is-today" : ""}${selectedDay === dayKey ? " is-selected" : ""}`}
+              aria-pressed={selectedDay === dayKey}
+              onClick={() => setSelectedDay((current) => current === dayKey ? null : dayKey)}
+            >
+              <span>{index === 0 ? "Today" : formatMarketDate(`${dayKey}T12:00:00.000Z`, { weekday: "short" })}</span>
+              <strong>{formatMarketDate(`${dayKey}T12:00:00.000Z`, { day: "numeric", month: "short" })}</strong>
+              <small>{eventCount || "—"} {eventCount === 1 ? "event" : "events"}</small>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="date-ledger-groups">
+        {visibleGroups.map((group) => {
+          const isToday = group.dayKey === todayKey;
+          return (
+            <section className={`date-ledger-group${isToday ? " is-today" : ""}`} key={group.dayKey} aria-labelledby={`ledger-${group.dayKey}`}>
+              <header className="date-ledger-group-head">
+                <div>
+                  <span>{isToday ? "Today" : formatMarketDate(`${group.dayKey}T12:00:00.000Z`, { weekday: "long" })}</span>
+                  <h3 id={`ledger-${group.dayKey}`}>
+                    {formatMarketDate(`${group.dayKey}T12:00:00.000Z`, { day: "numeric", month: "long", year: "numeric" })}
+                  </h3>
+                </div>
+                <strong>{group.events.length} milestone{group.events.length === 1 ? "" : "s"}</strong>
+              </header>
+
+              {group.events.length === 0 ? (
+                <div className="date-ledger-empty">
+                  <strong>No IPO milestone {isToday ? "today" : "on this date"}.</strong>
+                  <span>{isToday && openCount > 0 ? `${openCount} IPO${openCount === 1 ? " is" : "s are"} still accepting bids.` : "Choose another date or view all upcoming events."}</span>
+                </div>
+              ) : (
+                <div className="date-ledger-table-wrap">
+                  <table className="date-ledger-table">
+                    <thead>
+                      <tr>
+                        <th>Event</th>
+                        <th>IPO</th>
+                        <th>Price & minimum</th>
+                        <th>GMP · unofficial</th>
+                        <th>Demand</th>
+                        <th><span className="sr-only">Action</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {group.events.map((event) => (
+                        <DateLedgerRow event={event} now={now} key={`${event.ipo.id}-${event.type}-${event.dayKey}`} />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function DateLedgerRow({ event, now }: { event: IpoCalendarEvent<BoardIpo>; now: number }) {
+  const { ipo } = event;
+  const allotmentUrl = event.type === "allotment" ? registrarAllotmentUrl(ipo.registrar) : null;
+  const gmp = ipo.gmp;
+  const eventLabel = event.type === "lists" ? "Listing" : event.label;
+  return (
+    <tr>
+      <td data-label="Event">
+        <span className={`date-event-pill cal-${event.type}`}>{eventLabel}</span>
+        <small>{calendarEventTimingLabel(event, now)}</small>
+      </td>
+      <td data-label="IPO" className="date-ledger-company">
+        <a href={`/ipo/${ipo.slug}`}>{ipo.companyName}</a>
+        <div><span className="board-tag">{ipo.board === "MAINBOARD" ? "Mainboard" : "SME"}</span><VerificationBadge ipo={ipo} /></div>
+      </td>
+      <td data-label="Price & minimum">
+        <strong>₹{ipo.priceBandLow}–₹{ipo.priceBandHigh}</strong>
+        <small>{ipo.lotSize} shares · {fmtINR(ipo.lotSize * ipo.priceBandHigh)}</small>
+      </td>
+      <td data-label="GMP · unofficial" className="date-ledger-gmp">
+        {gmp ? <><strong>{fmtINR(gmp.medianValue)} ({gmpPct(ipo)}%)</strong><small>{confidenceLabel(gmp.confidence)} · {gmpUpdatedText(gmp.capturedAt, now)}</small></> : <><strong>Not available</strong><small>No observation captured</small></>}
+      </td>
+      <td data-label="Demand">
+        <strong>{subSummary(ipo)}</strong>
+        <small>{ipo.subscription?.sourceName ? `Source: ${ipo.subscription.sourceName}` : "Updated as bidding data arrives"}</small>
+      </td>
+      <td data-label="Action" className="date-ledger-row-actions">
+        {allotmentUrl && (
+          <a className="ui-button ui-button-primary" href={allotmentUrl} target="_blank" rel="noopener noreferrer">Check allotment</a>
+        )}
+        <a className={`ui-button ${allotmentUrl ? "ui-button-secondary" : "ui-button-primary"}`} href={`/ipo/${ipo.slug}`}>Details & sources</a>
+      </td>
+    </tr>
   );
 }
 

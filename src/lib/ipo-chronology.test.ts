@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   calendarEventTimingLabel,
   chronologyAnchor,
+  dateLedgerGroups,
   formatMarketDate,
   groupIposByChronology,
   lifecycleEventsByDay,
   lifecycleEventsForIpo,
   marketDayKey,
+  marketDayOffset,
   marketMonthAnchor,
   sortCalendarAgendaEvents,
   sortIposByChronology,
@@ -33,6 +35,32 @@ describe("IPO chronology", () => {
 
   it("creates a stable market-month anchor from the server timestamp", () => {
     expect(marketMonthAnchor("2026-08-31T20:00:00.000Z").toISOString()).toBe("2026-09-01T12:00:00.000Z");
+  });
+
+  it("builds a seven-day date ledger and keeps an empty Today group", () => {
+    const now = Date.parse("2026-08-15T06:00:00.000Z");
+    const rows = [ipo({
+      openDate: "2026-08-17T00:00:00.000Z",
+      closeDate: "2026-08-22T00:00:00.000Z",
+      allotmentDate: "2026-08-24T00:00:00.000Z",
+      listingDate: "2026-08-26T00:00:00.000Z",
+    })];
+    const groups = dateLedgerGroups(rows, now, 7);
+    expect(groups.map((group) => group.dayKey)).toEqual(["2026-08-15", "2026-08-17", "2026-08-22"]);
+    expect(groups[0].events).toEqual([]);
+    expect(groups[1].events[0].type).toBe("opens");
+  });
+
+  it("can show all upcoming dates beyond the homepage week", () => {
+    const now = Date.parse("2026-08-15T06:00:00.000Z");
+    const groups = dateLedgerGroups([ipo({
+      openDate: "2026-08-24T00:00:00.000Z",
+      closeDate: "2026-08-25T00:00:00.000Z",
+      allotmentDate: "2026-08-27T00:00:00.000Z",
+      listingDate: "2026-08-31T00:00:00.000Z",
+    })], now, null);
+    expect(groups.at(-1)?.dayKey).toBe("2026-08-31");
+    expect(marketDayOffset("2026-08-31", 1)).toBe("2026-09-01");
   });
 
   it("puts every today event first, then future events across month boundaries", () => {
