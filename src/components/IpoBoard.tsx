@@ -1266,11 +1266,8 @@ function GmpTrendChart({ points }: { points: { value: number; capturedAt: string
             fill={i === pts.length - 1 ? "var(--accent)" : "var(--surface-2)"}
             stroke="var(--accent)"
             strokeWidth={1}
-          >
-            <title>
-              {fmtDateShort(points[i].capturedAt)} — ₹{p[2]}
-            </title>
-          </circle>
+            aria-label={`${fmtDateShort(points[i].capturedAt)} — ₹${p[2]}`}
+          />
         ))}
         <text
           x={last[0]}

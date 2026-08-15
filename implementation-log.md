@@ -15,4 +15,8 @@
 - [DONE] Passed 41 focused tests and TypeScript.
 - [DONE] Passed all 265 Vitest tests, lint, Production build, Prisma validation and 10 Python tests.
 - [BLOCKED] Local visual rendering cannot reach the remote database from this environment; use the Vercel Preview for responsive/browser evidence.
-- [ ] Push the branch, validate CI/Vercel Preview, and prepare the PR for merge.
+- [DONE] Pushed PR #46; CI, migration smoke test and the first Vercel Preview passed.
+- [DONE] Browser-verified the desktop and 390 px mobile date board, chronological event stream, event-type colours, scoped calendar links and corrected listing lifecycle.
+- [DONE] Isolated the remaining detail-page hydration failure to React 19 hoisting empty SVG `title` nodes during SSR; replaced those nodes with hydration-safe accessible point labels.
+- [DONE] Re-ran all 265 Vitest tests, lint, TypeScript and the Production build after the hydration fix.
+- [ ] Validate the updated Vercel Preview, merge PR #46, and smoke-test Production.
