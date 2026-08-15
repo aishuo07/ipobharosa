@@ -464,7 +464,7 @@ a backup, no-write Preview validation and explicit migration approval.
 - [x] Audit auth, environment, domain, security and monitoring boundaries.
 - [x] Write the expanded production-closure plan.
 - [x] Obtain explicit approval for this expanded plan.
-- [ ] Implement and validate PR 6. (Implementation and local gates complete; Preview evidence pending.)
+- [x] Implement and validate PR 6. (Local/CI gates and desktop/mobile Preview browser evidence complete; Production smoke follows merge.)
 - [ ] Implement and observe PR 7 for three Production cycles.
 - [ ] Implement and validate PR 8.
 - [ ] Implement and validate PR 9.

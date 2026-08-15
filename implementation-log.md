@@ -19,4 +19,5 @@
 - [DONE] Browser-verified the desktop and 390 px mobile date board, chronological event stream, event-type colours, scoped calendar links and corrected listing lifecycle.
 - [DONE] Isolated the remaining detail-page hydration failure to React 19 hoisting empty SVG `title` nodes during SSR; replaced those nodes with hydration-safe accessible point labels.
 - [DONE] Re-ran all 265 Vitest tests, lint, TypeScript and the Production build after the hydration fix.
-- [ ] Validate the updated Vercel Preview, merge PR #46, and smoke-test Production.
+- [DONE] Updated Vercel Preview and every required PR check passed; a fresh browser session confirmed the IPO detail page now hydrates with zero console errors.
+- [ ] Merge PR #46 and smoke-test the exact commit in Production.
