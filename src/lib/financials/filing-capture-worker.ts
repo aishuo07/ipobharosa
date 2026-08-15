@@ -34,6 +34,9 @@ export type FilingWorkerResult = {
   outcome: "CAPTURED" | "FAILED" | "IDLE" | "LOCKED";
   candidate?: Omit<FilingCaptureCandidate, "key">;
   documentId?: string;
+  sourceFormat?: "PDF" | "ZIP";
+  archiveEntry?: string;
+  error?: string;
   retryAt?: string;
   ready: number;
   waitingForRetry: number;
@@ -129,6 +132,8 @@ export async function runFilingCaptureStep(startedBy = "filing-cron", now = new 
         outcome: "CAPTURED",
         candidate: publicCandidate,
         documentId: capture.documentId,
+        sourceFormat: capture.sourceFormat,
+        archiveEntry: capture.archiveEntry,
         ready: Math.max(0, selection.ready - 1),
         waitingForRetry: selection.waitingForRetry,
       };
@@ -138,6 +143,7 @@ export async function runFilingCaptureStep(startedBy = "filing-cron", now = new 
         complete: false,
         outcome: "FAILED",
         candidate: publicCandidate,
+        error: (error instanceof Error ? error.message : String(error)).slice(0, 300),
         retryAt: retryAt.toISOString(),
         ready: Math.max(0, selection.ready - 1),
         waitingForRetry: selection.waitingForRetry + 1,

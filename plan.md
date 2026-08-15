@@ -1,6 +1,6 @@
 # Implementation Plan: launch readiness and date-wise IPO experience
 
-Status: approved by the product owner on 15 August 2026; PR 1 and PR 2 are live, and PR 3 has passed local gates.
+Status: approved by the product owner on 15 August 2026; PR 1–3 are live, and the official ZIP filing path is under review in PR 4.
 
 ## Outcome
 
@@ -23,6 +23,7 @@ Use small pull requests against `main`. Each PR gets CI, isolated Vercel Preview
 PR 1  Date-wise All IPOs + calendar agenda
 PR 2  Ingestion critical-path repair
 PR 3  Domain/email/canonical readiness
+PR 4  Safe official ZIP filing acquisition and extraction
 Task  Real-user beta proof + launch checklist
 Track Financial document/extraction coverage
 ```
@@ -222,12 +223,22 @@ Next measurable steps:
 
 Financial coverage can continue after private beta, but unverified figures must stay explicitly unavailable.
 
+### PR 4 — official exchange ZIP filings
+
+- Accept direct official PDFs and official exchange ZIP downloads.
+- Bound compressed download size, expanded PDF size, archive entry count and total expanded PDF bytes.
+- Select RHP versus DRHP deterministically and fail closed on ambiguous archives.
+- Hash the extracted PDF bytes so capture and Python extraction produce the same immutable evidence checksum.
+- Return source format, selected archive entry and a bounded failure reason from the worker.
+- Exercise the same rules in TypeScript and Python tests before Production execution.
+
 ## Final launch checklist
 
 ### Required before public beta
 
 - [x] PR 1 merged and Production-smoked.
-- [ ] PR 2 merged and three scheduled cycles green.
+- [x] PR 2 merged; one Production cycle is green without filing work on the critical path.
+- [ ] Two additional ingestion cycles complete the three-cycle acceptance window.
 - [ ] Admin queue has no unexplained critical drift/conflict.
 - [ ] Terms, Privacy, Disclaimer and correction contact are public.
 - [ ] Google auth and one real watchlist/calendar journey pass.
@@ -266,9 +277,11 @@ Financial coverage can continue after private beta, but unverified figures must 
 - [ ] Observe two more scheduled ingestion cycles to complete the three-cycle acceptance window.
 - [x] Implement the validated site-origin contract, canonical metadata, configurable workflow URLs and honest user-email readiness gate.
 - [x] Add non-secret site/email readiness to the admin dashboard and pass PR 3 local gates (40 files, 255 tests).
-- [ ] Validate PR 3 in Preview and merge.
-- [ ] Implement and prove PR 2.
-- [ ] Implement PR 3 code work and complete owner DNS/domain actions.
+- [x] Validate PR 3 in Preview, merge and smoke Production (root, login, sitemap, robots and calendar all 200).
+- [x] Keep user email hidden until a custom domain and Resend sender are verified; Google remains available.
+- [x] Add bounded ZIP extraction to both the capture worker and Python financial extractor with matching selection rules.
+- [ ] Validate and merge PR 4, then rerun filing capture and financial extraction in Production.
+- [ ] Complete owner DNS/domain actions and enable email only after verification.
 - [ ] Run the real-user beta checklist and record evidence.
 
 ## Approval checkpoint
