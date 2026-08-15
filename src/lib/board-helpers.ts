@@ -1,4 +1,5 @@
 import type { BoardIpo } from "./board-data";
+import { formatMarketDate, marketDayKey, MARKET_TIME_ZONE } from "./ipo-chronology";
 
 // Real public allotment-status-check portals, keyed by a lowercase
 // substring match against the registrar name stored on the IPO —
@@ -25,7 +26,7 @@ export function fmtCr(n: number): string {
 }
 export function fmtDate(iso: string): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-IN", {
+  return formatMarketDate(iso, {
     weekday: "short",
     day: "numeric",
     month: "short",
@@ -34,10 +35,19 @@ export function fmtDate(iso: string): string {
 }
 export function fmtDateShort(iso: string): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-IN", {
+  return formatMarketDate(iso, {
     day: "numeric",
     month: "short",
   });
+}
+
+export function fmtDateTime(iso: string): string {
+  if (!iso) return "—";
+  return new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: MARKET_TIME_ZONE,
+  }).format(new Date(iso));
 }
 
 export type EffectiveStatus =
@@ -45,6 +55,7 @@ export type EffectiveStatus =
   | "closing-soon"
   | "upcoming"
   | "closed"
+  | "listed-pending"
   | "listed-gain"
   | "listed-loss";
 
@@ -55,11 +66,13 @@ export function isClosingSoon(ipo: BoardIpo, now: number): boolean {
 }
 
 export function effectiveStatus(ipo: BoardIpo, now: number): EffectiveStatus {
-  if (ipo.status === "OPEN") return isClosingSoon(ipo, now) ? "closing-soon" : "open";
-  if (ipo.status === "LISTED") {
+  const listingReached = Boolean(ipo.listingDate) && marketDayKey(ipo.listingDate) <= marketDayKey(now);
+  if (ipo.status === "LISTED" || listingReached) {
     const gainPct = listingGainPct(ipo);
-    return gainPct !== null && gainPct >= 0 ? "listed-gain" : "listed-loss";
+    if (gainPct === null) return "listed-pending";
+    return gainPct >= 0 ? "listed-gain" : "listed-loss";
   }
+  if (ipo.status === "OPEN") return isClosingSoon(ipo, now) ? "closing-soon" : "open";
   if (ipo.status === "UPCOMING") return "upcoming";
   return "closed";
 }
@@ -75,6 +88,7 @@ export function badgeText(status: EffectiveStatus): string {
     "closing-soon": "Closing soon",
     upcoming: "Upcoming",
     closed: "Awaiting allotment",
+    "listed-pending": "Listed · Price pending",
     "listed-gain": "Listed · Gain",
     "listed-loss": "Listed · Loss",
   }[status];

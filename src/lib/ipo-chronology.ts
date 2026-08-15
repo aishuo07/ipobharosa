@@ -31,6 +31,13 @@ export type IpoCalendarEvent<T extends ChronologyIpo = ChronologyIpo> = {
 
 export type CatalogueSort = "NEXT_EVENT" | "OPEN_ASC" | "OPEN_DESC";
 
+const AGENDA_EVENT_PRIORITY: Record<IpoCalendarEventType, number> = {
+  closes: 0,
+  allotment: 1,
+  lists: 2,
+  opens: 3,
+};
+
 function marketDateParts(date: Date): { year: number; month: number; day: number } {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: MARKET_TIME_ZONE,
@@ -48,6 +55,46 @@ export function marketDayKey(value: string | Date | number): string {
   const date = value instanceof Date ? value : new Date(value);
   const { year, month, day } = marketDateParts(date);
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+export function formatMarketDate(
+  value: string | Date | number,
+  options: Intl.DateTimeFormatOptions,
+): string {
+  const date = value instanceof Date ? value : new Date(value);
+  return new Intl.DateTimeFormat("en-IN", { ...options, timeZone: MARKET_TIME_ZONE }).format(date);
+}
+
+function dayKeyOffset(dayKey: string, days: number): string {
+  const [year, month, day] = dayKey.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}-${String(shifted.getUTCDate()).padStart(2, "0")}`;
+}
+
+export function sortCalendarAgendaEvents<T extends ChronologyIpo>(
+  events: readonly IpoCalendarEvent<T>[],
+  now: number,
+): IpoCalendarEvent<T>[] {
+  const today = marketDayKey(now);
+  return [...events].sort((a, b) => {
+    const todayA = a.dayKey === today;
+    const todayB = b.dayKey === today;
+    if (todayA !== todayB) return todayA ? -1 : 1;
+    return a.dayKey.localeCompare(b.dayKey)
+      || AGENDA_EVENT_PRIORITY[a.type] - AGENDA_EVENT_PRIORITY[b.type]
+      || a.ipo.companyName.localeCompare(b.ipo.companyName);
+  });
+}
+
+export function calendarEventTimingLabel(event: IpoCalendarEvent, now: number): string {
+  const today = marketDayKey(now);
+  const timing = event.dayKey === today
+    ? "today"
+    : event.dayKey === dayKeyOffset(today, 1)
+      ? "tomorrow"
+      : `on ${formatMarketDate(event.iso, { day: "numeric", month: "short", year: "numeric" })}`;
+  const label = event.type === "lists" ? "Listing" : event.type === "allotment" ? "Allotment" : event.label;
+  return `${label} ${timing}`;
 }
 
 export function lifecycleEventsForIpo<T extends ChronologyIpo>(ipo: T): IpoCalendarEvent<T>[] {

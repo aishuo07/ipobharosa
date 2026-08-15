@@ -168,3 +168,243 @@ The product is a credible private beta today, but not ready for a broad public l
 3. make domain/email/canonical configuration launch-ready;
 4. complete one real-user beta proof;
 5. continue financial coverage as an independently measured trust pipeline.
+
+## Production-readiness closure audit — 15 August 2026
+
+This follow-up audit was run after PRs 41–45 reached Production. It separates
+what is now proven from what still needs engineering or an owner action.
+
+### Proven healthy
+
+- `main` is deployed from merge commit `3df8da6e86e56074086990623cd0c61ee52cb737`.
+- The latest CI run and all recent scheduled market-ingestion runs are green.
+- Three post-boundary Production ingestion runs completed successfully:
+  `31836766490`, `31876774120`, and `31876866771`.
+- The repeat run wrote 47 GMP snapshots and 14 subscription snapshots, refreshed
+  100 filing-catalogue entries, linked 29 filings, and revalidated four published
+  records with zero detected drift.
+- The official financial worker now produces evidence instead of only a green
+  process status: run `31876658482` queued six Indo-MIM and three Juniper Green
+  Energy candidates and had zero submission failures.
+- `npm audit --omit=dev` reports zero known production dependency
+  vulnerabilities across 206 production dependencies.
+- Unauthenticated Production checks confirm `/admin` and
+  `/admin/financials` redirect to login, while cron/admin mutation routes reject
+  missing credentials.
+
+### Immediate engineering gaps
+
+1. **No independent service-health contract.** The ingestion route is protected
+   and writes a durable successful `IngestionRun` (`src/lib/ingestion/run-cycle.ts:111-120`),
+   but there is no small public endpoint that proves the web app can reach the
+   database and that the last complete ingestion is fresh. The existing Preview
+   smoke script calls an admin extraction endpoint and labels it a health check
+   (`scripts/smoke-preview.mjs:20-27`), which does not test operational freshness.
+2. **No scheduled availability monitor.** GitHub schedules ingestion every two
+   hours (`.github/workflows/ingest.yml:3-9`), but nothing checks the public site
+   between data runs or fails specifically when successful ingestion becomes
+   stale.
+3. **Browser hardening is incomplete.** Vercel supplies HSTS, but Production
+   currently exposes `x-powered-by: Next.js` and lacks explicit
+   `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and
+   `Permissions-Policy`. `next.config.ts:3-5` only configures the PostgreSQL
+   external package. A strict CSP should be a later report-only rollout because
+   introducing it blindly can break Next.js/Auth scripts.
+4. **Alert delivery is not independently proven.** Application alerts use the
+   same Resend transport as user email. Production has key/from variable names,
+   but no custom domain, no `SITE_URL`, and no recorded verified delivery. A
+   GitHub health workflow provides a separate first alert channel without
+   pretending Resend is ready.
+
+### External or account-level gaps
+
+- Vercel reports zero custom domains. Production remains on
+  `ipobharosa.vercel.app`.
+- Production does not define `SITE_URL`, `NEXT_PUBLIC_SITE_URL`, or
+  `EMAIL_USER_FEATURES_ENABLED`; user email remains correctly disabled.
+- GitHub branch protection cannot be enabled on the current private/free
+  repository configuration; the API returns HTTP 403 requiring GitHub Pro or a
+  public repository. Until the account changes, PR-only discipline is a process
+  control, not an enforced control.
+- Database connection variables are present as Vercel non-sensitive variables.
+  They are not exposed to browser code because they lack `NEXT_PUBLIC_`, but
+  project-access visibility should still be reduced by recreating credentials as
+  sensitive values during a controlled credential-rotation window.
+- The earlier Neon backup branch proves point-in-time recovery material exists,
+  but a timed restore-and-read rehearsal has not been recorded.
+- No external beta user has completed Google login, watchlist add/remove,
+  calendar subscription, and reminder receipt end to end.
+
+### Recommended next bounded release
+
+The first production-hardening PR should remain additive and migration-free:
+
+```text
+GET /api/health
+  -> database reachable?
+  -> at least one public IPO available?
+  -> latest successful ingestion no older than five hours?
+  -> 200 ok / 503 degraded, no internal exception text
+
+scheduled GitHub health check (15 minutes)
+  -> retry transient network errors
+  -> fail visibly on non-200 or malformed health JSON
+
+all routes
+  -> disable x-powered-by
+  -> nosniff, deny framing, strict referrer policy, restricted permissions policy
+```
+
+This closes a real detection gap without coupling monitoring to Resend or adding
+a new paid vendor. Custom domain/email, branch protection, and restore rehearsal
+remain explicit later gates rather than hidden inside this PR.
+
+## Full UI, trust-contract and ingestion audit — 15 August 2026
+
+The owner expanded the closure scope beyond health monitoring. The audit below
+uses the current source tree, current Production HTML, current IPO detail/login
+routes and the latest Production ingestion/financial runs. One already-open
+browser tab contained an older cached bundle, so visual claims from that tab
+were not treated as current defects unless the current source confirmed them.
+Every release below therefore requires a fresh exact-commit Preview at the
+supported breakpoints.
+
+### P0 public correctness defects
+
+1. **Date rendering is not timezone-stable.**
+   `src/lib/board-helpers.ts:26-41` formats date-only values without an explicit
+   market timezone. Server rendering and an Asia/Kolkata browser can therefore
+   render different days. The live IPO detail route exposed React hydration
+   error 418 and showed the same listing date as both 24 and 25 August. The
+   existing `MARKET_TIME_ZONE` and `marketDayKey` contract in
+   `src/lib/ipo-chronology.ts:34-51` should become the single shared date-only
+   implementation for server and client.
+2. **Lifecycle depends incorrectly on listing-price availability.**
+   `src/lib/ipo-status.ts:10-15` deliberately leaves a closed IPO in `CLOSED`
+   until a listing price exists, while `src/lib/board-helpers.ts:77` displays
+   every such record as “Awaiting allotment”. Historical IPOs can therefore
+   remain awaiting allotment indefinitely. Lifecycle must derive from dates;
+   listing performance is a separate enrichment state.
+3. **The public verification claim can exceed the evidence.**
+   `src/lib/public-verification.ts:71-82` maps a published row to `VERIFIED`
+   unconditionally. `src/lib/board-data.ts:468-532` can simultaneously return
+   no matched fields, provider or source capture. Production consequently showed
+   “Automated verification passed” beside “IPO facts not captured yet” and
+   “Official filings not captured yet”. Publication status and evidence status
+   must be independent. `VERIFIED` requires the configured official core fields,
+   source URL/provider and a successful match; missing evidence must be labelled
+   honestly rather than silently upgraded.
+4. **Financial/document calls to action can point nowhere.**
+   `src/components/IpoBoard.tsx:1397-1413` tells users to open the official filing
+   even when `filings.length === 0`. The empty state must never promise a link
+   that is absent.
+5. **Single-IPO Google Calendar action subscribes to every IPO.**
+   `src/app/ipo/[slug]/page.tsx:103-106` uses the global subscription URL from
+   `src/lib/calendar.ts:73-76`, although the adjacent ICS action is scoped with
+   `?ipo=<slug>`. The action must be truly per-IPO or be relabelled as the full
+   market calendar.
+
+### UI, mobile and accessibility findings
+
+- Current source already contains Board, All IPOs, Pipeline and Calendar views,
+  defaults to Board, and provides Mainboard/SME plus verification/status filters
+  (`src/components/IpoBoard.tsx:80-337`). These shipped capabilities should not
+  be rebuilt.
+- The IPO card is a `div` with `role="button"` and `tabIndex=0` containing a real
+  watchlist button and compare checkbox (`src/components/IpoBoard.tsx:754-840`).
+  Nested interactive controls inside a button-like composite create ambiguous
+  keyboard and screen-reader behaviour. Navigation should be a normal link on
+  the title/body, with watchlist and compare as sibling controls.
+- Login protection works, but `src/app/login/page.tsx:20-93` provides no direct
+  Home/back path and renders a non-clickable brand. It should preserve the safe
+  return target and always offer a visible route back to the public catalogue.
+- The public filter/view strips use horizontal overflow. Their current behaviour
+  must be tested afresh at 360, 390, 768, 1024 and 1440 px, with visible overflow
+  affordance, 44 px touch targets, keyboard focus, reduced motion and no body
+  overflow.
+- Admin pages are functional but visually fragmented. In particular,
+  `src/app/admin/financials/manual/page.tsx:28+` is a long inline-styled raw form.
+  Admin polish should reuse the same design tokens, group evidence and decision
+  fields, expose validation near the field, and retain an auditable actor/reason
+  rather than remove accountability.
+
+### Ingestion semantics and operational accuracy
+
+The latest completed Production market run is operationally green, but its
+summary shows why “green workflow” is not the same as healthy coverage:
+
+- 65 IPO records processed;
+- 100 filing-catalogue entries, 29 linked;
+- 47 GMP snapshots and 18 IPOs without a usable GMP value;
+- IPO Watch 46 success / 19 failure, IPO Ji 33 / 32, Sahi 16 / 49;
+- 14 subscription snapshots from roughly 60 attempts;
+- four published records revalidated, all four matched, zero drift.
+
+The current adapter contract collapses expected absence and actual outage into
+one failure:
+
+- `src/lib/gmp/ingest.ts:10-37` returns only boolean success/failure;
+- GMP adapters throw for missing company pages/tables
+  (`src/lib/gmp/adapters/sahi.ts:20-27`,
+  `src/lib/gmp/adapters/ipoji.ts:16-29`,
+  `src/lib/gmp/adapters/ipowatch.ts:16-38`);
+- the subscription adapter throws for 404, absent table and no completed day
+  (`src/lib/subscription/adapters/sahi.ts:31-43,68-70`);
+- `src/lib/ingestion/run-cycle.ts:270-331` counts all of those outcomes as
+  source failures and increments source-health failure counters.
+
+The correct contract needs at least four outcomes:
+
+```text
+VALUE              source covered the IPO and returned usable data
+NOT_YET_AVAILABLE  source covers it, but the market datum is not published yet
+NOT_COVERED        source has no page/product coverage for this IPO
+ERROR              timeout, 5xx, invalid response or parser regression
+```
+
+Only `ERROR` should degrade source health. Coverage/no-data still belongs in the
+run summary so product coverage remains visible.
+
+Further confirmed issues:
+
+- GMP runs for `UPCOMING`, `OPEN` and `CLOSED`; subscriptions run for `OPEN` and
+  `CLOSED` (`src/lib/ingestion/run-cycle.ts:26-27`). Because lifecycle can remain
+  `CLOSED` forever, old IPOs are retried for subscription forever. Subscription
+  refresh needs a bounded finalisation window after close/listing.
+- `SourceHealth.degraded` is reset on success but is not set meaningfully on
+  repeated failure, making the admin degraded indicator unreliable.
+- `withTransientRetries` and persisted `nextRetryAt` exist in
+  `src/lib/ingestion/source-operation.ts:36-108`, but adapters do not consistently
+  use the retry helper and the main cycle does not honour the persisted cooldown
+  before attempting another call.
+- `src/lib/ingestion/alert.ts:34-38` alerts only when every GMP source has zero
+  success. A severe partial regression such as 49/65 failures from one provider
+  can remain silent.
+- Email-based alerts are not an independent availability signal while sender
+  domain delivery remains unproven.
+
+### Platform, security and release gaps
+
+- There is no independent `/api/health`; `scripts/smoke-preview.mjs:20-27`
+  currently labels an admin extraction call as health.
+- `next.config.ts` exposes the framework header and does not define nosniff,
+  frame, referrer or permissions-policy headers. CSP should first ship in
+  report-only mode after measuring Auth/Next.js requirements.
+- `src/app/page.tsx:7` disables revalidation and builds the public root from live
+  state on every request. This is acceptable for the current beta scale but must
+  receive latency/query-count measurement before catalogue growth, not an
+  unmeasured caching rewrite.
+- No custom domain/email E2E, independent external beta E2E, timed restore
+  rehearsal or enforceable branch protection has been proven.
+
+### Production ordering conclusion
+
+Monitoring a page that can make contradictory trust claims is the wrong first
+release. The defensible order is:
+
+1. public correctness and accessibility hotfix;
+2. typed ingestion outcomes, bounded market windows and truthful source health;
+3. independent health monitoring and baseline browser hardening;
+4. UI/admin design-system consolidation and responsive evidence;
+5. filing/financial coverage expansion with explicit source provenance;
+6. owner-operated domain, email, restore and real-user launch gates.

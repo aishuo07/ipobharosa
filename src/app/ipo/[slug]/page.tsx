@@ -11,7 +11,7 @@ import {
   VerificationNotice,
 } from "@/components/IpoBoard";
 import { Badge, Surface } from "@/components/ui";
-import { badgeText, confidenceLabel, countdownText, effectiveStatus, fmtDate, fmtINR } from "@/lib/board-helpers";
+import { badgeText, confidenceLabel, countdownText, effectiveStatus, fmtDate, fmtDateTime, fmtINR } from "@/lib/board-helpers";
 import { googleCalendarSubscriptionUrl } from "@/lib/calendar";
 
 // GMP figures matter most for this page and refresh every 2 hours —
@@ -102,7 +102,7 @@ export default async function IpoDetailPage({
           </div>
           <div className="ipo-calendar-actions" aria-label="Add IPO dates to calendar">
             <a className="ui-button ui-button-primary" href={`/api/calendar?ipo=${ipo.slug}`}>Download this IPO&apos;s dates (.ics)</a>
-            <a className="ui-button ui-button-secondary" href={googleCalendarSubscriptionUrl()} target="_blank" rel="noopener noreferrer">Subscribe in Google Calendar ↗</a>
+            <a className="ui-button ui-button-secondary" href={googleCalendarSubscriptionUrl("ALL", ipo.slug)} target="_blank" rel="noopener noreferrer">Subscribe only this IPO in Google Calendar ↗</a>
           </div>
         </Surface>
 
@@ -147,7 +147,7 @@ export default async function IpoDetailPage({
             {ipo.provenance.sourceChecks?.map((check) => <div className="source-check" key={`${check.source}-${check.checkedAt}`}>
               <Badge tone={check.status === "FOUND" ? "positive" : check.status === "UNAVAILABLE" ? "warning" : "info"}>{check.source}</Badge>
               <strong>{sourceCheckLabel(check.status)}</strong>
-              <small>{check.reason ?? `Checked ${new Date(check.checkedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}`}</small>
+              <small>{check.reason ?? `Checked ${fmtDateTime(check.checkedAt)}`}</small>
               {check.url && <a href={check.url} target="_blank" rel="noopener noreferrer">Open source ↗</a>}
             </div>)}
           </div>}
@@ -159,7 +159,7 @@ export default async function IpoDetailPage({
                 <td><Badge tone={field.status === "MATCH" ? "positive" : field.status === "CONFLICT" ? "critical" : "warning"}>{field.status === "MATCH" ? "Matched" : field.status === "CONFLICT" ? "Conflict" : "Missing"}</Badge></td>
                 <td>{field.value}</td>
                 <td><a href={field.url} target="_blank" rel="noopener noreferrer">{field.source} ↗</a></td>
-                <td>{new Date(field.checkedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</td>
+                <td>{fmtDateTime(field.checkedAt)}</td>
               </tr>)}</tbody>
             </table>
           </div>}

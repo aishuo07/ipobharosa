@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  calendarEventTimingLabel,
   chronologyAnchor,
+  formatMarketDate,
   groupIposByChronology,
   lifecycleEventsByDay,
   lifecycleEventsForIpo,
   marketDayKey,
+  sortCalendarAgendaEvents,
   sortIposByChronology,
   type ChronologyIpo,
 } from "./ipo-chronology";
@@ -24,6 +27,46 @@ function ipo(overrides: Partial<ChronologyIpo> = {}): ChronologyIpo {
 describe("IPO chronology", () => {
   it("uses the Indian market day instead of the machine timezone", () => {
     expect(marketDayKey("2026-08-14T20:00:00.000Z")).toBe("2026-08-15");
+    expect(formatMarketDate("2026-08-14T20:00:00.000Z", { day: "numeric", month: "short" })).toBe("15 Aug");
+  });
+
+  it("puts every today event first, then future events across month boundaries", () => {
+    const today = Date.parse("2026-08-15T06:00:00.000Z");
+    const alpha = lifecycleEventsForIpo(ipo({
+      companyName: "Alpha",
+      openDate: "2026-08-15T00:00:00.000Z",
+      closeDate: "2026-08-16T00:00:00.000Z",
+      allotmentDate: "2026-09-01T00:00:00.000Z",
+      listingDate: "2026-09-03T00:00:00.000Z",
+    }));
+    const beta = lifecycleEventsForIpo(ipo({
+      id: "two",
+      companyName: "Beta",
+      openDate: "2026-08-12T00:00:00.000Z",
+      closeDate: "2026-08-15T00:00:00.000Z",
+      allotmentDate: "2026-08-20T00:00:00.000Z",
+      listingDate: "2026-08-24T00:00:00.000Z",
+    }));
+    const result = sortCalendarAgendaEvents([...alpha, ...beta].filter((event) => event.dayKey >= "2026-08-15"), today);
+    expect(result.map((event) => `${event.dayKey}:${event.type}`)).toEqual([
+      "2026-08-15:closes",
+      "2026-08-15:opens",
+      "2026-08-16:closes",
+      "2026-08-20:allotment",
+      "2026-08-24:lists",
+      "2026-09-01:allotment",
+      "2026-09-03:lists",
+    ]);
+  });
+
+  it("uses explicit today and tomorrow event labels", () => {
+    const now = Date.parse("2026-08-15T06:00:00.000Z");
+    const events = lifecycleEventsForIpo(ipo({
+      openDate: "2026-08-15T00:00:00.000Z",
+      closeDate: "2026-08-16T00:00:00.000Z",
+    }));
+    expect(calendarEventTimingLabel(events.find((event) => event.type === "opens")!, now)).toBe("Opens today");
+    expect(calendarEventTimingLabel(events.find((event) => event.type === "closes")!, now)).toBe("Closes tomorrow");
   });
 
   it("creates the four public lifecycle events in chronological order", () => {
