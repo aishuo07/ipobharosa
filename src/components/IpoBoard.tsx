@@ -22,6 +22,7 @@ import {
   formatMarketDate,
   groupIposByChronology,
   lifecycleEventsByDay,
+  marketMonthAnchor,
   marketDayKey,
   sortCalendarAgendaEvents,
   type CatalogueSort,
@@ -73,12 +74,14 @@ export default function IpoBoard({
   filings = [],
   user = null,
   watchlistedIds = [],
+  initialNow,
   onSignOut,
 }: {
   ipos: BoardIpo[];
   filings?: FilingRadarEntry[];
   user?: BoardUser;
   watchlistedIds?: string[];
+  initialNow: number;
   onSignOut?: () => Promise<void>;
 }) {
   const [tab, setTab] = useState<StatusFilter>("ALL");
@@ -87,17 +90,14 @@ export default function IpoBoard({
   const [watching, setWatching] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(watchlistedIds.map((id) => [id, true])),
   );
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(initialNow);
   const [query, setQuery] = useState("");
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [showCompare, setShowCompare] = useState(false);
   const [view, setView] = useState<PublicView>("board");
   const [boardFilter, setBoardFilter] = useState<BoardFilter>("ALL");
   const [verificationFilter, setVerificationFilter] = useState<VerificationFilter>("ALL");
-  const [calMonth, setCalMonth] = useState(() => {
-    const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth(), 1);
-  });
+  const [calMonth, setCalMonth] = useState(() => marketMonthAnchor(initialNow));
   const router = useRouter();
 
   const MAX_COMPARE = 3;

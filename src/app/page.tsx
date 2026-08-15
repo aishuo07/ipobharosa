@@ -12,6 +12,10 @@ async function handleSignOut() {
 }
 
 export default async function Home() {
+  // Send one timestamp through the RSC payload so the initial Client Component
+  // render exactly matches the server HTML. The board advances it after mount.
+  // eslint-disable-next-line react-hooks/purity
+  const initialNow = Date.now();
   const [ipos, filings, session] = await Promise.all([getPublicIpos(), getFilingRadarEntries(), auth()]);
 
   let watchlistedIds: string[] = [];
@@ -29,6 +33,7 @@ export default async function Home() {
       filings={filings}
       user={session?.user ? { email: session.user.email ?? null, name: session.user.name ?? null } : null}
       watchlistedIds={watchlistedIds}
+      initialNow={initialNow}
       onSignOut={handleSignOut}
     />
   );

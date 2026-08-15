@@ -7,6 +7,7 @@ import {
   lifecycleEventsByDay,
   lifecycleEventsForIpo,
   marketDayKey,
+  marketMonthAnchor,
   sortCalendarAgendaEvents,
   sortIposByChronology,
   type ChronologyIpo,
@@ -28,6 +29,10 @@ describe("IPO chronology", () => {
   it("uses the Indian market day instead of the machine timezone", () => {
     expect(marketDayKey("2026-08-14T20:00:00.000Z")).toBe("2026-08-15");
     expect(formatMarketDate("2026-08-14T20:00:00.000Z", { day: "numeric", month: "short" })).toBe("15 Aug");
+  });
+
+  it("creates a stable market-month anchor from the server timestamp", () => {
+    expect(marketMonthAnchor("2026-08-31T20:00:00.000Z").toISOString()).toBe("2026-09-01T12:00:00.000Z");
   });
 
   it("puts every today event first, then future events across month boundaries", () => {

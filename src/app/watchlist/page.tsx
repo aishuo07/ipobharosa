@@ -11,6 +11,9 @@ async function handleSignOut() {
 }
 
 export default async function WatchlistPage() {
+  // Keep the initial board render identical across the RSC and browser passes.
+  // eslint-disable-next-line react-hooks/purity
+  const initialNow = Date.now();
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
@@ -21,6 +24,7 @@ export default async function WatchlistPage() {
       ipos={ipos}
       user={{ email: session.user.email ?? null, name: session.user.name ?? null }}
       watchlistedIds={ipos.map((i) => i.id)}
+      initialNow={initialNow}
       onSignOut={handleSignOut}
     />
   );

@@ -57,6 +57,15 @@ export function marketDayKey(value: string | Date | number): string {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+/** A timezone-stable month anchor for server/client calendar hydration. */
+export function marketMonthAnchor(value: string | Date | number): Date {
+  const [year, month] = marketDayKey(value).split("-").map(Number);
+  // Midday UTC remains in the same calendar month in every supported browser
+  // timezone, unlike a local-midnight Date constructed independently on the
+  // server and client.
+  return new Date(Date.UTC(year, month - 1, 1, 12));
+}
+
 export function formatMarketDate(
   value: string | Date | number,
   options: Intl.DateTimeFormatOptions,
