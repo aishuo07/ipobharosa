@@ -4,10 +4,12 @@ import {
   badgeText,
   confidenceLabel,
   effectiveStatus,
+  gmpAvailabilityText,
   gmpPct,
   isStale,
   listingGainPct,
   registrarAllotmentUrl,
+  subscriptionAvailabilityText,
   subSummary,
 } from "./board-helpers";
 
@@ -77,12 +79,16 @@ describe("subSummary", () => {
     expect(subSummary(makeIpo({ status: "UPCOMING", subscription: null }))).toBe("Bidding not open yet");
   });
 
-  it("reports subscription pending for an OPEN IPO with no subscription data yet", () => {
-    expect(subSummary(makeIpo({ status: "OPEN", subscription: null }))).toBe("Subscription data pending");
+  it("reports an exchange update wait for an OPEN IPO with no subscription data yet", () => {
+    expect(subSummary(makeIpo({ status: "OPEN", subscription: null }))).toBe("Awaiting exchange update");
   });
 
   it("reports final subscription unavailable for a LISTED IPO with no subscription data", () => {
-    expect(subSummary(makeIpo({ status: "LISTED", subscription: null }))).toBe("Final subscription not available");
+    expect(subSummary(makeIpo({ status: "LISTED", subscription: null }))).toBe("Final demand unavailable");
+  });
+
+  it("reports final demand unavailable after bidding closes", () => {
+    expect(subSummary(makeIpo({ status: "CLOSED", subscription: null }))).toBe("Final demand unavailable");
   });
 
   it("averages over 3 categories when there is no employee quota", () => {
@@ -106,6 +112,22 @@ describe("subSummary", () => {
       subscription: { qibX: 4, niiX: 8, retailX: 4, employeeX: 4, totalX: 6.7, capturedAt: "2026-08-01T00:00:00.000Z" },
     });
     expect(subSummary(ipo)).toBe("4.0x retail · 6.7x overall");
+  });
+});
+
+describe("missing market signal copy", () => {
+  it("describes a missing current GMP as an absent tracked quote", () => {
+    expect(gmpAvailabilityText(makeIpo({ status: "OPEN", gmp: null }))).toBe("No tracked GMP quote yet");
+  });
+
+  it("describes missing listed GMP as history rather than a current quote", () => {
+    expect(gmpAvailabilityText(makeIpo({ status: "LISTED", gmp: null }))).toBe("No tracked GMP history");
+  });
+
+  it("explains when subscription figures will appear", () => {
+    expect(subscriptionAvailabilityText(makeIpo({ status: "UPCOMING", subscription: null }))).toBe("Figures appear after bidding opens");
+    expect(subscriptionAvailabilityText(makeIpo({ status: "OPEN", subscription: null }))).toBe("Checked hourly while bidding is open");
+    expect(subscriptionAvailabilityText(makeIpo({ status: "CLOSED", subscription: null }))).toBe("No final exchange snapshot captured");
   });
 });
 

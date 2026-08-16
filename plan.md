@@ -1,3 +1,132 @@
+# Implementation plan: compact date-first market dashboard
+
+Date: 17 August 2026
+Status: approved by owner; implementation in progress.
+
+## Approach
+
+Retain the proven chronology/data contracts and recompose the homepage around one compact market header plus a responsive agenda. The full month calendar remains a secondary view. Missing values become lifecycle-aware text, never invented data.
+
+## Changes required
+
+### 1. Add a pure today-summary contract
+
+**File:** `src/lib/ipo-chronology.ts`
+
+Add a tested helper that counts today’s events by type. The component should not independently duplicate event grouping logic.
+
+```ts
+type TodayMarketSummary = {
+  opens: number;
+  closes: number;
+  allotments: number;
+  listings: number;
+};
+
+export function todayMarketSummary(ipos, now): TodayMarketSummary
+```
+
+Keep “open for bidding” derived through the existing `effectiveStatus` contract because it is a lifecycle state, not a calendar milestone.
+
+### 2. Delete the market-timeline hero; use a one-line utility header
+
+**File:** `src/components/IpoBoard.tsx:205-290, 530-575`
+
+- Remove the entire bordered `IPO market timeline / What is happening today—and next` hero and its explanatory paragraph.
+- Reduce the editorial `board-intro` to a compact product/coverage line.
+- Start the date view with **Today · Monday, 17 August**.
+- On the same line (or directly below on narrow screens), show plain counts: `3 open for bidding · 1 closes · 4 allotments · 3 listings`.
+- Do not use the word `milestone` in public navigation, counters or headings; say event type directly.
+- Do not repeat the methodology disclaimer above the list; GMP and verification context stays on each IPO.
+- Move tracked issuer/filing/page coverage into secondary copy rather than primary proof blocks.
+- Keep view navigation, but visually prioritize Today, Explore and Calendar; Pipeline remains available without dominating the first row.
+
+### 3. Make the date picker human-readable
+
+**File:** `src/components/IpoBoard.tsx:575-615`
+
+- Keep horizontal seven-day selection and All upcoming.
+- Replace `— events` with `No events`.
+- Add event-type micro-dots/counts where a day has events so the colour meaning is visible before selection.
+- Preserve pressed/keyboard states.
+
+### 4. Recompose agenda records for desktop and mobile
+
+**File:** `src/components/IpoBoard.tsx:615-690`
+
+- Keep semantic table markup for desktop accessibility.
+- Add internal wrappers/classes so mobile becomes a deliberately composed card rather than generic `data-label` cells.
+- Put company/board before secondary verification details on mobile.
+- Combine price, lot and minimum coherently.
+- Make allotment the contextual primary action only when a registrar URL exists; otherwise details remains primary.
+
+### 5. Replace generic missing-value copy
+
+**Files:** `src/components/IpoBoard.tsx`, `src/lib/board-helpers.ts`
+
+Add small pure presentation helpers where state depends on lifecycle, for example:
+
+```ts
+gmpAvailabilityText(ipo) // "No tracked GMP quote yet"
+subscriptionAvailabilityText(ipo, now) // "Bidding opens 20 Aug" / "Awaiting exchange update"
+```
+
+Reuse the existing truthful values when present. Do not alter stored data.
+
+### 6. Fix responsive containment and polish
+
+**File:** `src/app/globals.css`
+
+- Guarantee `html`, `body`, `.wrap`, controls, tabs and date content cannot widen the viewport.
+- Reduce first-viewport vertical padding and headline size.
+- Make the seven-day strip an explicitly contained scroller with visible scroll affordance.
+- At ≤700px, render compact agenda cards with a two-column fact grid; at ≤430px allow a one-column fallback only where necessary.
+- Keep minimum 44px touch targets, visible focus states and reduced-motion behavior.
+- Use the existing paper/ink/orange/green design tokens; do not introduce a new visual language.
+
+### 7. Tests and visual proof
+
+**Files:** `src/lib/ipo-chronology.test.ts`, `src/lib/board-helpers.test.ts`, optionally a focused component markup test.
+
+- Test all four today event counts, including multiple events on one date.
+- Test zero-event and lifecycle-aware missing-signal labels.
+- Preserve timezone boundary tests.
+- Run all tests, lint and Production build.
+- Verify Preview at 390, 768 and 1440px with no page-level horizontal overflow.
+- Verify Today, future-date selection, All upcoming, Mainboard/SME, Month calendar and allotment/details actions.
+
+## Delivery sequence
+
+1. Implement on `codex/date-dashboard-polish`.
+2. Commit and push one focused PR.
+3. Wait for CI, migration smoke and Vercel Preview.
+4. Perform responsive browser proof on Preview.
+5. Merge only after proof is clean.
+6. Confirm the managed Production URL serves the merge.
+
+## Rollback
+
+The change is migration-free. Revert the single squash commit to restore the current layout. Chronology data, ingestion and stored IPO records remain untouched.
+
+## Todo list
+
+- [x] Add today event summary helper and tests.
+- [x] Add lifecycle-aware missing-signal copy and tests.
+- [x] Remove the timeline hero and replace it with the one-line Today utility header.
+- [x] Add event summary chips and improved seven-day picker.
+- [x] Recompose agenda rows/cards and actions.
+- [x] Fix global/mobile containment and responsive styles.
+- [x] Run tests, lint and build.
+- [ ] Create PR and wait for all checks.
+- [ ] Verify responsive Preview interactions and overflow.
+- [ ] Merge and verify managed Production.
+
+## Approval checkpoint
+
+Implementation begins only after the owner says **Plan approved**. Do not implement yet.
+
+---
+
 # Hourly market-refresh release
 
 Date: 17 August 2026
