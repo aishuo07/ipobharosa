@@ -75,7 +75,7 @@
 }
 
 * { box-sizing: border-box; }
-.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.sr-only { position: absolute; top: 0; left: 0; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
 html, body { width: 100%; max-width: 100%; margin: 0; padding: 0; overflow-x: clip; }
 html { scroll-behavior: smooth; }
 body {
@@ -531,7 +531,7 @@ a, button { font-family: inherit; }
 @media (max-width: 900px) {
   .date-strip { overflow-x: auto; grid-template-columns: repeat(7, minmax(108px, 1fr)); padding-bottom: 4px; }
 }
-@media (max-width: 700px) {
+@media (max-width: 840px) {
   .board-intro { grid-template-columns: 1fr; gap: 9px; }
   .board-coverage { text-align: left; }
   .date-ledger-today { align-items: flex-start; flex-direction: column; gap: 12px; }
