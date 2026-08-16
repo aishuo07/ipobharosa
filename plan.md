@@ -737,5 +737,7 @@ Status: owner explicitly redirected the approved responsive layout on 17 Aug 202
 - [DONE] Preserve semantic table rows at every viewport.
 - [DONE] Put IPO/company first and make it sticky below 840px.
 - [DONE] Enable touch-friendly horizontal scrolling with dense fixed-width columns.
-- [IN PROGRESS] Run tests, lint, build and browser QA at 768px/390px.
-- [TODO] Deploy Preview, verify scrolling/sticky behavior, merge and verify Production.
+- [DONE] Run 279 tests, zero-warning lint and production build.
+- [DONE] Verify Preview at 768px/390px with no document overflow.
+- [DONE] Programmatically scroll the table 300px and confirm the IPO column remains fixed at the same left position; 560px of horizontal detail is available on phone.
+- [IN PROGRESS] Merge and verify Production.
