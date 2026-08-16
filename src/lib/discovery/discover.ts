@@ -16,7 +16,7 @@ import { officialAutoPublishEnabled, persistOfficialDecision, persistOfficialInc
 // without hammering ipowatch.in/sahi.com.
 const CONCURRENCY = 5;
 // Listing discovery should be complete, but detail-page validation is
-// intentionally bounded. The source is newest-first, so every two-hour
+// intentionally bounded. The source is newest-first, so every hourly
 // cycle takes the next untracked candidates without risking a serverless
 // timeout or hammering upstream sites. `deferredCandidates` makes the
 // remaining backlog visible instead of silently dropping it.

@@ -1,3 +1,44 @@
+# Research: hourly market refresh and live-GMP competitor patterns
+
+Date: 17 August 2026
+
+## Production cadence evidence
+
+- Production market ingestion currently runs from GitHub Actions every two hours because Vercel Hobby native cron is daily-only.
+- The latest 12 scheduled runs all succeeded.
+- Those runs completed in roughly 91–118 seconds, leaving substantial headroom for an hourly schedule.
+- Workflow concurrency is serialized and the API also uses a database ingestion lock plus persisted checkpoints, so a delayed run cannot create a second overlapping cycle.
+- IPO pages read live database state (homepage) or revalidate within 30 minutes (detail), so no additional cache architecture is required.
+- Hourly GMP snapshots intentionally improve trend resolution. At current IPO volume the additional rows are modest; retention/compaction can be introduced later if history grows materially.
+
+## Competitor review
+
+### IPOWatch
+
+The useful pattern is its immediate live-GMP scan: IPO name, current GMP, trend, price band, implied listing value, lifecycle dates/type/status and an explicit last-updated value. The drawbacks are ad/SEO density, a single opaque GMP claim and an implied listing value that can look more predictive than it is.
+
+### Chittorgarh
+
+The homepage succeeds as a market directory: Mainboard and SME are visible side-by-side, issue dates are easy to scan and row colour conveys broad lifecycle state. The drawbacks are a large advertising void, legacy navigation density, unclear one-letter colour badges and little evidence context.
+
+### InvestorGain
+
+The strongest pattern is its filter bar (active, open, upcoming, closed, SME, Mainboard, closing today, listed) plus a sortable current-GMP table and explicit updated timestamp. The table is too wide, uses unexplained fire ratings and anchor icons, and depends on horizontal scrolling on smaller screens.
+
+## Product decision
+
+Keep IPOBharosa's date-first homepage as the primary answer to “what is happening today?” Add a separate **Live GMP** view in a follow-up release rather than turning the homepage into a competitor clone. The view should combine fast scanning with IPOBharosa's differentiator:
+
+- median GMP and percentage over the upper price band;
+- latest movement from stored hourly history;
+- explicit captured time, source count and agreement label;
+- open/upcoming/closing-today plus Mainboard/SME filters;
+- price, lot, dates and subscription without ratings or advice-like fire icons;
+- a desktop table that becomes stacked records on mobile, not horizontal scroll;
+- clickable source/evidence links and an “unofficial, not predictive” label beside the figure.
+
+---
+
 # Research: public launch readiness and chronological IPO catalogue
 
 Date: 15 August 2026

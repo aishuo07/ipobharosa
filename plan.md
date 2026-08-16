@@ -1,3 +1,22 @@
+# Hourly market-refresh release
+
+Date: 17 August 2026
+Status: approved by owner in conversation; implementation in progress.
+
+## Scope
+
+1. Change the serialized GitHub Actions market workflow from every two hours to every hour.
+2. Change public methodology and empty-state copy to the truthful hourly promise.
+3. Tighten the stale-GMP threshold from four hours to two hours (double the new cycle) and update boundary tests.
+4. Keep filing/PDF work outside the frequent market-data cycle.
+5. Run tests, lint and Production build; ship through a dedicated PR and observe the first scheduled cycle.
+
+## Explicitly separate follow-up
+
+Build a dedicated Live GMP decision table based on the competitor research in `research.md`. It will reuse current snapshots and provenance and needs no schema migration, but it is intentionally not bundled into the scheduling change.
+
+---
+
 # IPOBharosa production-closure plan
 
 Date: 15 August 2026

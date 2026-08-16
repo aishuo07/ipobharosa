@@ -2,7 +2,7 @@ name: Official filing evidence capture
 
 on:
   schedule:
-    # Remote PDFs are intentionally outside the two-hour market-data cycle.
+    # Remote PDFs are intentionally outside the hourly market-data cycle.
     # Capture immutable evidence first; the financial extractor runs at 01:30 UTC.
     - cron: "45 0 * * *"
   workflow_dispatch: {}

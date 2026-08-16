@@ -2,10 +2,10 @@ name: IPO data ingestion
 
 on:
   schedule:
-    # Every 2 hours. Vercel's free Hobby plan only allows daily native
+    # Every hour. Vercel's free Hobby plan only allows daily native
     # cron jobs, so this runs on GitHub Actions' free scheduler instead
     # and just hits the deployed, CRON_SECRET-protected API route.
-    - cron: "0 */2 * * *"
+    - cron: "0 * * * *"
   workflow_dispatch: {}
 
 jobs:

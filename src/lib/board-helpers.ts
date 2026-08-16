@@ -122,10 +122,10 @@ export function gmpPct(ipo: BoardIpo): string {
   return ((ipo.gmp.medianValue / ipo.priceBandHigh) * 100).toFixed(1);
 }
 
-// Our own ingestion cycle runs every 2 hours — anything more than double
+// Our own ingestion cycle runs every hour — anything more than double
 // that with no successful update is worth flagging explicitly rather
 // than making the user do the math on a timestamp themselves.
-const STALE_THRESHOLD_MS = 4 * 3600 * 1000;
+const STALE_THRESHOLD_MS = 2 * 3600 * 1000;
 
 export function isStale(capturedAtIso: string, now: number): boolean {
   return now - new Date(capturedAtIso).getTime() > STALE_THRESHOLD_MS;
