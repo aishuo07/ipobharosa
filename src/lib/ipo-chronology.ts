@@ -85,9 +85,30 @@ export type DateLedgerGroup<T extends ChronologyIpo = ChronologyIpo> = {
   events: IpoCalendarEvent<T>[];
 };
 
+export type TodayMarketSummary = {
+  opens: number;
+  closes: number;
+  allotments: number;
+  listings: number;
+};
+
+export function todayMarketSummary<T extends ChronologyIpo>(
+  ipos: readonly T[],
+  now: number,
+): TodayMarketSummary {
+  const summary: TodayMarketSummary = { opens: 0, closes: 0, allotments: 0, listings: 0 };
+  for (const event of lifecycleEventsByDay(ipos)[marketDayKey(now)] ?? []) {
+    if (event.type === "opens") summary.opens++;
+    else if (event.type === "closes") summary.closes++;
+    else if (event.type === "allotment") summary.allotments++;
+    else summary.listings++;
+  }
+  return summary;
+}
+
 /**
  * Groups current and future lifecycle events for the homepage ledger.
- * Today is deliberately returned even when it has no milestones so the first
+ * Today is deliberately returned even when it has no events so the first
  * question on the page never disappears on quiet market days.
  */
 export function dateLedgerGroups<T extends ChronologyIpo>(

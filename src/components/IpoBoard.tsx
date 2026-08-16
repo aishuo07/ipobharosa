@@ -27,6 +27,7 @@ import {
   marketDayKey,
   marketDayOffset,
   sortCalendarAgendaEvents,
+  todayMarketSummary,
   type CatalogueSort,
   type IpoCalendarEvent,
 } from "@/lib/ipo-chronology";
@@ -41,6 +42,7 @@ import {
   fmtDateShort,
   fmtINR,
   gmpPct,
+  gmpAvailabilityText,
   gmpUpdatedText,
   isStale,
   lifecycleDoneUpTo,
@@ -48,6 +50,7 @@ import {
   listingGainPct,
   registrarAllotmentUrl,
   subSummary,
+  subscriptionAvailabilityText,
   timeUntil,
 } from "@/lib/board-helpers";
 
@@ -103,10 +106,6 @@ export default function IpoBoard({
   const router = useRouter();
 
   const MAX_COMPARE = 3;
-  const trackedIssuerCount = useMemo(
-    () => new Set([...ipos.map((ipo) => ipo.companyName.toLowerCase()), ...filings.map((entry) => entry.companyName.toLowerCase())]).size,
-    [ipos, filings],
-  );
   const todayEventCount = useMemo(
     () => lifecycleEventsByDay(ipos)[marketDayKey(now)]?.length ?? 0,
     [ipos, now],
@@ -247,18 +246,14 @@ export default function IpoBoard({
         </div>
       </div>
 
-      <section className="board-intro" aria-labelledby="board-title">
+      <section className="board-intro board-intro-compact" aria-labelledby="board-title">
         <div>
-          <p className="board-kicker">Indian IPO intelligence</p>
-          <h1 id="board-title">Decide with evidence, not noise.</h1>
-          <p>Dates, demand and grey-market signals—clearly sourced, honestly labelled.</p>
+          <p className="board-kicker">Indian IPO tracker</p>
+          <h1 id="board-title">Dates, demand and GMP—without the noise.</h1>
         </div>
-        <div className="board-proof" aria-label="IPOBharosa data principles">
-          <span><b>{trackedIssuerCount}</b> tracked issuers</span>
-          <span><b>{filings.length}</b> official filings</span>
-          <span><b>{ipos.length}</b> complete IPO pages</span>
-          <span><b>3</b> GMP sources</span>
-        </div>
+        <p className="board-coverage">
+          <strong>{ipos.length} IPOs</strong> with complete terms · {filings.length} official filings · market signals checked hourly
+        </p>
       </section>
 
       <div className="controls">
@@ -268,14 +263,14 @@ export default function IpoBoard({
             active={view === "dates"}
             onClick={() => changeView("dates")}
           >
-            Today & dates <span className="n">{todayEventCount} today</span>
+            Today <span className="n">{todayEventCount}</span>
           </TabButton>
           <TabButton
             type="button"
             active={view === "board"}
             onClick={() => changeView("board")}
           >
-            Explore
+            Live IPOs
           </TabButton>
           <TabButton
             type="button"
@@ -533,25 +528,32 @@ function DateLedgerView({
     const status = effectiveStatus(ipo, now);
     return status === "open" || status === "closing-soon";
   }).length;
+  const summary = useMemo(() => todayMarketSummary(ipos, now), [ipos, now]);
   const feedUrl = calendarFeedUrl(boardFilter);
+  const todayCounts = [
+    { key: "opens", count: summary.opens, label: summary.opens === 1 ? "opening" : "openings" },
+    { key: "closes", count: summary.closes, label: summary.closes === 1 ? "closing" : "closings" },
+    { key: "allotment", count: summary.allotments, label: summary.allotments === 1 ? "allotment" : "allotments" },
+    { key: "lists", count: summary.listings, label: summary.listings === 1 ? "listing" : "listings" },
+  ].filter((item) => item.count > 0);
 
   return (
     <section className="date-ledger" aria-labelledby="date-ledger-title">
-      <div className="date-ledger-hero">
+      <header className="date-ledger-today">
         <div>
-          <p className="board-kicker">IPO market timeline</p>
-          <h2 id="date-ledger-title">What is happening today—and next.</h2>
-          <p>
-            Mainboard and SME milestones in one chronological view. GMP is unofficial;
-            verification and source status remain visible on every IPO.
-          </p>
+          <span>Today</span>
+          <h2 id="date-ledger-title">{formatMarketDate(now, { weekday: "long", day: "numeric", month: "long" })}</h2>
         </div>
-        <div className="date-ledger-summary" aria-label="Today market summary">
-          <strong>{formatMarketDate(now, { weekday: "long", day: "numeric", month: "long" })}</strong>
-          <span>{eventsByDay[todayKey]?.length ?? 0} milestone{(eventsByDay[todayKey]?.length ?? 0) === 1 ? "" : "s"} today</span>
-          <span>{openCount} IPO{openCount === 1 ? "" : "s"} accepting bids</span>
+        <div className="today-market-counts" aria-label="Today IPO activity">
+          <strong>{openCount} open for bidding</strong>
+          {todayCounts.map((item) => (
+            <span className={`today-count cal-${item.key}`} key={item.key}>
+              {item.count} {item.label}
+            </span>
+          ))}
+          {todayCounts.length === 0 && <span>No scheduled events today</span>}
         </div>
-      </div>
+      </header>
 
       <div className="date-ledger-toolbar">
         <SegmentedTabs label="Date range">
@@ -581,7 +583,7 @@ function DateLedgerView({
             >
               <span>{index === 0 ? "Today" : formatMarketDate(`${dayKey}T12:00:00.000Z`, { weekday: "short" })}</span>
               <strong>{formatMarketDate(`${dayKey}T12:00:00.000Z`, { day: "numeric", month: "short" })}</strong>
-              <small>{eventCount || "—"} {eventCount === 1 ? "event" : "events"}</small>
+              <small>{eventCount ? `${eventCount} ${eventCount === 1 ? "event" : "events"}` : "No events"}</small>
             </button>
           );
         })}
@@ -592,19 +594,23 @@ function DateLedgerView({
           const isToday = group.dayKey === todayKey;
           return (
             <section className={`date-ledger-group${isToday ? " is-today" : ""}`} key={group.dayKey} aria-labelledby={`ledger-${group.dayKey}`}>
-              <header className="date-ledger-group-head">
-                <div>
-                  <span>{isToday ? "Today" : formatMarketDate(`${group.dayKey}T12:00:00.000Z`, { weekday: "long" })}</span>
-                  <h3 id={`ledger-${group.dayKey}`}>
-                    {formatMarketDate(`${group.dayKey}T12:00:00.000Z`, { day: "numeric", month: "long", year: "numeric" })}
-                  </h3>
-                </div>
-                <strong>{group.events.length} milestone{group.events.length === 1 ? "" : "s"}</strong>
-              </header>
+              {isToday ? (
+                <h3 className="sr-only" id={`ledger-${group.dayKey}`}>Today&apos;s IPO events</h3>
+              ) : (
+                <header className="date-ledger-group-head">
+                  <div>
+                    <span>{formatMarketDate(`${group.dayKey}T12:00:00.000Z`, { weekday: "long" })}</span>
+                    <h3 id={`ledger-${group.dayKey}`}>
+                      {formatMarketDate(`${group.dayKey}T12:00:00.000Z`, { day: "numeric", month: "long", year: "numeric" })}
+                    </h3>
+                  </div>
+                  <strong>{group.events.length} event{group.events.length === 1 ? "" : "s"}</strong>
+                </header>
+              )}
 
               {group.events.length === 0 ? (
                 <div className="date-ledger-empty">
-                  <strong>No IPO milestone {isToday ? "today" : "on this date"}.</strong>
+                  <strong>No IPO event {isToday ? "today" : "on this date"}.</strong>
                   <span>{isToday && openCount > 0 ? `${openCount} IPO${openCount === 1 ? " is" : "s are"} still accepting bids.` : "Choose another date or view all upcoming events."}</span>
                 </div>
               ) : (
@@ -643,7 +649,7 @@ function DateLedgerRow({ event, now }: { event: IpoCalendarEvent<BoardIpo>; now:
   const eventLabel = event.type === "lists" ? "Listing" : event.label;
   return (
     <tr>
-      <td data-label="Event">
+      <td data-label="Event" className="date-ledger-event-cell">
         <span className={`date-event-pill cal-${event.type}`}>{eventLabel}</span>
         <small>{calendarEventTimingLabel(event, now)}</small>
       </td>
@@ -651,22 +657,22 @@ function DateLedgerRow({ event, now }: { event: IpoCalendarEvent<BoardIpo>; now:
         <a href={`/ipo/${ipo.slug}`}>{ipo.companyName}</a>
         <div><span className="board-tag">{ipo.board === "MAINBOARD" ? "Mainboard" : "SME"}</span><VerificationBadge ipo={ipo} /></div>
       </td>
-      <td data-label="Price & minimum">
+      <td data-label="Price & minimum" className="date-ledger-price">
         <strong>₹{ipo.priceBandLow}–₹{ipo.priceBandHigh}</strong>
         <small>{ipo.lotSize} shares · {fmtINR(ipo.lotSize * ipo.priceBandHigh)}</small>
       </td>
       <td data-label="GMP · unofficial" className="date-ledger-gmp">
-        {gmp ? <><strong>{fmtINR(gmp.medianValue)} ({gmpPct(ipo)}%)</strong><small>{confidenceLabel(gmp.confidence)} · {gmpUpdatedText(gmp.capturedAt, now)}</small></> : <><strong>Not available</strong><small>No observation captured</small></>}
+        {gmp ? <><strong>{fmtINR(gmp.medianValue)} ({gmpPct(ipo)}%)</strong><small>{confidenceLabel(gmp.confidence)} · {gmpUpdatedText(gmp.capturedAt, now)}</small></> : <><strong>{gmpAvailabilityText(ipo)}</strong><small>Unofficial quote not published by tracked sources</small></>}
       </td>
-      <td data-label="Demand">
+      <td data-label="Demand" className="date-ledger-demand">
         <strong>{subSummary(ipo)}</strong>
-        <small>{ipo.subscription?.sourceName ? `Source: ${ipo.subscription.sourceName}` : "Updated as bidding data arrives"}</small>
+        <small>{subscriptionAvailabilityText(ipo)}</small>
       </td>
       <td data-label="Action" className="date-ledger-row-actions">
         {allotmentUrl && (
           <a className="ui-button ui-button-primary" href={allotmentUrl} target="_blank" rel="noopener noreferrer">Check allotment</a>
         )}
-        <a className={`ui-button ${allotmentUrl ? "ui-button-secondary" : "ui-button-primary"}`} href={`/ipo/${ipo.slug}`}>Details & sources</a>
+        <a className={`ui-button ${allotmentUrl ? "ui-button-secondary" : "ui-button-primary"}`} href={`/ipo/${ipo.slug}`}>View IPO details</a>
       </td>
     </tr>
   );
@@ -800,7 +806,7 @@ function MajorIpoFacts({ ipo, now }: { ipo: BoardIpo; now: number }) {
   const gain = listingGainPct(ipo);
   const gmpValue = ipo.status === "LISTED" && gain !== null
     ? `${gain >= 0 ? "+" : ""}${gain.toFixed(1)}% debut`
-    : ipo.gmp ? `${fmtINR(ipo.gmp.medianValue)} (+${gmpPct(ipo)}%)` : "Not available";
+    : ipo.gmp ? `${fmtINR(ipo.gmp.medianValue)} (+${gmpPct(ipo)}%)` : gmpAvailabilityText(ipo);
   const gmpContext = ipo.status === "LISTED"
     ? "Listing performance"
     : ipo.gmp
@@ -1921,7 +1927,7 @@ function CalendarView({
                 ? new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" }).format(new Date(`${activeSelectedDay}T00:00:00+05:30`))
                 : "Today and upcoming IPO dates"}
             </h2>
-            {!activeSelectedDay && <p>Today&apos;s milestones appear first. Future opening, closing, allotment and listing dates follow chronologically.</p>}
+            {!activeSelectedDay && <p>Today&apos;s IPO events appear first. Opening, closing, allotment and listing dates follow in order.</p>}
           </div>
           {activeSelectedDay && <button type="button" className="btn btn-ghost" onClick={() => setSelectedDay(null)}>Show today + upcoming</button>}
         </div>
@@ -1939,7 +1945,7 @@ function CalendarView({
               <section className={`calendar-agenda-day${isToday ? " is-today" : ""}`} key={group.dayKey} aria-labelledby={`agenda-${group.dayKey}`}>
                 <div className="calendar-agenda-day-head">
                   <h3 id={`agenda-${group.dayKey}`}>{heading}</h3>
-                  <span>{group.events.length} milestone{group.events.length === 1 ? "" : "s"}</span>
+                  <span>{group.events.length} event{group.events.length === 1 ? "" : "s"}</span>
                 </div>
                 <div className="calendar-agenda-day-events">
                   {group.events.map((event) => (
@@ -1956,7 +1962,7 @@ function CalendarView({
             );
           })}
           {agendaEvents.length === 0 && (
-            <StatePanel title={activeSelectedDay ? "No IPO milestones on this date" : "No upcoming IPO milestones"}>
+            <StatePanel title={activeSelectedDay ? "No IPO events on this date" : "No upcoming IPO events"}>
               Choose another date. Early filings without final dates remain in IPO Pipeline.
             </StatePanel>
           )}

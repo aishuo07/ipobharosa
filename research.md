@@ -1,3 +1,111 @@
+# Research: date-first homepage information hierarchy and responsive UX
+
+Date: 17 August 2026
+
+## Scope and evidence
+
+Reviewed the current public homepage and the latest managed Production deployment at desktop (1440px) and mobile (390px), then traced the UI through:
+
+- `src/components/IpoBoard.tsx:170-680` — navigation, public views and date-ledger rendering;
+- `src/components/IpoBoard.tsx:730-840` — catalogue rows and major IPO facts;
+- `src/lib/ipo-chronology.ts:1-190` — market-day grouping, event priority and date sorting;
+- `src/app/globals.css:170-550` — masthead, hero, controls, catalogue and date ledger;
+- `src/app/globals.css:990-1060` — global mobile rules.
+
+The existing date model is sound: dates are normalized to `Asia/Kolkata`, lifecycle events are typed as opens/closes/allotment/lists, today is always retained, and events sort deterministically. This release needs no schema migration and should not rebuild the calendar data layer.
+
+## What is working
+
+- Date-first is the right homepage default for the user question: “what is happening today and next?”
+- Mainboard and SME already share one chronology with a working filter.
+- The seven-day selector and “All upcoming” mode provide better progressive disclosure than opening a full month calendar first.
+- Each row already has the right raw facts: event, company/type/verification, price/minimum, GMP/context, demand and relevant actions.
+- Full month calendar and calendar subscription already exist as secondary tools.
+
+## What is not working
+
+### 1. The first viewport has two competing hero sections
+
+`board-intro` uses up to 76px top spacing and a 70px editorial headline, then `date-ledger-hero` introduces a second large headline. Users must cross branding, inventory counters, view tabs, type filters and another hero before reaching actual IPOs. The valuable market rows start too low.
+
+### 2. Inventory numbers lead instead of today's decisions
+
+“153 tracked issuers / 93 filings / 60 pages / 3 GMP sources” explains coverage but is not what a returning user needs first. The primary summary should instead expose today’s opens, closes, allotments, listings and currently open issues. Coverage belongs in a quieter secondary line.
+
+### 3. Empty/missing states look synthetic
+
+- The seven-day strip displays `— events` for a zero-event day.
+- Missing GMP says generic “Not available / No observation captured”.
+- Demand can repeat a generic “Subscription data pending”.
+
+These are truthful but mechanically phrased. They should explain the lifecycle: “No IPO milestone”, “GMP not quoted by tracked sources”, “Bidding not open” or “Awaiting exchange update”. No value should be fabricated or replaced by zero.
+
+### 4. Mobile is not actually composed for the viewport
+
+The 390px capture visibly clips headings, counters, navigation and content on the right. The table-to-card CSS at `globals.css:527-550` helps individual rows, but page-level elements still create horizontal overflow. The mobile cards also retain desktop `data-label` table anatomy, producing tall, repetitive “EVENT / IPO / PRICE” blocks instead of a deliberate mobile record.
+
+### 5. Important details lack a clear reading order
+
+On desktop the row is complete but every column has similar weight. On mobile the company name appears only after the event label. The intended scan order should be:
+
+```text
+Date/event urgency → company + Mainboard/SME → price + minimum
+→ GMP/demand with freshness → verification → action
+```
+
+## Product decision
+
+Use a **date agenda**, not a month calendar, as the homepage. A month grid is useful for navigation but too sparse for price, lot, GMP, demand, verification and actions. The homepage should combine a compact today summary, horizontal seven-day picker and grouped agenda; “Month calendar” remains a secondary action.
+
+## Target experience
+
+### Above the fold
+
+1. Compact brand/navigation.
+2. A single utility heading: **Today · Monday, 17 August**.
+3. One plain-language summary line: `3 open for bidding · 1 closes · 4 allotments · 3 listings`.
+4. Mainboard/SME filter and seven-day picker.
+5. First actual IPO row/card.
+
+The standalone white “IPO market timeline / What is happening today—and next” card should be removed entirely. It repeats the selected tab/date, consumes a large part of the viewport, and introduces internal vocabulary (“milestones”) instead of helping the user act. The generic methodology sentence also does not belong above the market list; verification/GMP context already appears on each IPO and in Methodology.
+
+### Desktop agenda row
+
+- event colour rail/pill and relative timing;
+- company, board and concise verification state;
+- price band, lot and minimum in one high-priority cluster;
+- GMP with `% over cap`, freshness and source agreement;
+- demand using retail/overall when present;
+- one primary contextual action plus a quiet details link.
+
+### Mobile agenda card
+
+- event band + relative date at the top;
+- company and board immediately below;
+- 2×2 fact grid for price/minimum, GMP and demand;
+- short verification line;
+- full-width contextual action;
+- no desktop table labels and no page-level horizontal scrolling.
+
+### Empty states
+
+- Zero date count: `No milestones`.
+- GMP absent before sources publish a quote: `No tracked GMP quote yet`.
+- Subscription before opening: `Bidding opens [date]`.
+- Subscription during bidding but not captured: `Awaiting exchange update`.
+- No events on selected day: keep the selected date and show currently open IPOs as a useful fallback.
+
+## Constraints
+
+- Do not imply a GMP prediction or invent missing values.
+- Preserve source-agreement, verification and freshness context.
+- Preserve the existing month calendar and calendar feed.
+- Preserve Mainboard/SME filtering across the agenda.
+- Do not introduce a new dependency or schema migration.
+- Fix the public domain/deployment alias separately; UI code alone cannot move an inaccessible Vercel alias.
+
+---
+
 # Research: hourly market refresh and live-GMP competitor patterns
 
 Date: 17 August 2026

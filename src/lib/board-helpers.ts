@@ -153,6 +153,21 @@ export function confidenceLabel(tier: NonNullable<BoardIpo["gmp"]>["confidence"]
   return CONFIDENCE_LABELS[tier];
 }
 
+export function gmpAvailabilityText(ipo: BoardIpo): string {
+  return ipo.status === "LISTED" ? "No tracked GMP history" : "No tracked GMP quote yet";
+}
+
+export function subscriptionAvailabilityText(ipo: BoardIpo): string {
+  if (ipo.subscription) {
+    return ipo.subscription.sourceName
+      ? `Source: ${ipo.subscription.sourceName}`
+      : "Latest captured demand";
+  }
+  if (ipo.status === "UPCOMING") return "Figures appear after bidding opens";
+  if (ipo.status === "OPEN") return "Checked hourly while bidding is open";
+  return "No final exchange snapshot captured";
+}
+
 export function subSummary(ipo: BoardIpo): string {
   const s = ipo.subscription;
   if (!s || s.qibX === null || s.niiX === null || s.retailX === null) {
@@ -160,8 +175,8 @@ export function subSummary(ipo: BoardIpo): string {
     // actual status — conflating "not open yet" with "not scraped yet"
     // makes an OPEN IPO's card say something factually wrong.
     if (ipo.status === "UPCOMING") return "Bidding not open yet";
-    if (ipo.status === "LISTED") return "Final subscription not available";
-    return "Subscription data pending";
+    if (ipo.status === "CLOSED" || ipo.status === "LISTED") return "Final demand unavailable";
+    return "Awaiting exchange update";
   }
   if (s.totalX !== null && s.totalX !== undefined) return `${s.retailX.toFixed(1)}x retail · ${s.totalX.toFixed(1)}x overall`;
   const categoryAverage = ((s.qibX + s.niiX + s.retailX + (s.employeeX ?? 0)) / (s.employeeX !== null ? 4 : 3)).toFixed(1);

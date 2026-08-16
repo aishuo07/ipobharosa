@@ -12,6 +12,7 @@ import {
   marketMonthAnchor,
   sortCalendarAgendaEvents,
   sortIposByChronology,
+  todayMarketSummary,
   type ChronologyIpo,
 } from "./ipo-chronology";
 
@@ -49,6 +50,42 @@ describe("IPO chronology", () => {
     expect(groups.map((group) => group.dayKey)).toEqual(["2026-08-15", "2026-08-17", "2026-08-22"]);
     expect(groups[0].events).toEqual([]);
     expect(groups[1].events[0].type).toBe("opens");
+  });
+
+  it("summarizes each kind of event happening today", () => {
+    const now = Date.parse("2026-08-15T06:00:00.000Z");
+    const rows = [
+      ipo({
+        openDate: "2026-08-15T00:00:00.000Z",
+        closeDate: "2026-08-15T00:00:00.000Z",
+        allotmentDate: "2026-08-15T00:00:00.000Z",
+        listingDate: "2026-08-15T00:00:00.000Z",
+      }),
+      ipo({
+        id: "two",
+        companyName: "Beta Limited",
+        openDate: "2026-08-14T00:00:00.000Z",
+        closeDate: "2026-08-15T00:00:00.000Z",
+        allotmentDate: "2026-08-18T00:00:00.000Z",
+        listingDate: "2026-08-20T00:00:00.000Z",
+      }),
+    ];
+
+    expect(todayMarketSummary(rows, now)).toEqual({
+      opens: 1,
+      closes: 2,
+      allotments: 1,
+      listings: 1,
+    });
+  });
+
+  it("returns zero counts on a quiet market day", () => {
+    expect(todayMarketSummary([ipo()], Date.parse("2026-09-01T06:00:00.000Z"))).toEqual({
+      opens: 0,
+      closes: 0,
+      allotments: 0,
+      listings: 0,
+    });
   });
 
   it("can show all upcoming dates beyond the homepage week", () => {
