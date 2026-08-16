@@ -1270,7 +1270,7 @@ export function OverviewPanel({
             </div>
           ) : (
             <p style={{ color: "var(--ink-muted)", fontSize: 13.5 }}>
-              No GMP data captured yet — the ingestion pipeline runs every 2 hours during market
+              No GMP data captured yet — the ingestion pipeline runs every hour during market
               hours.
             </p>
           )}
@@ -1371,7 +1371,7 @@ export function GmpPanel({ ipo, now }: { ipo: BoardIpo; now: number }) {
     return (
       <StatePanel title="No GMP signal has been captured yet">
         No GMP data captured yet for this IPO. The ingestion pipeline scrapes multiple public
-        sources every 2 hours during market hours — check back soon.
+        sources every hour during market hours — check back soon.
       </StatePanel>
     );
   }

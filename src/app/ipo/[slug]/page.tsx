@@ -14,13 +14,13 @@ import { Badge, Surface } from "@/components/ui";
 import { badgeText, confidenceLabel, countdownText, effectiveStatus, fmtDate, fmtDateTime, fmtINR } from "@/lib/board-helpers";
 import { googleCalendarSubscriptionUrl } from "@/lib/calendar";
 
-// GMP figures matter most for this page and refresh every 2 hours —
+// GMP figures matter most for this page and refresh every hour —
 // 30 minutes keeps a crawled/cached copy reasonably current without
 // hitting the database on every single request.
 export const revalidate = 1800;
 
 export async function generateStaticParams() {
-  // IPOs are database-driven and can be published every two hours. Avoid a
+  // IPOs are database-driven and can be published every hour. Avoid a
   // build-time database/schema dependency: pages are generated on first
   // request and then follow the ISR policy above.
   return [];

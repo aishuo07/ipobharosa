@@ -56,13 +56,13 @@ function makeIpo(overrides: Partial<BoardIpo> = {}): BoardIpo {
 describe("isStale", () => {
   const capturedAt = new Date("2026-08-11T10:00:00.000Z").toISOString();
 
-  it("is not stale exactly at the 4-hour threshold", () => {
-    const now = new Date("2026-08-11T14:00:00.000Z").getTime();
+  it("is not stale exactly at the 2-hour threshold", () => {
+    const now = new Date("2026-08-11T12:00:00.000Z").getTime();
     expect(isStale(capturedAt, now)).toBe(false);
   });
 
-  it("is stale one millisecond past the 4-hour threshold", () => {
-    const now = new Date("2026-08-11T14:00:00.001Z").getTime();
+  it("is stale one millisecond past the 2-hour threshold", () => {
+    const now = new Date("2026-08-11T12:00:00.001Z").getTime();
     expect(isStale(capturedAt, now)).toBe(true);
   });
 

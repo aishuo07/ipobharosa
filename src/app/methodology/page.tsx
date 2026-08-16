@@ -44,8 +44,8 @@ export default function MethodologyPage() {
 
       <h2>Freshness and staleness</h2>
       <p>
-        Our ingestion pipeline runs every 2 hours. Every GMP figure shows how long ago it was captured. If a
-        value is more than 4 hours old — double our own cycle length with no successful update in between —
+        Our ingestion pipeline runs every hour. Every GMP figure shows how long ago it was captured. If a
+        value is more than 2 hours old — double our own cycle length with no successful update in between —
         we mark it <strong>Stale</strong> explicitly instead of leaving you to do that math yourself.
       </p>
 
@@ -67,7 +67,7 @@ export default function MethodologyPage() {
 
       <h2>How a new IPO gets added</h2>
       <p>
-        Every 2-hour cycle also checks IPO Watch&apos;s public listing for issues we aren&apos;t tracking yet.
+        Every hourly cycle also checks IPO Watch&apos;s public listing for issues we aren&apos;t tracking yet.
         Every candidate&apos;s facts get checked for internal consistency (a sane price band, dates in the
         right order, a lot size that&apos;s actually a positive number, and so on) before anything happens to
         it:
