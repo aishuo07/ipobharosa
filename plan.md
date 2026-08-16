@@ -727,5 +727,6 @@ Status: implementation requested by owner on 17 Aug 2026.
 - [DONE] Add a cached InvestorGain GMP adapter and safe SME name aliases.
 - [DONE] Reject absent (`--`) quotes instead of presenting them as ₹0.
 - [DONE] Publish successful InvestorGain observations in public provenance.
-- [IN PROGRESS] Run unit, lint, build and responsive browser verification.
-- [TODO] Deploy Preview, visually verify, merge, run production ingestion and confirm populated/absent SME quotes.
+- [DONE] Run 279 unit tests, zero-warning lint, production build and live adapter verification.
+- [DONE] Verify the Vercel Preview at 768px and 390px: compact rows/cards render without document overflow and retain every decision field.
+- [IN PROGRESS] Merge, run production ingestion and confirm populated/absent SME quotes.
