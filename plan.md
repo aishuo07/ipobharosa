@@ -718,3 +718,14 @@ Approval authorises the code work in PRs 6–10 one bounded PR at a time. It doe
 not authorise domain purchase, billing/plan changes, public email enablement,
 credential rotation, destructive database work or public legal publication;
 those remain explicit owner actions.
+# Compact agenda and SME GMP coverage
+
+Status: implementation requested by owner on 17 Aug 2026.
+
+- [DONE] Replace oversized tablet agenda cards with a compact information grid.
+- [DONE] Keep a dedicated phone layout without hiding price, minimum, GMP, demand or actions.
+- [DONE] Add a cached InvestorGain GMP adapter and safe SME name aliases.
+- [DONE] Reject absent (`--`) quotes instead of presenting them as ₹0.
+- [DONE] Publish successful InvestorGain observations in public provenance.
+- [IN PROGRESS] Run unit, lint, build and responsive browser verification.
+- [TODO] Deploy Preview, visually verify, merge, run production ingestion and confirm populated/absent SME quotes.

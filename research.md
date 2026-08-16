@@ -656,3 +656,10 @@ view, not the homepage itself.
 - Local validation passed 268 tests, lint, TypeScript and the optimized Next.js
   build. Real-data responsive validation must run on Vercel Preview because the
   sandboxed local web process cannot reach the hosted database.
+# Compact agenda and SME GMP coverage — 17 Aug 2026
+
+- The responsive agenda switched every row into a vertically stacked card below 840px. Repeated full-width sections and a full-width CTA made a single IPO consume most of a tablet screen.
+- A compact three-column information grid preserves event, company, price/minimum, GMP, demand and actions while reducing repeated labels and whitespace. Phones below 600px still get a readable two-column layout.
+- The existing three GMP adapters have uneven SME coverage. Live checks found IPO Watch reports Skytech, while Credent and Technocrats have current quotes on InvestorGain; ENS, Fascinate and Pramodini currently show no active quote there.
+- InvestorGain exposes the live report as structured JSON. The adapter can fetch the report once per five minutes, match known shortened company names, and treat `--` as unavailable rather than manufacturing a ₹0 quote.
+- GMP remains unofficial. A fourth source improves coverage and cross-source comparison; it does not change the verification status of official IPO terms.

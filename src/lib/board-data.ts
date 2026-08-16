@@ -259,6 +259,8 @@ function shapeIpo(ipo: IpoWithRelations, officialProvenance?: OfficialProvenance
         ? `https://www.sahi.com/blogs/${slug}-ipo-gmp-today`
         : observation.source.adapterKey === "ipoji"
           ? `https://www.ipoji.com/ipo/${slug}-ipo`
+          : observation.source.adapterKey === "investorgain"
+            ? "https://www.investorgain.com/report/ipo-gmp-live/331/"
           : observation.source.baseUrl;
     if (url.startsWith("https://")) gmpSourceLinks.set(observation.source.adapterKey, {
       name: observation.source.name,

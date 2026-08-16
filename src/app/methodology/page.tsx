@@ -24,7 +24,7 @@ export default function MethodologyPage() {
       </p>
       <p>
         We pull a GMP figure from three independent public sources every ingestion cycle: <strong>IPO
-        Watch</strong>, <strong>Sahi</strong>, and <strong>IPO Ji</strong>. Each is scraped separately. The
+        Watch</strong>, <strong>Sahi</strong>, <strong>IPO Ji</strong>, and <strong>InvestorGain</strong>. Each is collected separately. The
         value we show is the <strong>median</strong> of whichever sources returned a number that cycle —
         if a source is down, its page layout changed, or it simply hasn&apos;t published a figure for that
         IPO yet, it is dropped from that cycle&apos;s calculation. A source going missing never blocks the

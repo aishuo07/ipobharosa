@@ -543,24 +543,52 @@ a, button { font-family: inherit; }
   .date-ledger-table-wrap { overflow: visible; border: 0; background: transparent; }
   .date-ledger-table { min-width: 0; }
   .date-ledger-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-  .date-ledger-table, .date-ledger-table tbody, .date-ledger-table td { display: block; width: 100%; }
+  .date-ledger-table, .date-ledger-table tbody { display: block; width: 100%; }
   .date-ledger-table tbody { display: grid; gap: 10px; }
-  .date-ledger-table tr { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; width: 100%; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-card); }
-  .date-ledger-table :is(td, tr:last-child td) { padding: 10px 0; border-bottom: 1px solid var(--border); }
-  .date-ledger-table td::before { display: block; margin-bottom: 5px; content: attr(data-label); color: var(--ink-faint); font: 700 9.5px/1.4 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
-  .date-ledger-event-cell, .date-ledger-company, .date-ledger-demand, .date-ledger-row-actions { grid-column: 1 / -1; }
-  .date-ledger-event-cell { display: flex !important; align-items: center; justify-content: space-between; gap: 12px; padding-top: 0 !important; }
+  .date-ledger-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, .9fr) minmax(124px, .7fr);
+    grid-template-areas:
+      "event event actions"
+      "company company actions"
+      "price gmp demand";
+    gap: 0 12px; width: 100%; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface);
+  }
+  .date-ledger-table :is(td, tr:last-child td) { width: auto; min-width: 0; padding: 7px 0; border-bottom: 0; }
+  .date-ledger-table td::before { display: block; margin-bottom: 3px; content: attr(data-label); color: var(--ink-faint); font: 700 8.5px/1.3 var(--font-mono); letter-spacing: .055em; text-transform: uppercase; }
+  .date-ledger-event-cell { grid-area: event; }
+  .date-ledger-company { grid-area: company; }
+  .date-ledger-price { grid-area: price; }
+  .date-ledger-gmp { grid-area: gmp; }
+  .date-ledger-demand { grid-area: demand; }
+  .date-ledger-row-actions { grid-area: actions; }
+  .date-ledger-event-cell { display: flex !important; align-items: center; justify-content: flex-start; gap: 9px; padding-top: 0 !important; }
   .date-ledger-event-cell::before, .date-ledger-company::before, .date-ledger-row-actions::before { display: none !important; }
-  .date-ledger-company { padding-top: 12px !important; }
-  .date-ledger-table td:last-child { border-bottom: 0; }
+  .date-ledger-event-cell small { margin: 0 !important; }
+  .date-event-pill { min-width: 68px; padding: 4px 7px; font-size: 9px; }
+  .date-ledger-company { padding: 5px 0 8px !important; }
+  .date-ledger-company > a { font-size: 15px; }
   .date-ledger-company { min-width: 0; }
   .date-ledger-company > div { margin-top: 4px; }
-  .date-ledger-row-actions { min-width: 0; }
-  .date-ledger-row-actions .ui-button { width: 100%; }
+  .date-ledger-table td > strong { font-size: 11px; line-height: 1.35; }
+  .date-ledger-table td > small { margin-top: 2px; font-size: 9.5px; line-height: 1.35; }
+  .date-ledger-row-actions { align-content: center; min-width: 0; padding-left: 8px !important; border-left: 1px solid var(--border); }
+  .date-ledger-row-actions .ui-button { width: 100%; min-height: 31px; padding: 6px 8px; font-size: 10.5px; }
 }
-@media (max-width: 430px) {
-  .date-ledger-table tr { grid-template-columns: 1fr; }
-  .date-ledger-price, .date-ledger-gmp { grid-column: 1; }
+@media (max-width: 600px) {
+  .date-ledger-table tr {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "event event"
+      "company company"
+      "price gmp"
+      "demand demand"
+      "actions actions";
+  }
+  .date-ledger-demand { border-top: 1px solid var(--border) !important; }
+  .date-ledger-row-actions { display: flex; gap: 7px; padding: 7px 0 0 !important; border-top: 1px solid var(--border); border-left: 0; }
+  .date-ledger-row-actions .ui-button { flex: 1; }
 }
 
 /* ---------- calendar ---------- */

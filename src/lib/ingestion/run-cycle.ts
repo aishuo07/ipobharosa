@@ -4,6 +4,7 @@ import { computeGmpSnapshot } from "@/lib/gmp/confidence";
 import { ipoWatchAdapter } from "@/lib/gmp/adapters/ipowatch";
 import { sahiAdapter } from "@/lib/gmp/adapters/sahi";
 import { ipojiAdapter } from "@/lib/gmp/adapters/ipoji";
+import { investorGainAdapter } from "@/lib/gmp/adapters/investorgain";
 import { sahiSubscriptionAdapter } from "@/lib/subscription/adapters/sahi";
 import { syncIpoStatuses } from "@/lib/ipo-status";
 import { notifyWatchersOfTransitions } from "@/lib/email/reminders";
@@ -22,7 +23,7 @@ import { resolveSiteUrl } from "@/lib/site-url";
 const ALERT_RECIPIENT = "aish.iiitb@gmail.com";
 const SITE_URL = resolveSiteUrl();
 const BATCH_SIZE = 3;
-const GMP_ADAPTERS: GmpAdapter[] = [ipoWatchAdapter, sahiAdapter, ipojiAdapter];
+const GMP_ADAPTERS: GmpAdapter[] = [ipoWatchAdapter, sahiAdapter, ipojiAdapter, investorGainAdapter];
 const GMP_ELIGIBLE_STATUSES = ["UPCOMING", "OPEN", "CLOSED"] as const;
 const SUBSCRIPTION_ELIGIBLE_STATUSES = ["OPEN", "CLOSED"] as const;
 // Candidate checks are bounded so the workflow still has ample calls for GMP,
