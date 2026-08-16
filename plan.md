@@ -730,3 +730,14 @@ Status: implementation requested by owner on 17 Aug 2026.
 - [DONE] Run 279 unit tests, zero-warning lint, production build and live adapter verification.
 - [DONE] Verify the Vercel Preview at 768px and 390px: compact rows/cards render without document overflow and retain every decision field.
 - [IN PROGRESS] Merge, run production ingestion and confirm populated/absent SME quotes.
+# Scrollable IPO rows
+
+Status: owner explicitly redirected the approved responsive layout on 17 Aug 2026.
+
+- [DONE] Preserve semantic table rows at every viewport.
+- [DONE] Put IPO/company first and make it sticky below 840px.
+- [DONE] Enable touch-friendly horizontal scrolling with dense fixed-width columns.
+- [DONE] Run 279 tests, zero-warning lint and production build.
+- [DONE] Verify Preview at 768px/390px with no document overflow.
+- [DONE] Programmatically scroll the table 300px and confirm the IPO column remains fixed at the same left position; 560px of horizontal detail is available on phone.
+- [IN PROGRESS] Merge and verify Production.

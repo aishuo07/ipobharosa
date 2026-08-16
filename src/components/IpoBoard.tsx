@@ -618,8 +618,8 @@ function DateLedgerView({
                   <table className="date-ledger-table">
                     <thead>
                       <tr>
-                        <th>Event</th>
                         <th>IPO</th>
+                        <th>Event</th>
                         <th>Price & minimum</th>
                         <th>GMP · unofficial</th>
                         <th>Demand</th>
@@ -649,13 +649,13 @@ function DateLedgerRow({ event, now }: { event: IpoCalendarEvent<BoardIpo>; now:
   const eventLabel = event.type === "lists" ? "Listing" : event.label;
   return (
     <tr>
-      <td data-label="Event" className="date-ledger-event-cell">
-        <span className={`date-event-pill cal-${event.type}`}>{eventLabel}</span>
-        <small>{calendarEventTimingLabel(event, now)}</small>
-      </td>
       <td data-label="IPO" className="date-ledger-company">
         <a href={`/ipo/${ipo.slug}`}>{ipo.companyName}</a>
         <div><span className="board-tag">{ipo.board === "MAINBOARD" ? "Mainboard" : "SME"}</span><VerificationBadge ipo={ipo} /></div>
+      </td>
+      <td data-label="Event" className="date-ledger-event-cell">
+        <span className={`date-event-pill cal-${event.type}`}>{eventLabel}</span>
+        <small>{calendarEventTimingLabel(event, now)}</small>
       </td>
       <td data-label="Price & minimum" className="date-ledger-price">
         <strong>₹{ipo.priceBandLow}–₹{ipo.priceBandHigh}</strong>

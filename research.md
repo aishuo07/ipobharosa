@@ -663,3 +663,9 @@ view, not the homepage itself.
 - The existing three GMP adapters have uneven SME coverage. Live checks found IPO Watch reports Skytech, while Credent and Technocrats have current quotes on InvestorGain; ENS, Fascinate and Pramodini currently show no active quote there.
 - InvestorGain exposes the live report as structured JSON. The adapter can fetch the report once per five minutes, match known shortened company names, and treat `--` as unavailable rather than manufacturing a ₹0 quote.
 - GMP remains unofficial. A fourth source improves coverage and cross-source comparison; it does not change the verification status of official IPO terms.
+# Scrollable IPO rows — 17 Aug 2026
+
+- Owner feedback rejects responsive cards: mobile and tablet should preserve the same table-row mental model as desktop.
+- The lowest-complexity accessible solution is a real semantic table inside an explicit horizontal scroll container; no duplicate mobile markup is required.
+- IPO/company is the most important identity column, so it moves first and remains sticky while price, GMP, demand and actions scroll horizontally.
+- Dense mobile row typography and fixed minimum column widths retain all information without turning rows back into tall cards.
