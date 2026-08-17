@@ -920,3 +920,158 @@ The user explicitly approved implementation of all remaining filing layouts whil
 ## Rollback
 
 Revert the parser/request commit. Existing extraction rows are append-only and remain review-gated; no public financial is mutated by the worker.
+# Plan: launch trust closure
+
+Date: 17 August 2026
+Status: approved by owner; PR 1 implemented locally
+
+## Outcome
+
+Close the three pre-beta trust gaps with separate, reversible changes:
+
+```text
+PR 1  Batch financial verification + exception-only review
+PR 2  Launch-safe source policy + official NSE/SEBI ingestion path
+Drill Isolated Neon point-in-time restore proof
+Gate 10–20 user invite beta for 5–7 days
+```
+
+No current financial value will be silently published by a migration, no historical provenance will be erased, and no recovery action will target the Production branch.
+
+## PR 1 — replace 78 row approvals with safe batches
+
+### Policy and data flow
+
+- Add a pure verification-policy module that returns `AUTO_VERIFIED` or `REVIEW_REQUIRED` plus stable reason codes.
+- A row is batch-safe only when all of the following hold:
+  - source URL is an allowlisted official filing host and the document identity/checksum is recorded;
+  - native-text extraction (not OCR) meets the stricter confidence threshold;
+  - metric, fiscal year, explicit units, scope, audit status, page and table reference are present;
+  - normalization and bounds validation pass with no warning;
+  - duplicate occurrences agree within tolerance;
+  - it does not conflict with an existing published value;
+  - no newer RHP/Prospectus supersedes the document.
+- Everything else remains `REVIEW_REQUIRED` with one exact reason: missing context, low confidence/OCR, duplicate disagreement, superseded filing, published mismatch or unsupported metric/layout.
+- Add an atomic batch publication operation scoped to one IPO + filing checksum. It publishes only unchanged `AUTO_VERIFIED` rows, writes immutable published rows and audit events, and aborts the whole batch if evidence changed since classification.
+
+### Admin experience
+
+- Replace the flat 78-row queue with filing groups:
+  - `Ready to publish (N)` with one batch action and expandable evidence;
+  - `Needs review (N)` containing only real exceptions;
+  - published/skipped history with actor, timestamp and reason.
+- Remove the mandatory free-text reviewer field. Use the authenticated admin identity automatically; require a reason only for reject/override.
+- Keep row-level evidence links and correction controls.
+
+### Existing 78 values
+
+- First run a no-write classification report against all 78 rows and record counts by filing and reason.
+- Review the report for false positives.
+- Reclassify eligible pending revisions in a controlled backfill; do not publish during backfill.
+- Publish clean groups through the new atomic batch action. Only exception rows need human inspection.
+
+### Likely files
+
+- `src/lib/financials/verification-policy.ts` (new)
+- `src/lib/financials/workflow.ts`
+- `src/app/admin/financials/page.tsx`
+- `src/app/admin/financials/actions.ts`
+- Prisma migration only if filing checksum/batch audit cannot fit the existing schema cleanly
+- focused policy, workflow, authorization and atomicity tests
+- a no-write script/report for the existing queue
+
+### Acceptance and rollback
+
+- No clean filing requires per-value clicks.
+- No conflict/unclear value can enter a safe batch.
+- Concurrent/evidence-changing publish attempts fail closed.
+- Publication remains immutable and attributable.
+- Full tests, lint, build, migration test and Vercel Preview pass.
+- Rollback disables the batch action and reverts classification code; immutable published history is never deleted.
+
+## PR 2 — remove risky launch dependencies
+
+### Source policy
+
+- Add a checked-in source-policy registry with authority, purpose, Production-enabled state, reuse-review state and display attribution.
+- Exclude IPOWatch and Sahi adapters from new Production discovery/GMP/subscription/financial collection.
+- Preserve historical observations and links with original provenance, but do not select stale disabled-source values as current market truth.
+- Make Admin source health distinguish disabled-by-policy from operational failure.
+
+### Official primary path
+
+- Use NSE current/historical catalogues for discovery and core issue terms.
+- Use NSE issue details/demand snapshots for subscription where present.
+- Use SEBI's official filing catalogue plus NSE official document links for DRHP/RHP/Prospectus evidence.
+- Keep official consensus/revalidation and published-drift alerts.
+- Remove Sahi financial fallback from active Production paths.
+
+### GMP boundary
+
+- GMP remains explicitly unofficial.
+- Retain only providers whose launch usage is approved; until that review is complete, keep the layer configurable and show exact checked-source coverage.
+- Never use NSE/SEBI branding to imply GMP verification.
+- If provider coverage drops, show `No permitted tracked quote` or single-source confidence rather than `0` or a synthetic estimate.
+
+### Tests and release proof
+
+- Unit tests prove disabled sources are never called.
+- Contract fixtures cover NSE Mainboard and SME discovery, documents and demand.
+- A no-write Production inventory report compares coverage before/after policy enforcement and lists every lost field by IPO.
+- Preview proves source links, freshness, verification labels and empty reasons.
+- Production rollout must complete one clean hourly cycle within the first one-hour observation window and alert on official-source degradation. The following two cycles are collected as non-blocking beta evidence rather than delaying the recovery drill.
+
+### Rollback
+
+Source enablement is policy/config driven. Revert the PR or disable an affected adapter; do not delete observations or rewrite published values.
+
+## Recovery drill — isolated Neon branch only
+
+### Procedure
+
+1. Re-resolve the Production branch ID and record current project retention.
+2. Select a recent timestamp inside the six-hour history window and record the intended RPO.
+3. Create `recovery-rehearsal-<UTC timestamp>` from the Production branch at that timestamp.
+4. Create/use a compute endpoint for that branch and export its connection string only to the drill command.
+5. Run read-only checks:
+   - Prisma migration status and schema diff;
+   - non-sensitive counts for IPOs, filings, observations, financial revisions/published rows, users and watchlists;
+   - representative board/detail/admin data reads.
+6. Do not run ingestion, reminders, migrations, approval actions or any write smoke.
+7. Record commands with credentials redacted, evidence, effective RPO and measured RTO in `docs/reports/2026-08-17-neon-restore-rehearsal.md`.
+8. After the evidence is accepted, delete only the exact temporary branch and confirm Production branch identity/counts are unchanged.
+
+### Pass criteria
+
+- Restored schema matches the expected deployed schema.
+- Counts are consistent with the selected restore point.
+- Representative reads succeed.
+- RPO is within six hours and measured RTO is recorded.
+- Production branch receives no write and remains unchanged.
+
+## Invite beta gate
+
+After PR 1, PR 2, one clean hourly Production cycle and the recovery proof:
+
+- invite 10–20 users for 5–7 days;
+- monitor hourly ingestion freshness, broken external links, auth, watchlist, mobile layout, calendar sync and reminder delivery;
+- capture feedback without PAN/demat/UPI data;
+- open unrestricted public beta only with no unresolved correctness/privacy P0/P1, no silent stale period beyond two cycles, successful restore evidence and truthful financial/source labels.
+
+## Delivery order and checklist
+
+- [x] Owner approves this plan.
+- [x] PR 1 no-write classification preview implemented for the existing queue; exact Production counts will render on authenticated Preview/Production without downloading secrets.
+- [x] PR 1 implementation and local tests/build.
+- [ ] PR 1 Preview proof and merge.
+- [ ] PR 2 source-policy inventory dry-run.
+- [ ] PR 2 implementation, tests, Preview proof and merge.
+- [ ] One complete hourly Production cycle observed within the one-hour release window.
+- [ ] Two additional cycles collected non-blockingly during invite beta.
+- [ ] Isolated Neon restore rehearsal completed and evidence reviewed.
+- [ ] Invite beta completed for 5–7 days.
+- [ ] Public-launch go/no-go review.
+
+## Approval checkpoint
+
+Owner approved implementation. Production source changes and Neon recovery remain bounded to their explicit steps above.

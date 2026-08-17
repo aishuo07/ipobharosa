@@ -4,7 +4,8 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdminEmail } from "@/lib/admin";
 import { loginPathFor } from "@/lib/auth-redirect";
-import { approveFinancialRevision, rejectFinancialRevision } from "./actions";
+import { previewPendingFinancialClassification } from "@/lib/financials/workflow";
+import { applyFinancialClassification, approveFinancialRevision, publishSafeFinancialBatch, rejectFinancialRevision } from "./actions";
 
 export const revalidate = 0;
 
@@ -39,10 +40,23 @@ export default async function FinancialsReviewPage() {
     ],
   });
 
+  const classificationPreview = await previewPendingFinancialClassification();
+  const previewSafe = classificationPreview.filter((row) => row.state === "AUTO_VERIFIED");
+  const pendingReclassification = previewSafe.filter((row) => row.previousState !== "AUTO_VERIFIED").length;
   const stats = {
     autoVerified: pending.filter((r) => r.state === "AUTO_VERIFIED").length,
     reviewRequired: pending.filter((r) => r.state === "REVIEW_REQUIRED").length,
   };
+  const readyBatches = Array.from(
+    pending.filter((revision) => revision.state === "AUTO_VERIFIED").reduce((groups, revision) => {
+      const documentId = revision.extraction.documentId;
+      const current = groups.get(documentId) ?? [];
+      current.push(revision);
+      groups.set(documentId, current);
+      return groups;
+    }, new Map<string, typeof pending>()),
+  );
+  const exceptions = pending.filter((revision) => revision.state === "REVIEW_REQUIRED");
 
   return (
     <div className="wrap">
@@ -54,9 +68,20 @@ export default async function FinancialsReviewPage() {
       <div className="legal-wrap" style={{ maxWidth: 1200 }}>
         <h1>Financial Review Queue</h1>
         <div className="legal-updated">
-          Signed in as {session!.user!.email} — {pending.length} pending ({stats.reviewRequired} review required,{" "}
-          {stats.autoVerified} legacy auto-verified records still requiring sign-off)
+          Signed in as {session!.user!.email} — {readyBatches.length} safe filing batches and {stats.reviewRequired} exception values
         </div>
+
+        {pendingReclassification > 0 && (
+          <div style={{ border: "1px solid var(--warning)", padding: 16, marginTop: 20, marginBottom: 20, background: "var(--surface)" }}>
+            <strong>{pendingReclassification} values pass the new safe-filing policy</strong>
+            <p style={{ margin: "6px 0 12px", color: "var(--ink-muted)" }}>
+              Preview only: nothing has been published. Apply classification to group these values into atomic filing batches; exceptions stay in review.
+            </p>
+            <form action={applyFinancialClassification}>
+              <button type="submit" className="btn btn-primary">Apply safe classification</button>
+            </form>
+          </div>
+        )}
 
         {pending.length === 0 && (
           <p style={{ color: "var(--ink-muted)", marginTop: 20 }}>
@@ -64,7 +89,38 @@ export default async function FinancialsReviewPage() {
           </p>
         )}
 
-        {pending.map((rev) => {
+        {readyBatches.length > 0 && (
+          <section style={{ marginTop: 24, marginBottom: 32 }}>
+            <h2>Ready to publish</h2>
+            <p style={{ color: "var(--ink-muted)" }}>
+              These native-text values passed the official-source, final-filing, evidence and consistency policy. Each filing publishes atomically.
+            </p>
+            {readyBatches.map(([documentId, revisions]) => {
+              const document = revisions[0].extraction.document;
+              const ipo = document.ipo;
+              return (
+                <div key={documentId} style={{ border: "1px solid var(--good)", borderRadius: 4, padding: 16, marginBottom: 12, background: "var(--surface)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--good)" }}>SAFE BATCH</span>
+                    <strong>{ipo.company.name}</strong>
+                    <span style={{ color: "var(--ink-muted)", fontSize: 12 }}>{document.documentType} · {revisions.length} extracted values</span>
+                    <a href={document.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", fontSize: 12 }}>Open filing ↗</a>
+                    <form action={publishSafeFinancialBatch} style={{ marginLeft: "auto" }}>
+                      <input type="hidden" name="documentId" value={documentId} />
+                      <button type="submit" className="btn btn-primary">Publish safe batch</button>
+                    </form>
+                  </div>
+                  <div style={{ marginTop: 10, fontSize: 12, color: "var(--ink-muted)" }}>
+                    {revisions.map((revision) => `${fmtMetric(revision.extraction.metric)} ${revision.extraction.fiscalYear}`).join(" · ")}
+                  </div>
+                </div>
+              );
+            })}
+          </section>
+        )}
+
+        {exceptions.length > 0 && <h2>Needs review</h2>}
+        {exceptions.map((rev) => {
           const ext = rev.extraction;
           const doc = ext.document;
           const ipo = doc.ipo;
@@ -94,7 +150,7 @@ export default async function FinancialsReviewPage() {
                     color: "white",
                   }}
                 >
-                  {rev.state === "REVIEW_REQUIRED" ? "NEEDS REVIEW" : "LEGACY — REVIEW REQUIRED"}
+                  NEEDS REVIEW
                 </span>
                 <strong>{ipo.company.name}</strong>
                 <span style={{ fontSize: 12, color: "var(--ink-faint)" }}>({ipo.board})</span>

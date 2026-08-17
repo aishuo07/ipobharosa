@@ -1,3 +1,3 @@
-phase=validation
-checkpoint=financial-layout-expansion-approved
-feature=financial-layout-expansion
+phase=implementation
+checkpoint=launch-trust-closure-pr1-local-validation
+feature=launch-trust-closure

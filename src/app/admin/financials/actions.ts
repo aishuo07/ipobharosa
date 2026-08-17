@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { isAdminEmail } from "@/lib/admin";
-import { approveRevision, rejectRevision } from "@/lib/financials/workflow";
+import { applyPendingFinancialClassification, approveRevision, publishSafeDocumentBatch, rejectRevision } from "@/lib/financials/workflow";
 
 async function requireAdmin(): Promise<string> {
   const session = await auth();
@@ -20,6 +20,24 @@ export async function approveFinancialRevision(formData: FormData) {
 
   await approveRevision(revisionId, approver);
 
+  revalidatePath("/admin/financials");
+  revalidatePath("/admin");
+}
+
+export async function publishSafeFinancialBatch(formData: FormData) {
+  const approver = await requireAdmin();
+  const documentId = formData.get("documentId") as string;
+  if (!documentId) throw new Error("Document ID required");
+
+  await publishSafeDocumentBatch(documentId, approver);
+
+  revalidatePath("/admin/financials");
+  revalidatePath("/admin");
+}
+
+export async function applyFinancialClassification() {
+  const admin = await requireAdmin();
+  await applyPendingFinancialClassification(admin);
   revalidatePath("/admin/financials");
   revalidatePath("/admin");
 }
