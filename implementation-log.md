@@ -13,6 +13,10 @@
 - Implemented the PWA manifest, branded standard/maskable/Apple icons, service-worker route, install UI and explicit offline page.
 - The worker caches only `/offline`, does not intercept API/admin/login/watchlist navigation and removes obsolete app caches on activation.
 - PWA validation: 44 test files / 287 tests, lint, TypeScript and Production build passed. Runtime checks confirmed manifest fields/icons, JavaScript content type, root worker scope and offline route.
+- PR #54 passed all required checks; Preview smoke passed and Chrome reported zero installability errors. Squash-merged as `f63ba77`.
+- Started the monitoring/recovery release from the exact merged PWA main.
+- Implemented a privacy-safe public health contract, 15-minute external probe, deduplicated GitHub incident lifecycle and Production operations/restore runbook.
+- Monitoring validation: 45 test files / 291 tests, lint, TypeScript, workflow-script syntax and Production build passed. Real Production health execution remains a post-Preview/merge check; isolated Neon restore remains an access-dependent launch gate.
 
 ## PR 6 — public correctness, trust contract and date board
 
