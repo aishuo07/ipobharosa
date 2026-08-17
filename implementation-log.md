@@ -16,7 +16,7 @@
 - PR #54 passed all required checks; Preview smoke passed and Chrome reported zero installability errors. Squash-merged as `f63ba77`.
 - Started the monitoring/recovery release from the exact merged PWA main.
 - Implemented a privacy-safe public health contract, 15-minute external probe, deduplicated GitHub incident lifecycle and Production operations/restore runbook.
-- Monitoring validation: 45 test files / 291 tests, lint, TypeScript, workflow-script syntax and Production build passed. Real Production health execution remains a post-Preview/merge check; isolated Neon restore remains an access-dependent launch gate.
+- Monitoring validation: 45 test files / 291 tests, lint, TypeScript, workflow-script syntax and Production build passed. The merged Production monitor completed a real end-to-end health run successfully; its Actions were then upgraded to Node 24-compatible releases to remove the deprecation warning. Isolated Neon restore remains an access-dependent launch gate.
 
 ## PR 6 — public correctness, trust contract and date board
 
