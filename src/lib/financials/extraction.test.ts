@@ -22,6 +22,12 @@ describe("Financial Extraction", () => {
       expect(unit).toBe("Mn");
     });
 
+    it("parses lakhs", () => {
+      const { value, unit } = parseNumber("₹35,116.02 Lakhs");
+      expect(value).toBe(35116.02);
+      expect(unit).toBe("Lakhs");
+    });
+
     it("parses negative numbers in parentheses", () => {
       const { value } = parseNumber("(595.18)");
       expect(value).toBe(-595.18);
@@ -44,8 +50,12 @@ describe("Financial Extraction", () => {
       expect(normalizeToCrores(1000, "million")).toBe(100);
     });
 
+    it("converts lakhs to crores", () => {
+      expect(normalizeToCrores(35116.02, "Lakhs")).toBeCloseTo(351.1602, 4);
+    });
+
     it("rejects a value without an explicit unit", () => {
-      expect(() => normalizeToCrores(344.996, "actual")).toThrow("explicit Cr or Mn unit");
+      expect(() => normalizeToCrores(344.996, "actual")).toThrow("explicit Cr, Mn or Lakh unit");
     });
 
     it("throws on unknown unit", () => {
