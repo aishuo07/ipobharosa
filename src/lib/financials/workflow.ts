@@ -46,21 +46,30 @@ export async function syncDocument(
     return existing.id;
   }
 
-  // Ingest new document
-  const doc = await prisma.financialDocument.create({
-    data: {
-      ipoId,
-      documentType,
-      sourceUrl,
-      sourceHost: new URL(sourceUrl).hostname,
-      fetchedAt: new Date(),
-      sha256,
-      pageCount,
-      // Fetch time is known. Publication date must come from filing metadata;
-      // using "now" here would manufacture evidence, so leave it empty.
-      publicationDate: null,
-    },
-  });
+  // Ingest a new immutable document version and retire the previous latest
+  // pointer for the same filing type. This keeps an official mirror retry from
+  // leaving the blocked source eligible forever.
+  const [, doc] = await prisma.$transaction([
+    prisma.financialDocument.updateMany({
+      where: { ipoId, documentType, isLatestForType: true },
+      data: { isLatestForType: false },
+    }),
+    prisma.financialDocument.create({
+      data: {
+        ipoId,
+        documentType,
+        sourceUrl,
+        sourceHost: new URL(sourceUrl).hostname,
+        fetchedAt: new Date(),
+        sha256,
+        pageCount,
+        isLatestForType: true,
+        // Fetch time is known. Publication date must come from filing metadata;
+        // using "now" here would manufacture evidence, so leave it empty.
+        publicationDate: null,
+      },
+    }),
+  ]);
 
   await prisma.correctionLog.create({
     data: {

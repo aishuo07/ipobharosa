@@ -9,6 +9,7 @@ import sys
 import requests
 
 from extract import extract_from_pdf
+from filing_archive import filing_source_candidates
 
 
 def main() -> int:
@@ -33,11 +34,17 @@ def main() -> int:
     for document in documents:
         name = document["companyName"]
         print(f"\n=== {name} ===")
-        result = extract_from_pdf(
-            document["sourceUrl"],
-            document["ipoId"],
-            document["documentType"],
-        )
+        result = None
+        for position, source_url in enumerate(filing_source_candidates(document["sourceUrl"])):
+            if position > 0:
+                print(f"OFFICIAL MIRROR: retrying from {source_url}")
+            result = extract_from_pdf(source_url, document["ipoId"], document["documentType"])
+            if result.get("rawExtractions"):
+                break
+            issues = result.get("issues", [])
+            if not any("HTTP 403" in issue or "HTTP 406" in issue for issue in issues):
+                break
+        assert result is not None
         rows = result.get("rawExtractions", [])
         if not rows:
             skipped += 1
@@ -66,4 +73,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
