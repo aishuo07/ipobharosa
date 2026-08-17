@@ -1,6 +1,6 @@
 import unittest
 
-from targeted import detect_unit, extract_periods, extract_summary_page
+from targeted import detect_unit, extract_from_pages, extract_periods, extract_summary_page
 
 
 LOHIA_SAMPLE = """
@@ -23,6 +23,20 @@ Revenue from operations 41,929.85 33,295.77 28,703.95
 Other income 1,277.17 443.95 299.87
 Restated profit before tax 7,337.40 5,810.03 4,352.05
 Restated profit for the year 5,335.43 4,237.34 2,837.34
+"""
+
+AASHTA_CONTEXT = """
+The Restated Financial Information comprising the restated statement of assets and liabilities
+for the Financial Years ended March 31, 2025, March 31, 2024 and March 31, 2023,
+which is on a standalone basis, and the restated statement of profit and loss.
+"""
+
+AASHTA_STATEMENT = """
+RESTATED STATEMENT OF PROFIT & LOSS
+(All amounts are in ₹ lakhs)
+Particulars December 31, 2025 March 31, 2025 March 31, 2024 March 31, 2023
+Revenue from operations 31,328.50 35,116.02 30,486.16 23,926.50
+Net profit for the year after tax 1,755.62 2,291.62 1,628.76 105.83
 """
 
 
@@ -66,6 +80,27 @@ class TargetedExtractionTests(unittest.TestCase):
             ],
         )
         self.assertTrue(all(row["auditStatus"] == "Restated" and row["pageNumber"] == 66 for row in rows))
+
+    def test_extracts_real_rhp_lakh_layout_using_explicit_document_scope(self):
+        rows, evidence_pages = extract_from_pages([AASHTA_CONTEXT, AASHTA_STATEMENT])
+
+        self.assertEqual(evidence_pages, [2])
+        self.assertEqual(
+            [(row["metric"], row["fiscalYear"], row["scope"], row["rawValue"]) for row in rows],
+            [
+                ("REVENUE", "31 Mar 2025", "Standalone", "₹35,116.02 Lakhs"),
+                ("REVENUE", "31 Mar 2024", "Standalone", "₹30,486.16 Lakhs"),
+                ("REVENUE", "31 Mar 2023", "Standalone", "₹23,926.50 Lakhs"),
+                ("PAT", "31 Mar 2025", "Standalone", "₹2,291.62 Lakhs"),
+                ("PAT", "31 Mar 2024", "Standalone", "₹1,628.76 Lakhs"),
+                ("PAT", "31 Mar 2023", "Standalone", "₹105.83 Lakhs"),
+            ],
+        )
+
+    def test_does_not_guess_document_scope_when_both_scopes_are_present(self):
+        mixed_context = AASHTA_CONTEXT + " Restated Financial Information is also on a consolidated basis."
+        rows, _ = extract_from_pages([mixed_context, AASHTA_STATEMENT])
+        self.assertEqual(rows, [])
 
 
 if __name__ == "__main__":

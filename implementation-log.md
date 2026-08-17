@@ -54,3 +54,9 @@
 - Treat HTTP-200 interstitial/schema-drift pages as failures instead of a successful zero-IPO result.
 - Normalize relative IPO detail links to trusted absolute `https://ipowatch.in/...` URLs; a live source check exposed this as a concrete cause of missed candidate processing.
 - Live adapter proof returned 59 current/recent rows: 28 Mainboard and 31 SME.
+# 2026-08-17 — Real-RHP financial layout coverage
+
+- Reproduced the Production extraction gap from the successful scheduled run: `submitted=0 skipped=10 failed=0`.
+- Added support for a common real filing layout: `RESTATED STATEMENT OF PROFIT & LOSS`, rupee-lakh units, March year columns, and document-level standalone/consolidated scope only when the filing states one unambiguous scope.
+- Added lakh-to-crore normalization in the API workflow.
+- Verified against Aastha Spintex's public RHP text: six filing-backed candidates (Revenue + PAT for FY2023–FY2025), page 249, explicit Standalone scope, Restated status. Candidates still enter the review queue; this change does not auto-publish ambiguous financial data.

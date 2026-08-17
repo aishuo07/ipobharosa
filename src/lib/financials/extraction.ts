@@ -60,7 +60,9 @@ export function parseNumber(text: string): { value: number; unit: string; curren
   // Infer unit from context (check specific units first, then fall back to currency)
   let unit = "actual"; // default: raw number as-is
 
-  if (trimmed.toLowerCase().includes("million") || trimmed.includes("Mn")) {
+  if (/\b(?:lakh|lakhs|lac|lacs)\b/i.test(trimmed)) {
+    unit = "Lakhs";
+  } else if (trimmed.toLowerCase().includes("million") || trimmed.includes("Mn")) {
     unit = "Mn";
   } else if (trimmed.toLowerCase().includes("crore") || trimmed.includes("Cr")) {
     unit = "Cr";
@@ -81,8 +83,13 @@ export function normalizeToCrores(value: number, unit: string): number {
     case "mn":
     case "million":
       return value / 10; // 10 million = 1 crore
+    case "lakh":
+    case "lakhs":
+    case "lac":
+    case "lacs":
+      return value / 100; // 100 lakh = 1 crore
     case "actual":
-      throw new Error("Financial value requires an explicit Cr or Mn unit");
+      throw new Error("Financial value requires an explicit Cr, Mn or Lakh unit");
     default:
       throw new Error(`Unknown unit: ${unit}`);
   }
