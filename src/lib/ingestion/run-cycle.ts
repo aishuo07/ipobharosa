@@ -36,7 +36,7 @@ const PUBLISHED_REVALIDATION_PER_RUN = 4;
 // `filings` remains readable so an in-flight checkpoint written by an older
 // deployment can be advanced safely. New runs never enter that stage: remote
 // PDF downloads run in the independent daily filing-evidence worker.
-export type IngestionStage = "prepare" | "revalidation" | "publishedRevalidation" | "filings" | "gmp" | "subscription" | "finalize" | "complete";
+export type IngestionStage = "prepare" | "catalogue" | "discovery" | "revalidation" | "publishedRevalidation" | "filings" | "gmp" | "subscription" | "finalize" | "complete";
 
 export type IngestionSummary = {
   ipoCount: number;
@@ -157,6 +157,8 @@ export async function runIngestionStep(startedBy = "cron"): Promise<IngestionSte
     checkpoint = { ...checkpoint, attempts: checkpoint.attempts + 1, lastError: null };
 
     if (checkpoint.stage === "prepare") checkpoint = await runPrepare(checkpoint);
+    else if (checkpoint.stage === "catalogue") checkpoint = await runCatalogue(checkpoint);
+    else if (checkpoint.stage === "discovery") checkpoint = await runDiscoveryStep(checkpoint);
     else if (checkpoint.stage === "revalidation") checkpoint = await runRevalidationBatch(checkpoint);
     else if (checkpoint.stage === "publishedRevalidation") checkpoint = await runPublishedRevalidationBatch(checkpoint);
     else if (checkpoint.stage === "filings") checkpoint = nextStage(checkpoint, "gmp");
@@ -183,9 +185,27 @@ export async function runIngestionStep(startedBy = "cron"): Promise<IngestionSte
 async function runPrepare(checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
   const transitions = await syncIpoStatuses();
   const reminders = await notifyWatchersOfTransitions(transitions);
+  return nextStage({
+    ...checkpoint,
+    summary: {
+      ...checkpoint.summary,
+      statusTransitions: transitions.length,
+      reminders,
+    },
+  }, "catalogue");
+}
+
+async function runCatalogue(checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
   const catalogue = await syncOfficialFilingCatalogue();
   if (catalogue.error) await recordSourceFailure("sebi:filing-catalogue", "SEBI", "filing-catalogue", catalogue.error);
   else await recordSourceSuccess("sebi:filing-catalogue", "SEBI", "filing-catalogue");
+  return nextStage({
+    ...checkpoint,
+    summary: { ...checkpoint.summary, catalogue },
+  }, "discovery");
+}
+
+async function runDiscoveryStep(checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
   let discovery: IngestionSummary["discovery"];
   try {
     discovery = await runDiscovery();
@@ -202,9 +222,6 @@ async function runPrepare(checkpoint: IngestionCheckpoint): Promise<IngestionChe
     summary: {
       ...checkpoint.summary,
       ipoCount,
-      statusTransitions: transitions.length,
-      reminders,
-      catalogue,
       discovery,
       revalidation: { ...checkpoint.summary.revalidation, target: revalidationTarget },
       publishedRevalidation: { ...checkpoint.summary.publishedRevalidation, target: publishedRevalidationTarget },

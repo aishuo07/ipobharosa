@@ -2,8 +2,10 @@ import { prisma } from "@/lib/prisma";
 
 const DEFAULT_LOCK_ID = "singleton";
 // A route invocation has a hard 60-second ceiling. Anything still locked after
-// two minutes cannot be live work and is safe for the next caller to recover.
-const STALE_AFTER_MS = 2 * 60 * 1000;
+// 75 seconds cannot be live work and is safe for the next caller to recover.
+// Keeping this close to the platform limit avoids turning one killed request
+// into several minutes of no-op workflow polling.
+const STALE_AFTER_MS = 75 * 1000;
 
 /**
  * A single well-known row as a mutex. Acquiring is one conditional
