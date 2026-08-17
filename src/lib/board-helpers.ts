@@ -154,7 +154,19 @@ export function confidenceLabel(tier: NonNullable<BoardIpo["gmp"]>["confidence"]
 }
 
 export function gmpAvailabilityText(ipo: BoardIpo): string {
+  if (ipo.gmpAvailability?.kind === "NOT_YET_AVAILABLE") return "GMP quote not published yet";
+  if (ipo.gmpAvailability?.kind === "NOT_COVERED") return "Not covered by tracked GMP sources";
+  if (ipo.gmpAvailability?.kind === "ERROR") return "GMP source check failed · retrying";
   return ipo.status === "LISTED" ? "No tracked GMP history" : "No tracked GMP quote yet";
+}
+
+export function gmpAvailabilityDetailText(ipo: BoardIpo): string {
+  const count = ipo.gmpAvailability?.checkedSources ?? 0;
+  const sources = count ? `${count} tracked source${count === 1 ? "" : "s"}` : "Tracked sources";
+  if (ipo.gmpAvailability?.kind === "NOT_YET_AVAILABLE") return `${sources} checked; no active quote is published`;
+  if (ipo.gmpAvailability?.kind === "NOT_COVERED") return `${sources} checked; this IPO is outside their current coverage`;
+  if (ipo.gmpAvailability?.kind === "ERROR") return `${sources} could not be checked successfully; automatic retry is scheduled`;
+  return "No successful GMP observation has been captured";
 }
 
 export function subscriptionAvailabilityText(ipo: BoardIpo): string {

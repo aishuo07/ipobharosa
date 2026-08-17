@@ -35,6 +35,13 @@ export function computeAlertReasons(summary: IngestionSummary): string[] {
   const allSourcesDown = sourceEntries.length > 0 && sourceEntries.every(([, s]) => s.success === 0 && s.failure > 0);
   if (allSourcesDown) {
     reasons.push("Every GMP source failed this cycle");
+  } else {
+    for (const [source, counts] of sourceEntries) {
+      const coveredAttempts = counts.success + counts.failure;
+      if (counts.failure >= 3 && coveredAttempts > 0 && counts.failure / coveredAttempts >= 0.5) {
+        reasons.push(`${source} GMP source had ${counts.failure}/${coveredAttempts} real errors this cycle`);
+      }
+    }
   }
 
   if (summary.reminders.failed > 0) {

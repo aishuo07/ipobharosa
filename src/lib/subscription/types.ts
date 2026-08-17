@@ -9,5 +9,6 @@ export type SubscriptionResult = {
 export interface SubscriptionAdapter {
   key: string;
   name: string;
-  fetchSubscription(companyName: string): Promise<SubscriptionResult>;
+  fetchSubscription(companyName: string): Promise<ProviderResult<SubscriptionResult>>;
 }
+import type { ProviderResult } from "@/lib/ingestion/provider-result";

@@ -6,11 +6,11 @@ function makeSummary(overrides: Partial<IngestionSummary> = {}): IngestionSummar
   return {
     ipoCount: 5,
     gmp: { snapshotsWritten: 5, ipoWithNoData: 0 },
-    subscription: { snapshotsWritten: 2, failed: 0 },
+    subscription: { snapshotsWritten: 2, failed: 0, notYetAvailable: 0, notCovered: 0 },
     perSource: {
-      ipowatch: { success: 5, failure: 0 },
-      sahi: { success: 4, failure: 1 },
-      ipoji: { success: 5, failure: 0 },
+      ipowatch: { success: 5, failure: 0, notYetAvailable: 0, notCovered: 0 },
+      sahi: { success: 4, failure: 1, notYetAvailable: 0, notCovered: 0 },
+      ipoji: { success: 5, failure: 0, notYetAvailable: 0, notCovered: 0 },
     },
     statusTransitions: 0,
     reminders: { sent: 0, failed: 0, skipped: 0 },
@@ -55,9 +55,9 @@ describe("computeAlertReasons", () => {
     const reasons = computeAlertReasons(
       makeSummary({
         perSource: {
-          ipowatch: { success: 0, failure: 5 },
-          sahi: { success: 0, failure: 5 },
-          ipoji: { success: 0, failure: 5 },
+          ipowatch: { success: 0, failure: 5, notYetAvailable: 0, notCovered: 0 },
+          sahi: { success: 0, failure: 5, notYetAvailable: 0, notCovered: 0 },
+          ipoji: { success: 0, failure: 5, notYetAvailable: 0, notCovered: 0 },
         },
       }),
     );
@@ -92,5 +92,25 @@ describe("computeAlertReasons", () => {
     // sahi failing 1/5 while the other two sources succeed is normal
     // degraded-but-fine operation, not alert-worthy.
     expect(computeAlertReasons(makeSummary())).toEqual([]);
+  });
+
+  it("does not alert when every missing quote is expected absence or non-coverage", () => {
+    const reasons = computeAlertReasons(makeSummary({
+      perSource: {
+        ipowatch: { success: 0, failure: 0, notYetAvailable: 3, notCovered: 2 },
+        sahi: { success: 0, failure: 0, notYetAvailable: 0, notCovered: 5 },
+      },
+    }));
+    expect(reasons).toEqual([]);
+  });
+
+  it("alerts on a sustained partial provider regression", () => {
+    const reasons = computeAlertReasons(makeSummary({
+      perSource: {
+        ipowatch: { success: 5, failure: 0, notYetAvailable: 0, notCovered: 0 },
+        sahi: { success: 1, failure: 4, notYetAvailable: 0, notCovered: 0 },
+      },
+    }));
+    expect(reasons).toContain("sahi GMP source had 4/5 real errors this cycle");
   });
 });

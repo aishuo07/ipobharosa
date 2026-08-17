@@ -1,3 +1,27 @@
+# Launch data-reliability slice
+
+Date: 17 August 2026
+Status: approved by owner; implementation complete locally, Preview/Production observation pending.
+
+## Todo
+
+- [x] Introduce typed provider outcomes for GMP and subscription adapters.
+- [x] Classify expected quote absence and provider non-coverage without degrading source health.
+- [x] Retry transient network/429/5xx errors with bounds.
+- [x] Stop GMP/subscription polling after the two-day finalisation window.
+- [x] Show exact missing-GMP reasons and checked-source count in public views.
+- [x] Show values, pending, uncovered and error totals separately in Admin.
+- [x] Alert on sustained partial provider regressions while suppressing coverage-only alerts.
+- [x] Make reminder emails deep-link to the exact IPO.
+- [x] Run live Mainboard/SME adapter proof.
+- [x] Pass 301 tests, lint, TypeScript, Production build and Prisma validation.
+- [ ] Pass PR checks and Preview smoke.
+- [ ] Merge and observe three complete hourly Production cycles.
+- [ ] Continue official financial coverage as a separate evidence-safe slice.
+- [ ] Complete one consented real-user calendar/reminder journey after domain/email setup.
+
+---
+
 # Plan: Production public launch and installable PWA
 
 Date: 17 August 2026

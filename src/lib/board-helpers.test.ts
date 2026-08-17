@@ -5,6 +5,7 @@ import {
   confidenceLabel,
   effectiveStatus,
   gmpAvailabilityText,
+  gmpAvailabilityDetailText,
   gmpPct,
   isStale,
   listingGainPct,
@@ -122,6 +123,17 @@ describe("missing market signal copy", () => {
 
   it("describes missing listed GMP as history rather than a current quote", () => {
     expect(gmpAvailabilityText(makeIpo({ status: "LISTED", gmp: null }))).toBe("No tracked GMP history");
+  });
+
+  it("shows the exact classified reason for missing GMP", () => {
+    expect(gmpAvailabilityText(makeIpo({ gmp: null, gmpAvailability: { kind: "NOT_YET_AVAILABLE", checkedAt: null, checkedSources: 3 } }))).toBe("GMP quote not published yet");
+    expect(gmpAvailabilityText(makeIpo({ gmp: null, gmpAvailability: { kind: "NOT_COVERED", checkedAt: null, checkedSources: 3 } }))).toBe("Not covered by tracked GMP sources");
+    expect(gmpAvailabilityText(makeIpo({ gmp: null, gmpAvailability: { kind: "ERROR", checkedAt: null, checkedSources: 3 } }))).toBe("GMP source check failed · retrying");
+  });
+
+  it("explains how many tracked sources produced the missing-GMP state", () => {
+    const ipo = makeIpo({ gmp: null, gmpAvailability: { kind: "NOT_COVERED", checkedAt: null, checkedSources: 4 } });
+    expect(gmpAvailabilityDetailText(ipo)).toBe("4 tracked sources checked; this IPO is outside their current coverage");
   });
 
   it("explains when subscription figures will appear", () => {

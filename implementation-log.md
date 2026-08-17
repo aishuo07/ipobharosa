@@ -1,5 +1,14 @@
 # Implementation log
 
+## 17 August 2026 — launch data reliability
+
+- Created `codex/launch-data-reliability` from current `origin/main` after the owner approved closing the launch data gaps.
+- Replaced boolean GMP/subscription failures with `VALUE`, `NOT_YET_AVAILABLE`, `NOT_COVERED` and `ERROR` outcomes.
+- Limited closed-IPO market polling to a two-day finalisation window, added transient retries, truthful source-health counting and partial-regression alerts.
+- Added public exact-reason GMP empty states, richer Admin run summaries and exact-IPO reminder deep links.
+- Live provider proof correctly separated successful SME quotes, unpublished quotes, non-coverage and an actual unreachable provider.
+- Validation: 48 files / 301 tests, zero-warning lint, TypeScript, Production build and Prisma schema validation passed.
+
 ## 17 August 2026 — public launch and PWA plan
 
 - Owner approved the written launch and installable-PWA plan.

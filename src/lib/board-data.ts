@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { toIpoSlug } from "@/lib/ipo-slug";
 import { filingEvidenceLabel, filingSourceHost } from "@/lib/document-evidence";
+import { deriveGmpAvailability, type PublicSignalAvailability } from "@/lib/market-signal";
 import { publicVerificationFromPublicationState, type PublicVerification } from "@/lib/public-verification";
 import { MATERIAL_OFFICIAL_FIELDS } from "@/lib/discovery/official/types";
 
@@ -44,6 +45,7 @@ export type BoardIpo = {
     sourceUrl?: string;
   } | null;
   gmpHistory: { value: number; capturedAt: string }[];
+  gmpAvailability?: PublicSignalAvailability;
   documents: { label: string; url: string; docType: string; evidenceLabel: string; sourceHost: string }[];
   financials: {
     fiscalYear: string;
@@ -350,6 +352,12 @@ function shapeIpo(ipo: IpoWithRelations, officialProvenance?: OfficialProvenance
       value: toNum(s.medianValue),
       capturedAt: s.capturedAt.toISOString(),
     })),
+    gmpAvailability: deriveGmpAvailability(ipo.gmpObservations.map((observation) => ({
+      sourceKey: observation.source.adapterKey,
+      success: observation.success,
+      errorMessage: observation.errorMessage,
+      capturedAt: observation.capturedAt,
+    }))),
     documents: ipo.documents.map((d) => ({
       label: d.label,
       url: d.url,

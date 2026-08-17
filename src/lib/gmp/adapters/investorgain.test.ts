@@ -16,20 +16,20 @@ describe("InvestorGain GMP adapter", () => {
 
   it("parses the report rows and known shortened SME names", () => {
     expect(parseInvestorGainRows({ reportTableData: rows })).toHaveLength(4);
-    expect(findInvestorGainGmp("Credent Connect N Care", rows)).toBe(55);
-    expect(findInvestorGainGmp("Technocrats Plasma", rows)).toBe(32);
+    expect(findInvestorGainGmp("Credent Connect N Care", rows)).toEqual({ kind: "VALUE", value: 55 });
+    expect(findInvestorGainGmp("Technocrats Plasma", rows)).toEqual({ kind: "VALUE", value: 32 });
   });
 
   it("preserves a genuine negative premium", () => {
-    expect(findInvestorGainGmp("Down Example", rows)).toBe(-4);
+    expect(findInvestorGainGmp("Down Example", rows)).toEqual({ kind: "VALUE", value: -4 });
   });
 
   it("does not invent zero when the provider has no active quote", () => {
-    expect(() => findInvestorGainGmp("ENS Enterprises", rows)).toThrow("no active GMP quote");
+    expect(findInvestorGainGmp("ENS Enterprises", rows)).toMatchObject({ kind: "NOT_YET_AVAILABLE" });
   });
 
   it("fails safely on malformed responses and unknown IPOs", () => {
     expect(() => parseInvestorGainRows({ rows })).toThrow("reportTableData");
-    expect(() => findInvestorGainGmp("Unknown SME", rows)).toThrow("no matching IPO row");
+    expect(findInvestorGainGmp("Unknown SME", rows)).toMatchObject({ kind: "NOT_COVERED" });
   });
 });

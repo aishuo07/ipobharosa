@@ -1,3 +1,21 @@
+# Launch data-reliability implementation evidence — 17 August 2026
+
+The approved launch-gap bundle was re-audited against current `origin/main` before implementation. The main defect was confirmed: GMP and subscription adapters represented expected absence and provider non-coverage by throwing, so hourly ingestion treated missing SME coverage like a provider outage. Closed IPOs also remained eligible for subscription/GMP polling without a finalisation bound.
+
+The bounded release implements a four-outcome contract (`VALUE`, `NOT_YET_AVAILABLE`, `NOT_COVERED`, `ERROR`) without a schema migration. Only `ERROR` now increments failure/degraded health. Public GMP empty states are derived from the latest per-provider observations, so the site can distinguish “not published”, “not covered” and “source check failed/retrying”. Subscription and GMP polling stop two days after the closed IPO's listing/finalisation window. Watchlist reminder links now open the exact IPO detail page.
+
+Live adapter proof after the change:
+
+- Credent Connect: InvestorGain returned ₹55; Sahi was `NOT_COVERED`; IPO Ji was `NOT_YET_AVAILABLE`.
+- Skytech Infinite Platform: IPO Watch and InvestorGain both returned ₹7.
+- Technocrats Plasma: InvestorGain returned ₹32; other expected gaps were classified without inventing zero.
+- ENS Enterprises: no tracked source published an active quote; this is now expected absence/non-coverage rather than four outages.
+- The live subscription adapter returned exchange-attributed category values for Dhoot Transmission, Molbio Diagnostics and Technocraft Ventures.
+
+IPO Watch was unreachable from the verification environment and correctly remained a real retryable error. This is exactly the distinction the new contract is intended to preserve.
+
+---
+
 # Research: public-launch gates and installable app strategy
 
 Date: 17 August 2026
