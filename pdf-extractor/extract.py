@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 import hashlib
 from io import BytesIO
 from pypdf import PdfReader
-from filing_archive import MAX_DOWNLOAD_BYTES, extract_filing_pdf_bytes, filing_request_headers
+from filing_archive import FILING_REQUEST_TIMEOUT, MAX_DOWNLOAD_BYTES, extract_filing_pdf_bytes, filing_request_headers
 from targeted import extract_from_pages
 
 # Financial metric keywords
@@ -142,7 +142,7 @@ def extract_from_pdf(pdf_url: str, ipo_id: str, doc_type: str) -> Dict[str, Any]
         if parsed_url.scheme != "https":
             raise ValueError("Only HTTPS PDF sources are allowed")
 
-        response = requests.get(pdf_url, headers=filing_request_headers(), timeout=30)
+        response = requests.get(pdf_url, headers=filing_request_headers(), timeout=FILING_REQUEST_TIMEOUT)
         if response.status_code != 200:
             return {
                 "rawExtractions": [],

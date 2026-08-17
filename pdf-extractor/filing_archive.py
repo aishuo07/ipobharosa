@@ -8,6 +8,7 @@ MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024
 MAX_PDF_BYTES = 50 * 1024 * 1024
 MAX_ZIP_ENTRIES = 100
 MAX_TOTAL_PDF_BYTES = 75 * 1024 * 1024
+FILING_REQUEST_TIMEOUT = (15, 180)
 
 OFFICIAL_FILING_MIRRORS = {
     "https://www.manipalhospitals.com/assets/pdf/drhp-manipal-hospitals.pdf": (

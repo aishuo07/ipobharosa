@@ -2,7 +2,7 @@ import io
 import unittest
 import zipfile
 
-from filing_archive import extract_filing_pdf_bytes, filing_request_headers, filing_source_candidates
+from filing_archive import FILING_REQUEST_TIMEOUT, extract_filing_pdf_bytes, filing_request_headers, filing_source_candidates
 
 
 def archive(entries):
@@ -19,6 +19,7 @@ class FilingDownloadTests(unittest.TestCase):
         self.assertIn("IPOBharosa/1.0", headers["User-Agent"])
         self.assertIn("application/pdf", headers["Accept"])
         self.assertIn("application/zip", headers["Accept"])
+        self.assertEqual(FILING_REQUEST_TIMEOUT, (15, 180))
 
     def test_uses_only_verified_official_mirror_after_captured_source(self):
         blocked = "https://www.manipalhospitals.com/assets/pdf/drhp-manipal-hospitals.pdf"
