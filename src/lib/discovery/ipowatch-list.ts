@@ -2,6 +2,7 @@ import * as cheerio from "cheerio";
 import type { IpoListingCandidate } from "./types";
 
 import { ipobharosaUserAgent } from "@/lib/site-url";
+import { withTransientRetries } from "@/lib/ingestion/source-operation";
 
 const USER_AGENT = ipobharosaUserAgent();
 const LIST_URL = "https://ipowatch.in/upcoming-ipo-list/";
@@ -42,17 +43,22 @@ export function parseListingCloseDate(label: string, now: Date): Date | null {
  * distinguished by a "Platform" column the mainboard table doesn't have.
  */
 export async function fetchIpoListing(now = new Date()): Promise<IpoListingCandidate[]> {
-  const res = await fetch(LIST_URL, {
-    headers: { "User-Agent": USER_AGENT },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  const res = await withTransientRetries(async () => {
+    const response = await fetch(LIST_URL, {
+      headers: { "User-Agent": USER_AGENT },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error(`ipowatch listing: HTTP ${response.status}`);
+    return response;
   });
-  if (!res.ok) throw new Error(`ipowatch listing: HTTP ${res.status}`);
   const html = await res.text();
   const $ = cheerio.load(html);
 
   const candidates: IpoListingCandidate[] = [];
 
-  $("table.tablepress").each((_, table) => {
+  const listingTables = $("table.tablepress");
+  listingTables.each((_, table) => {
     const $table = $(table);
     const headerCells = $table.find("thead th").map((_, th) => $(th).text().trim()).get();
     if (headerCells.length === 0) return;
@@ -62,13 +68,28 @@ export async function fetchIpoListing(now = new Date()): Promise<IpoListingCandi
       const cells = $(row).find("td");
       const link = cells.first().find("a").first();
       const companyName = link.text().trim();
-      const detailUrl = link.attr("href");
-      if (!companyName || !detailUrl) return;
+      const href = link.attr("href");
+      if (!companyName || !href) return;
+      let detailUrl: string;
+      try {
+        const resolved = new URL(href, LIST_URL);
+        if (!/(?:^|\.)ipowatch\.in$/i.test(resolved.hostname) || resolved.protocol !== "https:") return;
+        detailUrl = resolved.toString();
+      } catch {
+        return;
+      }
       const dateLabel = cells.eq(1).text().trim();
       const closeDate = parseListingCloseDate(dateLabel, now);
       candidates.push({ companyName, detailUrl, board, dateLabel, ...(closeDate ? { closeDate } : {}) });
     });
   });
+
+  // A bot-check/interstitial can return HTTP 200 while containing none of
+  // the market tables. Treat that as a source failure, not a successful
+  // zero-IPO day, so operators are alerted and stale coverage is visible.
+  if (listingTables.length === 0 || candidates.length === 0) {
+    throw new Error("ipowatch listing: expected Mainboard/SME tables were not present");
+  }
 
   const cutoff = new Date(now.getTime() - RECENT_CLOSE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
   // Unparseable/TBA rows from the two curated tables stay visible to the
