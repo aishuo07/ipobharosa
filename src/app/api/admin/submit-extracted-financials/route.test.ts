@@ -52,6 +52,12 @@ describe("financial extraction submission boundary", () => {
     expect(parseFinancialSubmission({ ...validPayload, extractions: [extraction] })).toBeNull();
   });
 
+  it("accepts filing values explicitly reported in lakhs", () => {
+    const extraction = { ...validPayload.extractions[0], rawValue: "₹35,116.02 Lakhs" };
+    expect(parseFinancialSubmission({ ...validPayload, extractions: [extraction] })?.extractions[0].rawValue)
+      .toBe("₹35,116.02 Lakhs");
+  });
+
   it("fails closed before authentication when the experimental endpoint is disabled", async () => {
     const request = new NextRequest("https://preview.example/api/admin/submit-extracted-financials", {
       method: "POST",

@@ -68,7 +68,7 @@ export function parseFinancialSubmission(value: unknown): SubmissionBody | null 
       !METRICS.includes(item.metric as FinancialMetric) ||
       typeof item.originalLabel !== "string" ||
       typeof item.rawValue !== "string" ||
-      !/(?:\bCr\b|\bMn\b|crores?|millions?)/i.test(item.rawValue) ||
+      !/(?:\bCr\b|\bMn\b|crores?|millions?|lakhs?|lacs?)/i.test(item.rawValue) ||
       typeof item.fiscalYear !== "string" ||
       !/^\d{1,2} [A-Z][a-z]{2} \d{4}$/.test(item.fiscalYear) ||
       (item.scope !== "Consolidated" && item.scope !== "Standalone") ||

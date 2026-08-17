@@ -14,13 +14,13 @@ import { officialAutoPublishEnabled, persistOfficialDecision, persistOfficialInc
 // first run against months of backlog) or fully parallel (impolite to
 // the source and more likely to trip rate limiting), keeps runs fast
 // without hammering ipowatch.in/sahi.com.
-const CONCURRENCY = 5;
+const CONCURRENCY = 2;
 // Listing discovery should be complete, but detail-page validation is
 // intentionally bounded. The source is newest-first, so every hourly
 // cycle takes the next untracked candidates without risking a serverless
 // timeout or hammering upstream sites. `deferredCandidates` makes the
 // remaining backlog visible instead of silently dropping it.
-const MAX_CANDIDATES_PER_RUN = 10;
+const MAX_CANDIDATES_PER_RUN = 2;
 // A human review queue that grows forever isn't "human review", it's a
 // backlog nobody will ever clear. Once DRAFT+QUARANTINED hits this, new
 // candidates are skipped (and it's surfaced as `queueCapped`) rather
