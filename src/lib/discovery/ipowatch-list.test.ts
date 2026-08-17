@@ -43,6 +43,39 @@ describe("fetchIpoListing", () => {
     ]);
   });
 
+  it("retries a transient listing outage before declaring discovery failed", async () => {
+    const html = `<table class="tablepress"><thead><tr><th>Company</th></tr></thead><tbody>${rows("Recovered", 1)}</tbody></table>`;
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new TypeError("fetch failed"))
+      .mockResolvedValueOnce({ ok: true, text: async () => html });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const candidates = await fetchIpoListing(new Date("2026-08-12T12:00:00Z"));
+
+    expect(candidates).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("normalizes relative detail links so downstream fact collection can fetch them", async () => {
+    const html = `
+      <table class="tablepress"><thead><tr><th>Company</th></tr></thead><tbody>
+        <tr><td><a href="/relative-company-ipo/">Relative Company</a></td><td>24-26 August</td></tr>
+      </tbody></table>
+    `;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, text: async () => html }));
+
+    const candidates = await fetchIpoListing(new Date("2026-08-12T12:00:00Z"));
+
+    expect(candidates[0].detailUrl).toBe("https://ipowatch.in/relative-company-ipo/");
+  });
+
+  it("fails loudly when an HTTP 200 response does not contain the IPO tables", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, text: async () => "<html>Access check</html>" }));
+
+    await expect(fetchIpoListing(new Date("2026-08-12T12:00:00Z")))
+      .rejects.toThrow("expected Mainboard/SME tables were not present");
+  });
+
   it("infers the closest year when the source omits it", () => {
     expect(parseListingCloseDate("30-2 January", new Date("2026-12-28T12:00:00Z"))?.toISOString())
       .toBe("2027-01-02T12:00:00.000Z");

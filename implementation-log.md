@@ -48,3 +48,9 @@
 - [DONE] Re-ran all 265 Vitest tests, lint, TypeScript and the Production build after the hydration fix.
 - [DONE] Updated Vercel Preview and every required PR check passed; a fresh browser session confirmed the IPO detail page now hydrates with zero console errors.
 - [ ] Merge PR #46 and smoke-test the exact commit in Production.
+# 2026-08-17 — Production discovery resilience
+
+- Added transient retry/backoff to the IPO Watch Mainboard/SME listing fetch.
+- Treat HTTP-200 interstitial/schema-drift pages as failures instead of a successful zero-IPO result.
+- Normalize relative IPO detail links to trusted absolute `https://ipowatch.in/...` URLs; a live source check exposed this as a concrete cause of missed candidate processing.
+- Live adapter proof returned 59 current/recent rows: 28 Mainboard and 31 SME.
