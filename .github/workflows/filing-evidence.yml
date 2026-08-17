@@ -17,7 +17,7 @@ jobs:
     steps:
       - name: Capture bounded official filing evidence
         env:
-          SITE_URL: ${{ vars.SITE_URL || 'https://ipobharosa.vercel.app' }}
+          SITE_URL: ${{ vars.SITE_URL || 'https://ipodekho-ten.vercel.app' }}
         run: |
           for attempt in $(seq 1 30); do
             if ! status=$(curl --max-time 55 -s -o /tmp/response.json -w "%{http_code}" \

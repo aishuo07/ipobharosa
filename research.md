@@ -1,3 +1,113 @@
+# Research: public-launch gates and installable app strategy
+
+Date: 17 August 2026
+
+## Executive finding
+
+IPOBharosa is technically strong enough for a small invite-only beta, but it is not ready for an unrestricted public launch today. The hourly ingestion path is stable and the core public experience works; the remaining blockers are trust, identity, real-user delivery proof and recovery—not another large product rewrite.
+
+The first app should be an **installable Progressive Web App (PWA)** using the existing Next.js product. A separate iOS/Android codebase would duplicate UI, authentication, analytics and release work before the product has retention evidence. A PWA gives an app icon, standalone window and one shared release path without app-store approval. Native apps should be reconsidered only after beta usage proves a store-distributed app or deeper device capability is valuable.
+
+## Evidence reviewed
+
+- The current Next.js repository, layout metadata, authentication, email readiness, sitemap, robots contract, ingestion alerts and admin source-health UI.
+- The managed Production origin `https://ipodekho-ten.vercel.app` and its public, legal and authentication routes.
+- The latest 30 hourly ingestion workflow runs: all 30 completed successfully, with no failed or pending run in the sample.
+- Current GitHub launch-readiness and financial-pipeline issues.
+- Current PWA requirements from Next.js, Chrome and Apple documentation.
+
+No Production data or configuration was changed during this audit.
+
+## What is ready
+
+- Mainboard and SME IPO discovery, chronological browsing, detail pages and transparent verification states are live.
+- Hourly ingestion is serialized, resumable and currently healthy.
+- Google authentication is exposed; email authentication is conditionally exposed only when transport, sender, feature flag and site URL are configured.
+- Privacy, Terms and Disclaimer pages are live.
+- Source health, retry state, official-evidence conflicts, ingestion alerts and admin visibility already exist.
+- The release foundation has a recorded Production migration baseline and a recoverable Neon backup branch.
+
+## Hard gates before public launch
+
+### 1. Establish one canonical public identity
+
+The visible deployment is `ipodekho-ten.vercel.app`, but live `robots.txt`, `sitemap.xml` and IPO canonical metadata currently point to `ipobharosa.vercel.app`. This splits SEO signals and can also make authentication callbacks, calendar URLs and reminder links disagree.
+
+Required outcome:
+
+- choose and connect the final custom domain;
+- set the same origin in Vercel `SITE_URL` and `NEXT_PUBLIC_SITE_URL` and in GitHub `SITE_URL`;
+- update Google OAuth, Resend sender/link configuration and any Vercel aliases;
+- verify canonical tags, sitemap, robots, calendar feeds, auth callbacks and email links all use that origin.
+
+### 2. Prove one complete real-user journey
+
+Configuration presence is not delivery proof. Before launch, one consented non-admin user must complete:
+
+```text
+sign in -> save IPO -> enable reminder -> receive reminder -> open correct IPO -> remove reminder/sign out
+```
+
+Test Google and email sign-in separately if both are advertised. Record delivery status without storing secrets or unnecessary personal data.
+
+### 3. Add independent monitoring and a rehearsed recovery path
+
+Ingestion alerts exist, but launch requires an external check that can notice when the application itself cannot report failure. Monitor homepage, a representative IPO page, auth entry point and cron freshness. Route failures to a channel that will be acted on. Perform and document one database restore rehearsal with recovery time and data-loss window.
+
+### 4. Apply baseline browser and abuse protection
+
+Production has HSTS, but the audited response did not expose a Content Security Policy, frame restriction, MIME-sniffing protection or referrer policy. Add tested response headers and verify admin/API authorization boundaries. Add or verify bounded rate controls for authentication and state-changing endpoints; do not rate-limit static public reads aggressively.
+
+### 5. Close the public data-use checklist
+
+The product already shows source and verification context, but a public launch needs an explicit source-use and takedown process: attribution links, contact path, source-specific terms review and a documented correction workflow. This is especially important for unofficial GMP sources. Product copy must continue to separate official issue terms from unofficial GMP.
+
+## Important but beta-safe gaps
+
+- Official RHP financial extraction and review issues remain open. Beta may launch with financials labelled unavailable/pending, but must not claim complete financial coverage or publish uncertain values.
+- Social previews are weak because the base layout does not define complete Open Graph/Twitter metadata or a share image.
+- A checked-in environment template and concise operator runbook are still needed.
+- Provider-neutral IPO application is a later regulated integration; it should not be included in this launch or represented as live.
+
+## PWA product decision
+
+The initial app is a thin, safe installation layer—not an offline financial database.
+
+### Include in v1
+
+- branded manifest with name, short name, start URL, theme/background colours and standalone display;
+- 192px, 512px and maskable app icons plus Apple touch icon;
+- service-worker registration with versioned, minimal shell handling;
+- install guidance that works on Android/desktop and explains iOS Share -> Add to Home Screen;
+- standalone-safe navigation and responsive QA;
+- offline page for loss of connectivity.
+
+### Do not include in v1
+
+- stale-first caching of IPO, GMP, subscription, authentication, admin or API responses;
+- background trading/application behavior;
+- push notifications before consent, domain and reminder delivery are proven;
+- an app-store wrapper presented as a native product.
+
+Market data should remain network-first because freshness and provenance are part of the product promise. Authentication, admin and API routes must never be placed in a public cache.
+
+## Release recommendation
+
+1. Fix canonical domain, headers and social metadata.
+2. Ship the installable PWA on Preview and test install/update/offline behavior.
+3. Complete monitoring, restore rehearsal and real-user reminder proof.
+4. Run a 7-day invite beta with 20-50 users.
+5. Open public beta only if ingestion freshness, auth success, email delivery and error rates remain within the launch thresholds in the implementation plan.
+
+## Primary platform references
+
+- Next.js PWA guide: https://nextjs.org/docs/app/guides/progressive-web-apps
+- Next.js manifest convention: https://nextjs.org/docs/app/api-reference/file-conventions/metadata/manifest
+- Chrome installability manifest requirements: https://developer.chrome.com/docs/lighthouse/pwa/installable-manifest
+- Apple Web Push for Home Screen web apps: https://developer.apple.com/documentation/usernotifications/sending-web-push-notifications-in-web-apps-and-browsers
+
+---
+
 # Research: date-first homepage information hierarchy and responsive UX
 
 Date: 17 August 2026

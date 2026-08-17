@@ -19,6 +19,6 @@ jobs:
       - run: pip install -r pdf-extractor/requirements.txt
       - name: Extract filing-backed candidates into review queue
         env:
-          API_BASE: ${{ vars.SITE_URL || 'https://ipobharosa.vercel.app' }}
+          API_BASE: ${{ vars.SITE_URL || 'https://ipodekho-ten.vercel.app' }}
           ADMIN_TOKEN: ${{ secrets.ADMIN_BEARER_TOKEN }}
         run: python pdf-extractor/worker.py

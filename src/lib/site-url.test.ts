@@ -3,7 +3,7 @@ import { resolveSiteUrl, siteUrlConfigured } from "./site-url";
 
 describe("site URL contract", () => {
   it("uses the safe public fallback when no domain is configured", () => {
-    expect(resolveSiteUrl({})).toBe("https://ipobharosa.vercel.app");
+    expect(resolveSiteUrl({})).toBe("https://ipodekho-ten.vercel.app");
     expect(siteUrlConfigured({})).toBe(false);
   });
 
@@ -15,7 +15,7 @@ describe("site URL contract", () => {
   it("rejects mismatched public and server origins", () => {
     expect(() => resolveSiteUrl({
       NEXT_PUBLIC_SITE_URL: "https://www.ipobharosa.com",
-      SITE_URL: "https://ipobharosa.vercel.app",
+      SITE_URL: "https://ipodekho-ten.vercel.app",
     })).toThrow("must resolve to the same origin");
   });
 
