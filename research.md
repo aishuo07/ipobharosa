@@ -867,3 +867,86 @@ prevents silent fiscal-year remapping. EPS remains intentionally excluded.
   validates that it belongs to the same IPO and retires it only after the
   mirror evidence and review candidates are persisted. A failed mirror remains
   retryable and no public value is auto-published.
+# Research: launch trust closure — financial review, source policy, and recovery
+
+Date: 17 August 2026
+
+## Executive finding
+
+The launch blockers are three different problems and should not be solved in one broad change:
+
+1. The 78 extracted financial values are not 78 independent editorial decisions. They are rows from a much smaller number of official filings and should be classified and approved at filing/batch level, with only ambiguous rows sent to manual review.
+2. “Public” and “official” do not automatically mean “licensed for unrestricted commercial republication.” NSE and SEBI are the correct primary evidence layer for issue terms and filings, but the product still needs a documented source policy and must stop depending on sources whose terms conflict with the intended commercial use.
+3. Neon recovery has a documented procedure but no measured restore proof. The current Neon project exposes a six-hour history-retention window, so the rehearsal must use a recent restore point and an isolated branch.
+
+## 1. Financial review is currently row-oriented
+
+`src/lib/financials/workflow.ts` deliberately puts every normalized candidate into `REVIEW_REQUIRED`, including high-confidence native-text extractions. `getPendingReviews()` also treats the historical `AUTO_VERIFIED` state as requiring review. Approval creates immutable `FinancialPublished` rows and an audit entry, which is a good publication boundary, but the UI exposes that boundary once per value.
+
+The extracted record already carries enough evidence to make a deterministic safety classification:
+
+- official document URL, page and table reference;
+- metric and exact source label;
+- fiscal year, units, scope and audit status;
+- OCR and parser confidence;
+- normalization/validation result;
+- comparison with an existing published value.
+
+The missing concepts are document identity/checksum, document precedence (RHP/Prospectus over DRHP when both exist), duplicate agreement inside a filing, and a batch decision boundary.
+
+### Safer scalable model
+
+```text
+official filing -> extract rows -> deterministic policy
+  safe rows       -> AUTO_VERIFIED -> one atomic "publish safe batch" decision
+  unclear/conflict -> REVIEW_REQUIRED -> row-level exception review
+```
+
+This reduces the current burden from 78 clicks to roughly one decision per official filing while preserving an accountable publication event. Fully unattended publication should be reserved for values corroborated by another independent official representation; running the same parser twice on one PDF is not independent verification.
+
+## 2. Source-policy gap
+
+The current hourly ingestion path still registers IPOWatch and Sahi alongside IPOJi and InvestorGain for GMP, uses Sahi as the only subscription adapter, and records IPOWatch as the discovery source. Other modules still contain IPOWatch document/fact discovery and Sahi financial fallback code.
+
+The repository's own legal review identifies:
+
+- IPOWatch: terms conflict with use by a competing public product;
+- Sahi: commercial/public reproduction requires permission;
+- IPOJi: no clear permission was found, which is not the same as a licence;
+- InvestorGain: accessible publicly, but no commercial-reuse permission has been established.
+
+Official coverage already exists in code:
+
+- NSE current/historical issue catalogues and issue details supply board, dates, price band, lot/minimum quantity, registrar, lead managers, official documents and demand/subscription snapshots.
+- SEBI filing catalogue supplies official filing discovery.
+- official-source consensus/revalidation protects published core fields from silent drift.
+
+NSE's published data list confirms primary-market availability for issue/offer dates, bids and subscription data, and SEBI publishes the public-issues filing catalogue. These establish authority, not blanket commercial licensing. The launch policy must therefore distinguish `authoritative evidence` from `commercial reuse permission` and keep legal attribution/usage review explicit.
+
+### Launch-safe source posture
+
+- Make NSE/SEBI the primary layer for discoverability, issue terms, filings and subscription/demand.
+- Disable IPOWatch and Sahi from new Production collection before unrestricted launch; keep historical observations with their provenance rather than rewriting history.
+- Treat remaining unofficial GMP providers as a separately governed signal layer. Never label GMP official or verified by NSE/SEBI.
+- If only one permitted GMP source is available, show that fact and lower source-agreement confidence instead of silently fabricating consensus.
+- Surface source policy, last success, freshness and disabled reason in Admin and Methodology.
+
+## 3. Neon recovery posture
+
+The authenticated Neon project is `purple-hall-03383323` (`neon-teal-ribbon`, AWS us-east-1, PostgreSQL 17). Its history retention is currently 21,600 seconds (six hours). `docs/OPERATIONS.md` already says to restore into an isolated branch/database, point one-off commands only at that target, compare schema and non-sensitive counts, run read-only smoke checks, record RPO/RTO, and then remove the temporary target.
+
+No Production restore or overwrite is necessary for proof. The drill should:
+
+1. record the Production branch and a restore timestamp within the six-hour window;
+2. create a uniquely named temporary Neon branch from that point;
+3. obtain a connection string for only that branch;
+4. run Prisma schema status/diff and non-sensitive table-count comparisons;
+5. run read-only application queries with ingestion, reminders and mutations disabled;
+6. record creation time, successful checks, effective RPO and measured RTO;
+7. delete only the named temporary branch after evidence is accepted.
+
+The Neon CLI is authenticated. A subsequent branch-list call stalled during research, so the exact production branch ID and CLI create syntax must be re-resolved immediately before the drill; no mutation was attempted.
+
+## 4. Beta is an observation gate, not an engineering substitute
+
+The proposed 10–20 person, 5–7 day invite beta is reasonable after the three trust controls above are deployed. It should measure freshness, broken source/document links, auth, mobile overflow, calendar/reminder delivery and unclear labels. It cannot be used to discover preventable source-rights or backup failures after public launch.
