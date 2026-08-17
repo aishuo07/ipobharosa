@@ -119,9 +119,10 @@ Do not build React Native/Expo yet. Revisit after the beta using evidence such a
 
 - [x] Owner approved this plan.
 - [x] PR A code implementation and local validation.
-- [ ] PR A Preview proof and merge.
+- [x] PR A Preview proof and merge.
 - [ ] Final domain and provider configuration aligned.
-- [ ] PR B implementation, device/PWA proof and merge.
+- [x] PR B code implementation and local PWA validation.
+- [ ] PR B Preview/device proof and merge.
 - [ ] PR C monitoring and recovery proof.
 - [ ] Real-user launch-gate test recorded.
 - [ ] Seven-day invite beta completed.
