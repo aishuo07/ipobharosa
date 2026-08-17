@@ -9,6 +9,12 @@ MAX_PDF_BYTES = 50 * 1024 * 1024
 MAX_ZIP_ENTRIES = 100
 MAX_TOTAL_PDF_BYTES = 75 * 1024 * 1024
 
+OFFICIAL_FILING_MIRRORS = {
+    "https://www.manipalhospitals.com/assets/pdf/drhp-manipal-hospitals.pdf": (
+        "https://nsearchives.nseindia.com/corporate/Registration_24032026122414_MHEL_DRHP.pdf",
+    ),
+}
+
 
 def filing_request_headers() -> dict[str, str]:
     """Identify the product and explicitly request official filing bytes."""
@@ -16,6 +22,11 @@ def filing_request_headers() -> dict[str, str]:
         "User-Agent": "Mozilla/5.0 (compatible; IPOBharosa/1.0; +https://ipobharosa.vercel.app)",
         "Accept": "application/pdf,application/zip,application/octet-stream;q=0.9,*/*;q=0.5",
     }
+
+
+def filing_source_candidates(source_url: str) -> tuple[str, ...]:
+    """Return the captured source followed only by explicitly verified official mirrors."""
+    return (source_url, *OFFICIAL_FILING_MIRRORS.get(source_url, ()))
 
 
 def filing_name_score(name: str, doc_type: str) -> int:
