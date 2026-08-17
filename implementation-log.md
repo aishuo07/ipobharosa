@@ -60,3 +60,8 @@
 - Added support for a common real filing layout: `RESTATED STATEMENT OF PROFIT & LOSS`, rupee-lakh units, March year columns, and document-level standalone/consolidated scope only when the filing states one unambiguous scope.
 - Added lakh-to-crore normalization in the API workflow.
 - Verified against Aastha Spintex's public RHP text: six filing-backed candidates (Revenue + PAT for FY2023–FY2025), page 249, explicit Standalone scope, Restated status. Candidates still enter the review queue; this change does not auto-publish ambiguous financial data.
+# 2026-08-17 — Source failures now reach the external monitor
+
+- `/api/health` now includes the last completed ingestion run's real source-pipeline result, not only its age.
+- A fresh run containing discovery, filing, drift, reminder, or sustained GMP-source alerts returns degraded health; the 15-minute Production monitor then turns red and opens one deduplicated GitHub incident.
+- Malformed/legacy checkpoint JSON remains `unknown` and cannot crash or leak internals through the public health route.

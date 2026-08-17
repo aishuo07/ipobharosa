@@ -9,11 +9,21 @@ describe("public health contract", () => {
   const now = new Date("2026-08-17T05:00:00.000Z");
 
   it("reports a recent successful ingestion as healthy", () => {
-    const result = publicHealthFromLastSuccess(new Date(now.getTime() - 30 * 60 * 1000), now);
+    const result = publicHealthFromLastSuccess(new Date(now.getTime() - 30 * 60 * 1000), now, 0);
     expect(result).toMatchObject({
       status: "ok",
       database: "reachable",
       ingestion: { status: "fresh", ageMinutes: 30 },
+      sourcePipeline: { status: "healthy", issueCount: 0 },
+    });
+  });
+
+  it("degrades a fresh run when its source pipeline reported real failures", () => {
+    const result = publicHealthFromLastSuccess(new Date(now.getTime() - 10 * 60 * 1000), now, 2);
+    expect(result).toMatchObject({
+      status: "degraded",
+      ingestion: { status: "fresh" },
+      sourcePipeline: { status: "degraded", issueCount: 2 },
     });
   });
 
@@ -37,6 +47,7 @@ describe("public health contract", () => {
       checkedAt: now.toISOString(),
       database: "unreachable",
       ingestion: { status: "unknown", lastSuccessAt: null, ageMinutes: null },
+      sourcePipeline: { status: "unknown", issueCount: null },
     });
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeAlertReasons } from "./alert";
+import { computeAlertReasons, computeStoredCheckpointAlertReasons } from "./alert";
 import type { IngestionSummary } from "./run-cycle";
 
 function makeSummary(overrides: Partial<IngestionSummary> = {}): IngestionSummary {
@@ -112,5 +112,18 @@ describe("computeAlertReasons", () => {
       },
     }));
     expect(reasons).toContain("sahi GMP source had 4/5 real errors this cycle");
+  });
+});
+
+describe("computeStoredCheckpointAlertReasons", () => {
+  it("reads alert reasons from the stored checkpoint envelope", () => {
+    const summary = makeSummary({ discovery: { error: "listing page HTTP 500" } });
+    expect(computeStoredCheckpointAlertReasons({ version: 1, stage: "complete", summary }))
+      .toContain("Discovery crashed entirely: listing page HTTP 500");
+  });
+
+  it("returns unknown for an old or malformed stored payload", () => {
+    expect(computeStoredCheckpointAlertReasons(null)).toBe(null);
+    expect(computeStoredCheckpointAlertReasons({ summary: { discovery: null } })).toBe(null);
   });
 });

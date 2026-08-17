@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { publicHealthFromLastSuccess, unreachablePublicHealth } from "@/lib/public-health";
+import { computeStoredCheckpointAlertReasons } from "@/lib/ingestion/alert";
 
 export const dynamic = "force-dynamic";
 
@@ -9,9 +10,10 @@ export async function GET() {
     const latest = await prisma.ingestionRun.findFirst({
       where: { ok: true, skippedDueToLock: false, finishedAt: { not: null } },
       orderBy: { finishedAt: "desc" },
-      select: { finishedAt: true },
+      select: { finishedAt: true, summary: true },
     });
-    const body = publicHealthFromLastSuccess(latest?.finishedAt ?? null);
+    const sourceReasons = latest ? computeStoredCheckpointAlertReasons(latest.summary) : null;
+    const body = publicHealthFromLastSuccess(latest?.finishedAt ?? null, new Date(), sourceReasons?.length ?? null);
     return NextResponse.json(body, {
       status: body.status === "ok" ? 200 : 503,
       headers: { "Cache-Control": "no-store" },
