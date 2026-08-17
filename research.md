@@ -797,3 +797,56 @@ view, not the homepage itself.
 - The lowest-complexity accessible solution is a real semantic table inside an explicit horizontal scroll container; no duplicate mobile markup is required.
 - IPO/company is the most important identity column, so it moves first and remains sticky while price, GMP, demand and actions scroll horizontally.
 - Dense mobile row typography and fixed minimum column widths retain all information without turning rows back into tall cards.
+# Financial layout coverage research (2026-08-17)
+
+## Production evidence
+
+- Production run `31999764973` attempted ten unprocessed filing documents: one queued, seven parsed as no complete summary, and two were blocked with HTTP 403/406.
+- Repeating the two blocked downloads with an explicit browser-compatible User-Agent and `Accept: application/pdf` downloaded valid PDFs. The documents were not unavailable; the worker request contract was incomplete.
+- The seven readable skipped filings use several legitimate SEBI-style presentations:
+  - compact `SUMMARY OF RESTATED FINANCIAL INFORMATION` tables (Optimystix, Lalithaa);
+  - `SUMMARY OF FINANCIAL INFORMATION` tables derived from restated statements (Aegeus, Fusion, Poojaa);
+  - multi-page restated statement sections whose title is on the preceding page (Alpine, Silverstorm, Manipal, MV).
+- Annual columns appear as `March 31, 2025`, `31st March, 2025`, `FY 2025`, and `Fiscal 2024`. Some pages include an interim column before the annual columns.
+- Some statements contain mixed per-column scope: recent years Consolidated and the oldest comparative Standalone. Treating the entire page as one scope would be materially wrong.
+- Compact summaries expose safe crore-normalizable metrics: Revenue/Total Revenue/Total Income, PAT, Net Worth, Total Assets, Total Borrowings and EBITDA. EPS is per-share currency and must not enter the existing crore-normalized pipeline.
+
+## Existing architecture
+
+- `pdf-extractor/extract.py` downloads a filing, validates PDF/ZIP bytes, hashes the exact PDF and sends page text to `pdf-extractor/targeted.py`.
+- `targeted.py` is intentionally fail-closed: it requires a financial statement/summary context, explicit unit, explicit annual period and explicit scope before emitting a row.
+- `src/app/api/admin/submit-extracted-financials/route.ts` validates the evidence boundary; `src/lib/financials/workflow.ts` normalizes values and routes every candidate to `REVIEW_REQUIRED`.
+- Publication remains an authenticated admin decision. The change must increase candidate coverage without weakening that gate.
+
+## Safety constraints
+
+- Never infer a missing unit, reporting period, scope or audit status.
+- Drop interim columns; emit only annual periods.
+- Preserve mixed Standalone/Consolidated scope per fiscal column.
+- Do not extract EPS until the persisted model supports per-share units.
+- A conflict with an existing published figure stays in `REVIEW_REQUIRED`; no extraction directly publishes.
+
+## Real-filing verification after implementation
+
+The pinned production extractor (`pypdf==5.9.0`) was run against the exact nine
+previously skipped/blocked filings. All nine now produce complete, reviewable
+rows: 75 candidates total across Revenue, PAT, EBITDA, Assets, Net Worth and
+Borrowings.
+
+| Filing | Complete candidates | Covered metrics |
+| --- | ---: | --- |
+| Alpine | 9 | Revenue, PAT, EBITDA |
+| MV | 3 | Assets |
+| Lalithaa | 12 | Revenue, PAT, Net Worth, Assets |
+| Optimystix | 6 | PAT, Net Worth |
+| Aegeus | 12 | Revenue, PAT, Net Worth, Borrowings |
+| Fusion | 12 | Revenue, PAT, Net Worth, Borrowings |
+| Manipal | 9 | Revenue, PAT, Assets |
+| Poojaa | 6 | PAT, Assets |
+| Silverstorm | 6 | Revenue, PAT |
+
+The extractor still does not invent missing metrics. It emits only rows with a
+source page, explicit unit, annual fiscal period, restated audit status and a
+defensible scope. Multi-page metadata is carried for at most two pages and all
+old metric values and period columns are stripped before carry-forward, which
+prevents silent fiscal-year remapping. EPS remains intentionally excluded.

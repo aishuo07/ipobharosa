@@ -903,3 +903,20 @@ Status: owner explicitly redirected the approved responsive layout on 17 Aug 202
 - [DONE] Verify Preview at 768px/390px with no document overflow.
 - [DONE] Programmatically scroll the table 300px and confirm the IPO column remains fixed at the same left position; 560px of horizontal detail is available on phone.
 - [IN PROGRESS] Merge and verify Production.
+# Approved plan: Expand official financial layout coverage (2026-08-17)
+
+The user explicitly approved implementation of all remaining filing layouts while keeping unclear/conflicting values in review.
+
+## Changes
+
+- [x] Add production-compatible PDF request headers in `pdf-extractor/extract.py` and cover the request contract with a test.
+- [x] Extend `pdf-extractor/targeted.py` to recognize compact restated financial summaries, annual FY/Fiscal/March headers and safe summary metrics.
+- [x] Preserve explicit mixed scope per annual column; fail closed if scope/unit/period is ambiguous.
+- [x] Add representative fixtures for consolidated, standalone, mixed-scope and interim-column layouts; verify interim columns and EPS are excluded.
+- [x] Run the parser against all nine production documents and record exact coverage.
+- [x] Run Python tests, app tests, lint and production build.
+- [ ] Open a PR, wait for CI/preview, merge, rerun Production financial extraction and report queued/skipped/conflict counts.
+
+## Rollback
+
+Revert the parser/request commit. Existing extraction rows are append-only and remain review-gated; no public financial is mutated by the worker.

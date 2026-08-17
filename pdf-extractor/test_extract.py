@@ -2,7 +2,7 @@ import io
 import unittest
 import zipfile
 
-from filing_archive import extract_filing_pdf_bytes
+from filing_archive import extract_filing_pdf_bytes, filing_request_headers
 
 
 def archive(entries):
@@ -14,6 +14,12 @@ def archive(entries):
 
 
 class FilingDownloadTests(unittest.TestCase):
+    def test_requests_pdf_and_archive_bytes_with_identified_user_agent(self):
+        headers = filing_request_headers()
+        self.assertIn("IPOBharosa/1.0", headers["User-Agent"])
+        self.assertIn("application/pdf", headers["Accept"])
+        self.assertIn("application/zip", headers["Accept"])
+
     def test_keeps_direct_pdf_bytes(self):
         content = b"%PDF-direct"
         self.assertEqual(extract_filing_pdf_bytes(content, "RHP"), (content, None))
