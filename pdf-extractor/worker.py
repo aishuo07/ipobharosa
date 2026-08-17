@@ -51,6 +51,7 @@ def main() -> int:
                 selected_source = candidate
                 break
             issues = result.get("issues", [])
+            print(f"SOURCE FAILED: {'; '.join(issues) or 'no complete summary rows'}")
             if not any("HTTP 403" in issue or "HTTP 406" in issue for issue in issues):
                 break
         assert result is not None

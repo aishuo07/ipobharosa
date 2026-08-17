@@ -22,10 +22,15 @@ def archive(entries):
 class FilingDownloadTests(unittest.TestCase):
     def test_requests_pdf_and_archive_bytes_with_identified_user_agent(self):
         headers = filing_request_headers()
-        self.assertIn("IPOBharosa/1.0", headers["User-Agent"])
+        self.assertIn("Chrome/126.0.0.0", headers["User-Agent"])
         self.assertIn("application/pdf", headers["Accept"])
         self.assertIn("application/zip", headers["Accept"])
         self.assertEqual(FILING_REQUEST_TIMEOUT, (15, 180))
+        self.assertEqual(
+            filing_request_headers("https://investmentbank.kotak.com/kib-cms/filing.pdf")["Referer"],
+            "https://investmentbank.kotak.com/",
+        )
+        self.assertNotIn("Referer", filing_request_headers("https://nsearchives.nseindia.com/filing.pdf"))
 
     def test_uses_only_verified_official_mirror_after_captured_source(self):
         blocked = "https://www.manipalhospitals.com/assets/pdf/drhp-manipal-hospitals.pdf"
@@ -34,7 +39,7 @@ class FilingDownloadTests(unittest.TestCase):
             (
                 FilingSourceCandidate(blocked, "DRHP", False),
                 FilingSourceCandidate(
-                    "https://investmentbank.kotak.com//kib-cms/sites/default/files/offer-documets/Manipal%20Health%20Enterprises%20Limited-%20RHP%20%28July%2023%2C%202026%29.pdf",
+                    "https://investmentbank.kotak.com/kib-cms/sites/default/files/offer-documets/Manipal%20Health%20Enterprises%20Limited-%20RHP%20%28July%2023%2C%202026%29.pdf",
                     "RHP",
                     True,
                 ),

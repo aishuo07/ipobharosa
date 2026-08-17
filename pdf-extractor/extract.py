@@ -142,7 +142,7 @@ def extract_from_pdf(pdf_url: str, ipo_id: str, doc_type: str) -> Dict[str, Any]
         if parsed_url.scheme != "https":
             raise ValueError("Only HTTPS PDF sources are allowed")
 
-        response = requests.get(pdf_url, headers=filing_request_headers(), timeout=FILING_REQUEST_TIMEOUT)
+        response = requests.get(pdf_url, headers=filing_request_headers(pdf_url), timeout=FILING_REQUEST_TIMEOUT)
         if response.status_code != 200:
             return {
                 "rawExtractions": [],
