@@ -21,7 +21,7 @@ class FilingSourceCandidate(NamedTuple):
 OFFICIAL_FILING_MIRRORS = {
     "https://www.manipalhospitals.com/assets/pdf/drhp-manipal-hospitals.pdf": (
         FilingSourceCandidate(
-            "https://investmentbank.kotak.com//kib-cms/sites/default/files/offer-documets/Manipal%20Health%20Enterprises%20Limited-%20RHP%20%28July%2023%2C%202026%29.pdf",
+            "https://investmentbank.kotak.com/kib-cms/sites/default/files/offer-documets/Manipal%20Health%20Enterprises%20Limited-%20RHP%20%28July%2023%2C%202026%29.pdf",
             "RHP",
             True,
         ),
@@ -34,11 +34,18 @@ OFFICIAL_FILING_MIRRORS = {
 }
 
 
-def filing_request_headers() -> dict[str, str]:
+def filing_request_headers(source_url: str = "") -> dict[str, str]:
     """Identify the product and explicitly request official filing bytes."""
     return {
-        "User-Agent": "Mozilla/5.0 (compatible; IPOBharosa/1.0; +https://ipobharosa.vercel.app)",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
         "Accept": "application/pdf,application/zip,application/octet-stream;q=0.9,*/*;q=0.5",
+        "Accept-Language": "en-US,en;q=0.9",
+        **(
+            {"Referer": "https://investmentbank.kotak.com/"}
+            if source_url.startswith("https://investmentbank.kotak.com/")
+            else {}
+        ),
     }
 
 
