@@ -39,6 +39,50 @@ Revenue from operations 31,328.50 35,116.02 30,486.16 23,926.50
 Net profit for the year after tax 1,755.62 2,291.62 1,628.76 105.83
 """
 
+COMPACT_CONSOLIDATED_SUMMARY = """
+G. SUMMARY OF RESTATED FINANCIAL INFORMATION
+CONSOLIDATED FINANCIAL STATEMENT (₹ in Lakhs)
+Particulars For the financial year ended on
+March 31, 2025 March 31, 2024 March 31, 2023
+Networth 9,731.50 5,980.77 5,315.78
+Total Revenue 12,506.85 5,498.76 3,169.48
+Profit after Tax 1,721.86 665.00 (827.54)
+Total Borrowings 9.44 44.27 90.00
+Basic EPS (₹) 13.37 5.17 6.43
+"""
+
+FY_STANDALONE_SUMMARY = """
+SUMMARY OF RESTATED FINANCIAL INFORMATION
+The table is derived from the Restated Financial Information on a standalone basis.
+(in ₹ lakhs unless indicated otherwise)
+Particulars Six months ended September 30, 2025 FY 2025 FY 2024 FY 2023
+Net worth 1,503.41 1,002.62 391.74 133.90
+Revenue from Operations 1,231.22 1,008.65 458.30 481.71
+Profit/(loss) after tax 396.49 290.42 34.38 (68.08)
+Total Borrowings 374.51 101.36 32.46 150.95
+"""
+
+UNLABELED_ISSUER_SUMMARY = """
+SUMMARY OF OUR FINANCIAL STATEMENTS
+ANNEXURE-I: RESTATED STATEMENT OF ASSETS AND LIABILITIES
+(All amounts in Lakhs, except as otherwise stated)
+Particulars 31-03-2025 31-03-2024 31-03-2023
+Total Assets 13,592.27 9,674.69 9,094.34
+Revenue from Operations 15,000.00 12,000.00 10,000.00
+Profit after Tax 1,500.00 1,200.00 1,000.00
+"""
+
+MIXED_SCOPE_STATEMENT = """
+SUMMARY OF FINANCIAL INFORMATION
+Derived from the Restated Consolidated and Standalone Financial Information.
+All amounts are in ₹ Millions unless otherwise stated
+Particulars 31st March, 2026 31st March, 2025 31st March, 2024
+Consolidated Consolidated Standalone
+Total Assets 3,053.06 2,948.58 1,498.15
+Revenue from operations 4,500.00 4,000.00 3,000.00
+Profit after tax 300.00 250.00 180.00
+"""
+
 
 class TargetedExtractionTests(unittest.TestCase):
     def test_detects_explicit_unit_and_period_scope(self):
@@ -101,6 +145,68 @@ class TargetedExtractionTests(unittest.TestCase):
         mixed_context = AASHTA_CONTEXT + " Restated Financial Information is also on a consolidated basis."
         rows, _ = extract_from_pages([mixed_context, AASHTA_STATEMENT])
         self.assertEqual(rows, [])
+
+    def test_extracts_compact_consolidated_summary_without_treating_eps_as_crores(self):
+        rows = extract_summary_page(COMPACT_CONSOLIDATED_SUMMARY, 28)
+        self.assertEqual(len(rows), 12)
+        self.assertEqual({row["metric"] for row in rows}, {"REVENUE", "PAT", "NET_WORTH", "BORROWINGS"})
+        self.assertTrue(all(row["scope"] == "Consolidated" for row in rows))
+        self.assertFalse(any(row["metric"] == "EPS" for row in rows))
+
+    def test_ignores_interim_column_and_extracts_fy_annual_columns(self):
+        rows = extract_summary_page(FY_STANDALONE_SUMMARY, 62)
+        self.assertEqual(len(rows), 12)
+        self.assertEqual({row["fiscalYear"] for row in rows}, {"31 Mar 2025", "31 Mar 2024", "31 Mar 2023"})
+        self.assertTrue(all(row["scope"] == "Standalone" for row in rows))
+        revenue_2025 = next(row for row in rows if row["metric"] == "REVENUE" and row["fiscalYear"] == "31 Mar 2025")
+        self.assertEqual(revenue_2025["rawValue"], "₹1,008.65 Lakhs")
+
+    def test_preserves_explicit_mixed_scope_per_annual_column(self):
+        rows = extract_summary_page(MIXED_SCOPE_STATEMENT, 78)
+        revenue = [row for row in rows if row["metric"] == "REVENUE"]
+        self.assertEqual(
+            [(row["fiscalYear"], row["scope"]) for row in revenue],
+            [("31 Mar 2026", "Consolidated"), ("31 Mar 2025", "Consolidated"), ("31 Mar 2024", "Standalone")],
+        )
+
+    def test_compact_summary_still_fails_closed_without_scope_or_unit(self):
+        no_scope = COMPACT_CONSOLIDATED_SUMMARY.replace("CONSOLIDATED FINANCIAL STATEMENT", "FINANCIAL STATEMENT")
+        no_unit = COMPACT_CONSOLIDATED_SUMMARY.replace("(₹ in Lakhs)", "")
+        self.assertEqual(extract_summary_page(no_scope, 1), [])
+        self.assertEqual(extract_summary_page(no_unit, 1), [])
+
+    def test_uses_standalone_only_when_filing_explicitly_has_no_group_entities(self):
+        issuer_context = """
+        Our Company does not have any subsidiary companies.
+        Our Company does not have any associate or joint ventures.
+        """
+        rows, evidence_pages = extract_from_pages([issuer_context, UNLABELED_ISSUER_SUMMARY])
+        self.assertEqual(evidence_pages, [2])
+        self.assertEqual(len(rows), 9)
+        self.assertTrue(all(row["scope"] == "Standalone" for row in rows))
+
+        ambiguous_rows, _ = extract_from_pages([
+            "Our Company does not have any subsidiary companies.",
+            UNLABELED_ISSUER_SUMMARY,
+        ])
+        self.assertEqual(ambiguous_rows, [])
+
+    def test_page_context_never_reuses_old_metric_values(self):
+        continuation = """
+        RESTATED STATEMENT OF PROFIT AND LOSS
+        (₹ in Lakhs)
+        Particulars March 31, 2022 March 31, 2021 March 31, 2020
+        Revenue from operations 900.00 800.00 700.00
+        Profit after tax 90.00 80.00 70.00
+        """
+        rows, evidence_pages = extract_from_pages([COMPACT_CONSOLIDATED_SUMMARY, continuation])
+        self.assertEqual(evidence_pages, [1, 2])
+        assets = [row for row in rows if row["metric"] == "ASSETS"]
+        self.assertEqual(assets, [])
+        revenue = [row for row in rows if row["metric"] == "REVENUE"]
+        self.assertEqual(len(revenue), 6)
+        revenue_2022 = next(row for row in revenue if row["fiscalYear"] == "31 Mar 2022")
+        self.assertEqual(revenue_2022["rawValue"], "₹900.00 Lakhs")
 
 
 if __name__ == "__main__":

@@ -49,6 +49,14 @@ FY_PATTERNS = [
     r"FY\s*(\d{2,4})[–\-](\d{2,4})",
 ]
 
+
+def filing_request_headers() -> Dict[str, str]:
+    """Identify the product and explicitly request filing bytes."""
+    return {
+        "User-Agent": "Mozilla/5.0 (compatible; IPOBharosa/1.0; +https://ipobharosa.vercel.app)",
+        "Accept": "application/pdf,application/zip,application/octet-stream;q=0.9,*/*;q=0.5",
+    }
+
 def parse_number(text: str) -> Optional[float]:
     """Parse Indian financial numbers: ₹3,449.96 Mn → 3449.96"""
     if not text or not str(text).strip():
@@ -141,7 +149,7 @@ def extract_from_pdf(pdf_url: str, ipo_id: str, doc_type: str) -> Dict[str, Any]
         if parsed_url.scheme != "https":
             raise ValueError("Only HTTPS PDF sources are allowed")
 
-        response = requests.get(pdf_url, timeout=30)
+        response = requests.get(pdf_url, headers=filing_request_headers(), timeout=30)
         if response.status_code != 200:
             return {
                 "rawExtractions": [],
