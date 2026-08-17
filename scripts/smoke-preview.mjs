@@ -14,8 +14,37 @@ async function expectResponse(path, allowedStatuses, description) {
   return response;
 }
 
-await expectResponse("/", [200], "Board renders");
-await expectResponse("/ipo/technocraft-ventures", [200], "Seeded IPO detail renders");
+const board = await expectResponse("/", [200], "Board renders");
+const boardHtml = await board.text();
+const canonicalMatch = boardHtml.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i)
+  ?? boardHtml.match(/<link[^>]+href=["']([^"']+)["'][^>]+rel=["']canonical["']/i);
+if (!canonicalMatch) throw new Error("Board is missing a canonical URL");
+
+const canonical = new URL(canonicalMatch[1], baseUrl);
+const robots = await expectResponse("/robots.txt", [200], "Robots contract renders");
+const robotsText = await robots.text();
+const expectedSitemap = `${canonical.origin}/sitemap.xml`;
+if (!robotsText.includes(`Sitemap: ${expectedSitemap}`)) {
+  throw new Error(`robots.txt sitemap does not match canonical origin ${canonical.origin}`);
+}
+
+const sitemap = await expectResponse("/sitemap.xml", [200], "Sitemap renders");
+const sitemapText = await sitemap.text();
+const locations = [...sitemapText.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
+if (locations.length === 0) throw new Error("Sitemap contains no locations");
+if (locations.some((location) => new URL(location).origin !== canonical.origin)) {
+  throw new Error(`Sitemap contains an origin different from canonical ${canonical.origin}`);
+}
+console.log(`PASS Canonical, robots and sitemap agree: ${canonical.origin}`);
+
+const detail = await expectResponse("/ipo/technocraft-ventures", [200], "Seeded IPO detail renders");
+const detailHtml = await detail.text();
+const detailCanonicalMatch = detailHtml.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i)
+  ?? detailHtml.match(/<link[^>]+href=["']([^"']+)["'][^>]+rel=["']canonical["']/i);
+if (!detailCanonicalMatch || new URL(detailCanonicalMatch[1], baseUrl).origin !== canonical.origin) {
+  throw new Error("IPO detail canonical does not match the public canonical origin");
+}
+console.log("PASS IPO detail canonical uses the public origin");
 
 const health = await expectResponse(
   "/api/admin/extract-all-financials",

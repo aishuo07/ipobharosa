@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Trigger ingestion cycle
         env:
-          SITE_URL: ${{ vars.SITE_URL || 'https://ipobharosa.vercel.app' }}
+          SITE_URL: ${{ vars.SITE_URL || 'https://ipodekho-ten.vercel.app' }}
         run: |
           # A full run currently needs one bounded request per batch plus
           # preparation/finalization. Keep enough headroom for fleet growth and

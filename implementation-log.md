@@ -1,5 +1,14 @@
 # Implementation log
 
+## 17 August 2026 — public launch and PWA plan
+
+- Owner approved the written launch and installable-PWA plan.
+- Started PR A from current `origin/main` on `codex/launch-foundation`.
+- Generated one brand-matched social card for the existing paper/ink/green/orange design system.
+- Implemented canonical-origin alignment, metadata, browser headers, safe environment template and Preview origin checks.
+- Validation: 42 test files / 282 tests passed, lint passed, TypeScript passed and the Production build completed.
+- Local header inspection passed. Full local smoke could not query the configured remote database from this sandbox, so canonical/database-backed route proof remains a Vercel Preview gate.
+
 ## PR 6 — public correctness, trust contract and date board
 
 - [DONE] Owner approved the expanded Production-closure plan.

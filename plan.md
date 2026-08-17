@@ -1,3 +1,138 @@
+# Plan: Production public launch and installable PWA
+
+Date: 17 August 2026
+Status: approved by owner; implementation in progress.
+
+## Outcome
+
+Take the current Production product to a defensible public beta and add an installable app experience without creating a second native codebase. Work will be delivered as small PRs from fresh `origin/main`, each verified on Vercel Preview before merge.
+
+```text
+PR A  Canonical identity + browser hardening + social previews
+PR B  Installable PWA + offline boundary
+PR C  External monitoring + recovery/operator runbook
+Gate  Real-user auth/watchlist/reminder proof
+Beta  20-50 invited users for 7 days
+Launch Public beta if thresholds pass
+```
+
+No schema migration is expected for PR A or PR B. Production configuration changes remain explicit deployment steps and will not be guessed from code.
+
+## PR A — one public identity and a hardened web surface
+
+### Code changes
+
+- Expand root metadata with metadata base, canonical policy, Open Graph and Twitter fields.
+- Add a branded social share image using the existing design system.
+- Add tested security headers in `next.config.ts`: Content-Security-Policy, frame protection, `X-Content-Type-Options`, `Referrer-Policy` and an appropriate permissions policy.
+- Add a checked-in `.env.example` containing names and safe descriptions only—never credentials.
+- Add a deployment check that fails when public canonical, sitemap and configured Production origin disagree.
+
+### Deployment steps
+
+- Select/connect the final domain.
+- Set matching Vercel `SITE_URL` and `NEXT_PUBLIC_SITE_URL`.
+- Align GitHub `SITE_URL`, Google callback URLs and Resend domain/from address.
+- Redirect old public aliases to the canonical origin instead of serving competing canonicals.
+
+### Tests and acceptance
+
+- unit tests for site-origin resolution and safe fallbacks;
+- build/lint/full tests green;
+- Preview headers checked without blocking Google/Resend/auth assets;
+- canonical, sitemap, robots, calendar and email links share one origin;
+- link preview verified in at least one social/debug inspector;
+- no admin/API route becomes publicly accessible.
+
+### Rollback
+
+Revert the PR and restore the previous Vercel environment values/alias. Do not remove the old origin until callback and redirect verification is complete.
+
+## PR B — installable PWA
+
+### Files and behavior
+
+- Add `src/app/manifest.ts` with product name, short name, start URL, standalone display, theme/background colours and icon declarations.
+- Add branded 192px, 512px, maskable and Apple-touch icons.
+- Add a minimal service worker and a small client registration component.
+- Add an offline page using the current paper/ink design system.
+- Add an install entry point in navigation/settings:
+  - use the browser install prompt only where supported;
+  - show concise iOS Share -> Add to Home Screen instructions;
+  - never show a broken install CTA.
+- Exclude `/api`, `/admin`, `/login`, auth/session traffic and all dynamic IPO/GMP/subscription reads from cache.
+- Use network-first behavior; only the static shell/offline asset may be retained.
+- On activation, remove obsolete named caches so releases do not pin old assets.
+
+### Tests and acceptance
+
+- manifest contains name/short name, valid start URL, standalone display and 192/512 icons;
+- icons render without transparent/unsafe padding and pass maskable preview;
+- service-worker tests prove sensitive and dynamic routes are never cached;
+- offline navigation shows an explicit offline state, not stale financial data;
+- install/update/remove tested on Android Chrome, desktop Chrome and iOS Safari Home Screen;
+- 390, 768 and 1440px show no overflow and standalone mode preserves navigation;
+- Lighthouse PWA checks and Production build pass.
+
+### Rollback
+
+Unregister the worker in a follow-up deployment, invalidate its named static cache and remove manifest installation UI. Because no API data is cached, rollback cannot expose or corrupt user data.
+
+## PR C — monitoring and recovery closure
+
+- Add a public, dependency-light health/readiness contract that exposes no secrets or personal data.
+- Configure an external monitor for homepage, representative detail page and cron freshness.
+- Alert on repeated ingestion failure, stale successful run, auth entry failure, reminder failure and already-published source drift.
+- Deduplicate/cool down alerts to prevent notification storms.
+- Document incident ownership, retry/manual controls and data-correction path.
+- Perform a Neon restore rehearsal into an isolated target and record RPO/RTO evidence; never overwrite Production during the drill.
+
+## Real-user launch gate
+
+Use one consented non-admin account and record:
+
+- Google sign-in success;
+- email sign-in success if displayed;
+- watchlist add/remove;
+- reminder opt-in, send, receipt and correct deep link;
+- failure behavior and unsubscribe/disable path;
+- installed-PWA launch and update.
+
+No screenshot/log may expose tokens, full email addresses or session cookies.
+
+## Invite-beta thresholds
+
+Run for seven continuous days with 20-50 invited users. Public beta opens only if:
+
+- scheduled ingestion success is at least 99% and no market data remains stale beyond two expected hourly cycles without a visible degraded state;
+- zero unresolved P0/P1 correctness, authentication or privacy issue exists;
+- canonical/domain checks remain consistent;
+- auth and reminder E2E remain functional;
+- external monitoring and restore evidence are complete;
+- financial and source gaps remain truthfully labelled.
+
+## Native app decision after beta
+
+Do not build React Native/Expo yet. Revisit after the beta using evidence such as repeat weekly usage, watchlist/reminder adoption and requests for app-store distribution. If justified, the native app should consume a versioned public API and reuse design tokens, not scrape web markup or duplicate business rules.
+
+## Todo
+
+- [x] Owner approved this plan.
+- [x] PR A code implementation and local validation.
+- [ ] PR A Preview proof and merge.
+- [ ] Final domain and provider configuration aligned.
+- [ ] PR B implementation, device/PWA proof and merge.
+- [ ] PR C monitoring and recovery proof.
+- [ ] Real-user launch-gate test recorded.
+- [ ] Seven-day invite beta completed.
+- [ ] Go/no-go public-beta review.
+
+## Approval checkpoint
+
+Implementation begins only after the owner says **plan approved**. Until then, do not change Production configuration, create a service worker or merge launch-related code.
+
+---
+
 # Implementation plan: compact date-first market dashboard
 
 Date: 17 August 2026

@@ -43,7 +43,7 @@ export async function generateMetadata({
     `${gmpBit} Opens ${fmtDate(ipo.openDate)}, closes ${fmtDate(ipo.closeDate)}. GMP, subscription, financials, and allotment dates.`;
 
   return {
-    title: `${ipo.companyName} IPO — GMP, Price Band, Dates, Subscription | IPOBharosa`,
+    title: `${ipo.companyName} IPO — GMP, Price Band, Dates and Subscription`,
     description,
     alternates: { canonical: `/ipo/${ipo.slug}` },
     robots: ipo.verification.state === "VERIFIED"
