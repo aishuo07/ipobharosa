@@ -923,7 +923,7 @@ Revert the parser/request commit. Existing extraction rows are append-only and r
 # Plan: launch trust closure
 
 Date: 17 August 2026
-Status: approved by owner; PR 1 implemented locally
+Status: approved by owner; PR 1 merged, PR 2 implemented locally
 
 ## Outcome
 
@@ -1000,7 +1000,7 @@ No current financial value will be silently published by a migration, no histori
 
 ### Official primary path
 
-- Use NSE current/historical catalogues for discovery and core issue terms.
+- Use SEBI's official filing catalogue for discovery and NSE current/historical catalogues for core issue terms and revalidation.
 - Use NSE issue details/demand snapshots for subscription where present.
 - Use SEBI's official filing catalogue plus NSE official document links for DRHP/RHP/Prospectus evidence.
 - Keep official consensus/revalidation and published-drift alerts.
@@ -1063,9 +1063,10 @@ After PR 1, PR 2, one clean hourly Production cycle and the recovery proof:
 - [x] Owner approves this plan.
 - [x] PR 1 no-write classification preview implemented for the existing queue; exact Production counts will render on authenticated Preview/Production without downloading secrets.
 - [x] PR 1 implementation and local tests/build.
-- [ ] PR 1 Preview proof and merge.
-- [ ] PR 2 source-policy inventory dry-run.
-- [ ] PR 2 implementation, tests, Preview proof and merge.
+- [x] PR 1 Preview proof and merge (PR #69, squash `194bc79`).
+- [x] PR 2 source-policy registry and no-write policy coverage implemented; authenticated Production inventory remains part of release verification.
+- [x] PR 2 implementation and local tests/build (332 tests, lint, TypeScript and production build green).
+- [ ] PR 2 Preview proof and merge.
 - [ ] One complete hourly Production cycle observed within the one-hour release window.
 - [ ] Two additional cycles collected non-blockingly during invite beta.
 - [ ] Isolated Neon restore rehearsal completed and evidence reviewed.

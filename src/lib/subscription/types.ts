@@ -1,7 +1,7 @@
 export type SubscriptionResult = {
-  qibX: number;
-  niiX: number;
-  retailX: number;
+  qibX: number | null;
+  niiX: number | null;
+  retailX: number | null;
   employeeX: number | null;
   sourceExchange: string;
 };

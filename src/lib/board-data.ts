@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { toIpoSlug } from "@/lib/ipo-slug";
 import { filingEvidenceLabel, filingSourceHost } from "@/lib/document-evidence";
 import { deriveGmpAvailability, type PublicSignalAvailability } from "@/lib/market-signal";
+import { isGmpSourceEnabled } from "@/lib/source-policy";
 import { publicVerificationFromPublicationState, type PublicVerification } from "@/lib/public-verification";
 import { MATERIAL_OFFICIAL_FIELDS } from "@/lib/discovery/official/types";
 
@@ -222,7 +223,11 @@ function enrichmentProjection(enrichment: unknown, source: string, sourceUrl: st
 }
 
 function shapeIpo(ipo: IpoWithRelations, officialProvenance?: OfficialProvenance, operations?: OfficialOperations): BoardIpo {
-  const latestGmp = ipo.gmpSnapshots[ipo.gmpSnapshots.length - 1] ?? null;
+  const permittedGmpObservations = ipo.gmpObservations.filter((observation) => isGmpSourceEnabled(observation.source.adapterKey));
+  const latestRawGmp = ipo.gmpSnapshots[ipo.gmpSnapshots.length - 1] ?? null;
+  const latestGmp = latestRawGmp && permittedGmpObservations.some((observation) =>
+    observation.success && observation.capturedAt.getTime() === latestRawGmp.capturedAt.getTime(),
+  ) ? latestRawGmp : null;
   const slug = toIpoSlug(ipo.company.name);
   const storedSubscription = ipo.subscriptionSnapshots[0];
   const secondarySubscription: BoardIpo["subscription"] = storedSubscription ? {
@@ -232,8 +237,10 @@ function shapeIpo(ipo: IpoWithRelations, officialProvenance?: OfficialProvenance
     employeeX: toNumOrNull(storedSubscription.employeeX),
     totalX: null,
     capturedAt: storedSubscription.capturedAt.toISOString(),
-    sourceName: "Sahi (exchange-attributed)",
-    sourceUrl: `https://www.sahi.com/blogs/${slug}-ipo-gmp-today`,
+    sourceName: storedSubscription.sourceExchange === "nse-official" ? "NSE official issue demand" : "Legacy exchange-attributed snapshot",
+    sourceUrl: storedSubscription.sourceExchange === "nse-official"
+      ? "https://www.nseindia.com/market-data/all-upcoming-issues-ipo"
+      : ipo.sourceUrl ?? "https://www.nseindia.com/market-data/all-upcoming-issues-ipo",
   } : null;
   const officialDemand = officialProvenance?.demand ?? null;
   const latestSub = officialDemand && (!secondarySubscription || new Date(officialDemand.capturedAt) >= new Date(secondarySubscription.capturedAt))
@@ -271,9 +278,9 @@ function shapeIpo(ipo: IpoWithRelations, officialProvenance?: OfficialProvenance
     });
   }
   const discovery = ipo.sourceUrl ? [{
-    name: "IPO Watch listing facts",
+    name: "Historical discovery evidence",
     url: ipo.sourceUrl,
-    note: `Discovered from ${ipo.discoveredFrom.join(" + ") || "stored source"}`,
+    note: `Retained provenance from ${ipo.discoveredFrom.join(" + ") || "stored source"}; not evidence of current collection`,
   }] : [];
   if (officialProvenance) discovery.unshift(...officialProvenance.summaries);
   const publishedByYear = new Map<string, BoardIpo["financials"][number]>();
@@ -352,7 +359,7 @@ function shapeIpo(ipo: IpoWithRelations, officialProvenance?: OfficialProvenance
       value: toNum(s.medianValue),
       capturedAt: s.capturedAt.toISOString(),
     })),
-    gmpAvailability: deriveGmpAvailability(ipo.gmpObservations.map((observation) => ({
+    gmpAvailability: deriveGmpAvailability(permittedGmpObservations.map((observation) => ({
       sourceKey: observation.source.adapterKey,
       success: observation.success,
       errorMessage: observation.errorMessage,
@@ -374,7 +381,7 @@ function shapeIpo(ipo: IpoWithRelations, officialProvenance?: OfficialProvenance
       gmp: [...gmpSourceLinks.values()],
       subscription: latestSub ? {
         name: latestSub.sourceName ?? "Subscription source",
-        url: latestSub.sourceUrl ?? `https://www.sahi.com/blogs/${slug}-ipo-gmp-today`,
+        url: latestSub.sourceUrl ?? "https://www.nseindia.com/market-data/all-upcoming-issues-ipo",
         note: `Demand snapshot captured ${latestSub.capturedAt}`,
       } : null,
       officialFields: officialProvenance?.fields ?? [],

@@ -8,6 +8,7 @@ import { REJECTION_REASONS } from "@/lib/admin-review";
 import { filingEvidenceClass, filingEvidenceLabel, filingSourceHost } from "@/lib/document-evidence";
 import { getEmailReadiness } from "@/lib/email/readiness";
 import { resolveSiteUrl } from "@/lib/site-url";
+import { sourcePolicies } from "@/lib/source-policy";
 import { acceptOfficialCorrection, approveIpo, ignoreOfficialIncident, rejectIpo, retryOfficialVerification } from "./actions";
 
 export const revalidate = 0;
@@ -51,6 +52,7 @@ export default async function AdminPage({
   searchParams: Promise<{ retry?: string; company?: string; outcome?: string }>;
 }) {
   const params = await searchParams;
+  const policies = sourcePolicies();
   const session = await auth();
   if (!session?.user) redirect(loginPathFor("/admin"));
   if (!isAdminEmail(session?.user?.email)) notFound();
@@ -286,7 +288,7 @@ export default async function AdminPage({
                   </a>
                 ))}
                 {ipo.sourceUrl && <a href={ipo.sourceUrl} target="_blank" rel="noopener noreferrer">
-                  <span><strong>Discovery facts</strong><small>IPO Watch · compare dates, price and lot size</small></span><b>↗</b>
+                  <span><strong>Historical discovery evidence</strong><small>{filingSourceHost(ipo.sourceUrl)} · retained for provenance, not collected now</small></span><b>↗</b>
                 </a>}
               </div>
             </section>
@@ -368,9 +370,13 @@ export default async function AdminPage({
         <details className="admin-operations" open>
           <summary>Pipeline operations and source health</summary>
           <p>Market discovery and signals run every hour. Expected non-coverage is shown separately from real source failures.</p>
+          <h3>Production source policy</h3>
+          <div className="table-wrap"><table className="dates"><thead><tr><th>Source</th><th>Purpose</th><th>Policy</th><th>Reason</th></tr></thead>
+            <tbody>{policies.map((policy) => <tr key={policy.key}><td>{policy.name}</td><td>{policy.purpose.replaceAll("-", " ")}</td><td>{policy.productionEnabled ? <span className="status-good">Enabled</span> : <span>Disabled</span>}</td><td>{policy.reason}</td></tr>)}</tbody>
+          </table></div>
           <h3>GMP source health</h3>
           <div className="table-wrap"><table className="dates"><thead><tr><th>Source</th><th>Last success</th><th>Failures</th><th>Status</th></tr></thead>
-            <tbody>{sources.map((s) => <tr key={s.id}><td>{s.name}</td><td>{fmtDate(s.health?.lastSuccessAt)}</td><td>{s.health?.consecutiveFailures ?? 0}</td><td>{s.health?.degraded ? <span className="status-bad">Degraded</span> : <span className="status-good">Healthy</span>}</td></tr>)}</tbody>
+            <tbody>{sources.map((s) => <tr key={s.id}><td>{s.name}</td><td>{fmtDate(s.health?.lastSuccessAt)}</td><td>{s.health?.consecutiveFailures ?? 0}</td><td>{!s.active ? <span>Disabled by policy</span> : s.health?.degraded ? <span className="status-bad">Degraded</span> : <span className="status-good">Healthy</span>}</td></tr>)}</tbody>
           </table></div>
           <h3>Official and ingestion source health</h3>
           <div className="table-wrap"><table className="dates"><thead><tr><th>Source</th><th>Operation</th><th>Last success</th><th>Failures</th><th>Next retry</th><th>Last error</th></tr></thead>

@@ -5,10 +5,10 @@ import { ipoWatchAdapter } from "@/lib/gmp/adapters/ipowatch";
 import { sahiAdapter } from "@/lib/gmp/adapters/sahi";
 import { ipojiAdapter } from "@/lib/gmp/adapters/ipoji";
 import { investorGainAdapter } from "@/lib/gmp/adapters/investorgain";
-import { sahiSubscriptionAdapter } from "@/lib/subscription/adapters/sahi";
+import { nseSubscriptionAdapter } from "@/lib/subscription/adapters/nse";
 import { syncIpoStatuses } from "@/lib/ipo-status";
 import { notifyWatchersOfTransitions } from "@/lib/email/reminders";
-import { runDiscovery, type DiscoverySummary } from "@/lib/discovery/discover";
+import type { DiscoverySummary } from "@/lib/discovery/discover";
 import { acquireIngestionLock, releaseIngestionLock } from "@/lib/ingestion/lock";
 import { computeAlertReasons } from "@/lib/ingestion/alert";
 import { sendEmail } from "@/lib/email/resend";
@@ -22,11 +22,13 @@ import { providerErrorResult, providerResultMessage } from "@/lib/ingestion/prov
 import { sendDailyDigestIfDue } from "@/lib/ingestion/digest";
 import { resolveSiteUrl } from "@/lib/site-url";
 import { marketFinalizationCutoff } from "@/lib/ingestion/market-window";
+import { enabledGmpAdapters } from "@/lib/source-policy";
 
 const ALERT_RECIPIENT = "aish.iiitb@gmail.com";
 const SITE_URL = resolveSiteUrl();
 const BATCH_SIZE = 3;
-const GMP_ADAPTERS: GmpAdapter[] = [ipoWatchAdapter, sahiAdapter, ipojiAdapter, investorGainAdapter];
+const ALL_GMP_ADAPTERS: GmpAdapter[] = [ipoWatchAdapter, sahiAdapter, ipojiAdapter, investorGainAdapter];
+const activeGmpAdapters = () => enabledGmpAdapters(ALL_GMP_ADAPTERS);
 // Candidate checks are bounded so the workflow still has ample calls for GMP,
 // subscription and finalization. Remote PDF work is intentionally excluded
 // from this budget and runs in the daily filing-evidence worker.
@@ -206,14 +208,18 @@ async function runCatalogue(checkpoint: IngestionCheckpoint): Promise<IngestionC
 }
 
 async function runDiscoveryStep(checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
-  let discovery: IngestionSummary["discovery"];
-  try {
-    discovery = await runDiscovery();
-    await recordSourceSuccess("ipowatch:discovery", "IPO Watch", "discovery");
-  } catch (error) {
-    discovery = { error: error instanceof Error ? error.message : String(error) };
-    await recordSourceFailure("ipowatch:discovery", "IPO Watch", "discovery", error);
-  }
+  // The SEBI filing catalogue is the launch-safe discovery radar. Legacy
+  // IPOWatch discovery is intentionally not called because its reviewed terms
+  // conflict with the intended commercial product use.
+  const discovery: IngestionSummary["discovery"] = checkpoint.summary.catalogue.error
+    ? { error: checkpoint.summary.catalogue.error }
+    : {
+        ...structuredClone(EMPTY_SUMMARY.discovery as DiscoverySummary),
+        candidatesSeen: checkpoint.summary.catalogue.seen,
+        alreadyTracked: checkpoint.summary.catalogue.linked,
+        deferredCandidates: Math.max(0, checkpoint.summary.catalogue.seen - checkpoint.summary.catalogue.linked),
+      };
+  const gmpAdapters = activeGmpAdapters();
   const ipoCount = await prisma.ipo.count({ where: gmpEligibilityWhere() });
   const revalidationTarget = Math.min(await countRevalidationCandidates(), REVALIDATION_PER_RUN);
   const publishedRevalidationTarget = Math.min(await countPublishedRevalidationCandidates(), PUBLISHED_REVALIDATION_PER_RUN);
@@ -225,7 +231,7 @@ async function runDiscoveryStep(checkpoint: IngestionCheckpoint): Promise<Ingest
       discovery,
       revalidation: { ...checkpoint.summary.revalidation, target: revalidationTarget },
       publishedRevalidation: { ...checkpoint.summary.publishedRevalidation, target: publishedRevalidationTarget },
-      perSource: Object.fromEntries(GMP_ADAPTERS.map((adapter) => [adapter.key, { success: 0, failure: 0, notYetAvailable: 0, notCovered: 0 }])),
+      perSource: Object.fromEntries(gmpAdapters.map((adapter) => [adapter.key, { success: 0, failure: 0, notYetAvailable: 0, notCovered: 0 }])),
     },
   }, "revalidation");
 }
@@ -275,8 +281,9 @@ async function runPublishedRevalidationBatch(checkpoint: IngestionCheckpoint): P
   return { ...checkpoint, cursor: checkpoint.cursor + 1, summary };
 }
 
-async function ensureSources() {
-  const rows = await Promise.all(GMP_ADAPTERS.map((adapter) => prisma.gmpSource.upsert({
+async function ensureSources(adapters: GmpAdapter[]) {
+  await prisma.gmpSource.updateMany({ data: { active: false } });
+  const rows = await Promise.all(adapters.map((adapter) => prisma.gmpSource.upsert({
     where: { adapterKey: adapter.key },
     update: { name: adapter.name, active: true },
     create: { name: adapter.name, baseUrl: "n/a", adapterKey: adapter.key, active: true },
@@ -312,10 +319,11 @@ async function runGmpBatch(runId: string, capturedAt: Date, checkpoint: Ingestio
     take: BATCH_SIZE,
   });
   if (ipos.length === 0) return nextStage(checkpoint, "subscription");
-  const sourceIds = await ensureSources();
+  const gmpAdapters = activeGmpAdapters();
+  const sourceIds = await ensureSources(gmpAdapters);
   let next = checkpoint;
   for (const ipo of ipos) {
-    const observations = await collectObservations(ipo.company.name, GMP_ADAPTERS);
+    const observations = await collectObservations(ipo.company.name, gmpAdapters);
     const values = successfulValues(observations);
     const snapshot = computeGmpSnapshot(values);
     const summary = structuredClone(next.summary);
@@ -378,22 +386,22 @@ async function runSubscriptionBatch(runId: string, capturedAt: Date, checkpoint:
   if (ipos.length === 0) return nextStage(checkpoint, "finalize");
   let next = checkpoint;
   for (const ipo of ipos) {
-    let result: Awaited<ReturnType<typeof sahiSubscriptionAdapter.fetchSubscription>>;
-    try { result = await withTransientRetries(() => sahiSubscriptionAdapter.fetchSubscription(ipo.company.name)); }
+    let result: Awaited<ReturnType<typeof nseSubscriptionAdapter.fetchSubscription>>;
+    try { result = await withTransientRetries(() => nseSubscriptionAdapter.fetchSubscription(ipo.company.name)); }
     catch (error) { result = providerErrorResult(error); }
     const summary = structuredClone(next.summary);
     if (result.kind === "ERROR") {
       summary.subscription.failed++;
-      await recordSourceFailure("sahi:subscription", "Sahi", "subscription", result.reason);
+      await recordSourceFailure("nse:subscription", "NSE", "subscription", result.reason);
     } else if (result.kind === "NOT_YET_AVAILABLE") {
       summary.subscription.notYetAvailable++;
-      await recordSourceSuccess("sahi:subscription", "Sahi", "subscription");
+      await recordSourceSuccess("nse:subscription", "NSE", "subscription");
     } else if (result.kind === "NOT_COVERED") {
       summary.subscription.notCovered++;
-      await recordSourceSuccess("sahi:subscription", "Sahi", "subscription");
+      await recordSourceSuccess("nse:subscription", "NSE", "subscription");
     } else {
       summary.subscription.snapshotsWritten++;
-      await recordSourceSuccess("sahi:subscription", "Sahi", "subscription");
+      await recordSourceSuccess("nse:subscription", "NSE", "subscription");
     }
     const advanced = { ...next, cursor: next.cursor + 1, summary };
     await prisma.$transaction(async (tx) => {

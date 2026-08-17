@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function MethodologyPage() {
   return (
-    <LegalPage title="Methodology" updated="12 Aug 2026">
+    <LegalPage title="Methodology" updated="17 Aug 2026">
       <p>
         This page explains, in plain terms, where every number on IPOBharosa comes from, how it&apos;s
         combined, and what its limits are. If a figure on the board or detail page doesn&apos;t match what
@@ -23,12 +23,11 @@ export default function MethodologyPage() {
         number in isolation.
       </p>
       <p>
-        We pull a GMP figure from three independent public sources every ingestion cycle: <strong>IPO
-        Watch</strong>, <strong>Sahi</strong>, <strong>IPO Ji</strong>, and <strong>InvestorGain</strong>. Each is collected separately. The
-        value we show is the <strong>median</strong> of whichever sources returned a number that cycle —
-        if a source is down, its page layout changed, or it simply hasn&apos;t published a figure for that
-        IPO yet, it is dropped from that cycle&apos;s calculation. A source going missing never blocks the
-        others from reporting, and never gets treated as a zero.
+        Unofficial GMP providers are disabled by default and can be collected only after a source-specific
+        usage review and explicit Production allowlist. IPO Watch and Sahi are disabled for new collection.
+        When permitted providers are configured, each observation is collected separately and the displayed
+        value is the <strong>median</strong> of only the sources that returned a real quote in that cycle.
+        Missing coverage never becomes zero, and every displayed quote keeps its provider link and capture time.
       </p>
       <p>The label under a GMP figure describes how much the sources that <em>did</em> report agreed:</p>
       <ul>
@@ -53,24 +52,22 @@ export default function MethodologyPage() {
       <p>
         Unlike GMP, subscription (how many times an issue has been bid for, by QIB/NII/Retail/Employee
         category) is real exchange-reported data, not informal pricing — so it isn&apos;t aggregated across
-        multiple sources the way GMP is. We read it from Sahi&apos;s day-by-day subscription table, which is
-        itself explicitly sourced from NSE. We show the most recent day that has fully reported — a day still
-        marked &quot;upcoming&quot; on the source table is skipped rather than shown as zero.
+        multiple sources the way GMP is. We read the current issue-demand snapshot directly from NSE&apos;s
+        official issue details. Categories not yet published remain empty rather than being shown as zero.
       </p>
 
       <h2>Price band, lot size, dates, registrar, lead managers</h2>
       <p>
-        These come from the IPO&apos;s filing details as published on IPO Watch&apos;s page for that issue,
-        which in turn draws on the RHP/exchange filing. They are single-sourced — if you spot one that&apos;s
-        wrong, please report it so we can correct it and check the source.
+        Core issue terms are checked against NSE&apos;s official current/historical issue catalogues and issue
+        details. SEBI&apos;s public-issues catalogue supplies DRHP/RHP filing discovery. The field-level source
+        link and verification state remain visible on each IPO; conflicts are held instead of silently overwritten.
       </p>
 
       <h2>How a new IPO gets added</h2>
       <p>
-        Every hourly cycle also checks IPO Watch&apos;s public listing for issues we aren&apos;t tracking yet.
-        Every candidate&apos;s facts get checked for internal consistency (a sane price band, dates in the
-        right order, a lot size that&apos;s actually a positive number, and so on) before anything happens to
-        it:
+        Every hourly cycle syncs SEBI&apos;s official DRHP/RHP catalogue. A filing can appear in the public
+        pipeline before final application terms exist. Existing candidates are revalidated against NSE
+        official issue details before they can become verified application-ready records:
       </p>
       <ul>
         <li>
@@ -78,9 +75,8 @@ export default function MethodologyPage() {
           recorded, so a real inconsistency is visible rather than silently retried and re-failing forever.
         </li>
         <li>
-          <strong>Consistent, and both cross-verified by a second independent source and backed by an
-          official DRHP/RHP filing link</strong> — published automatically. No human touches this path, but
-          every auto-published IPO is logged as such.
+          <strong>Complete and consistent with official issue evidence</strong> — published automatically
+          when the safety flag is enabled. Every field comparison and publication transition is logged.
         </li>
         <li>
           <strong>Consistent, but missing the second source or the filing link</strong> — held as a draft
@@ -91,11 +87,10 @@ export default function MethodologyPage() {
 
       <h2>Financials</h2>
       <p>
-        Revenue, PAT, and ratio figures are first pulled from Sahi&apos;s per-IPO financial summary table, but
-        they are <strong>not shown</strong> until someone has manually checked them against the company&apos;s
-        actual RHP filing and marked them verified. Anything not yet checked simply doesn&apos;t appear on the
-        Financials tab — we&apos;d rather show nothing than show a number that hasn&apos;t been checked, with
-        just a disclaimer next to it.
+        Revenue, PAT and other supported metrics are extracted from the exact official DRHP/RHP/Prospectus
+        PDF with checksum, page, table, fiscal-year, scope and audit-status evidence. Complete native-text
+        values can enter one atomic filing batch. OCR, ambiguity, superseded documents and conflicts remain
+        in exception review. Only immutable published records appear on the Financials tab.
       </p>
       <p>
         Every verification (and every correction, if a checked figure later turns out wrong) is written to an
@@ -105,9 +100,9 @@ export default function MethodologyPage() {
 
       <h2>Documents (DRHP / RHP / anchor list)</h2>
       <p>
-        Document links are discovered from IPO Watch&apos;s per-IPO page, but the PDFs themselves are hosted
-        on the lead manager&apos;s or company&apos;s own domain — we don&apos;t host, re-upload, or modify
-        them. IPO Watch is only the index we use to find the real filing.
+        Document links come from SEBI&apos;s public-issues catalogue and official NSE issue details. Some official
+        filings may resolve to an issuer or lead-manager hosted copy; the exact host and evidence class are
+        shown. We don&apos;t re-upload or modify these filings.
       </p>
 
       <h2>What this site doesn&apos;t do</h2>
@@ -117,8 +112,8 @@ export default function MethodologyPage() {
         <li>We don&apos;t tell you whether to apply — see our <a href="/disclaimer">Disclaimer</a>.</li>
       </ul>
       <p>
-        This is unattended software scraping other unattended websites — a source going offline or changing
-        its page layout will occasionally cause a gap. That&apos;s exactly why every figure carries its own
+        This is unattended software reading external official and explicitly enabled provider sources. A source
+        going offline or changing its response can cause a gap. That&apos;s exactly why every figure carries its own
         source and freshness information instead of asking you to trust a single blended number blindly.
       </p>
 
