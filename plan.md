@@ -122,9 +122,9 @@ Do not build React Native/Expo yet. Revisit after the beta using evidence such a
 - [x] PR A Preview proof and merge.
 - [ ] Final domain and provider configuration aligned.
 - [x] PR B code implementation and local PWA validation.
-- [ ] PR B Preview/device proof and merge.
+- [x] PR B Preview/device proof and merge.
 - [x] PR C monitoring/runbook implementation and local validation.
-- [ ] PR C Production probe proof and merge.
+- [x] PR C Production probe proof and merge.
 - [ ] Isolated Neon restore rehearsal evidence.
 - [ ] Real-user launch-gate test recorded.
 - [ ] Seven-day invite beta completed.
