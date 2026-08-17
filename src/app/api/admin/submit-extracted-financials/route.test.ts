@@ -35,6 +35,15 @@ describe("financial extraction submission boundary", () => {
     expect(parseFinancialSubmission(validPayload)).toEqual(validPayload);
   });
 
+  it("accepts an optional captured filing to retire after a successful official-mirror submission", () => {
+    const payload = { ...validPayload, supersedesDocumentId: "captured-blocked-document" };
+    expect(parseFinancialSubmission(payload)).toEqual(payload);
+  });
+
+  it("rejects a malformed superseded document identifier", () => {
+    expect(parseFinancialSubmission({ ...validPayload, supersedesDocumentId: 42 })).toBeNull();
+  });
+
   it.each([
     ["virtual document URL", { ...validPayload.document, sourceUrl: "extracted://fake" }],
     ["non-PDF hash", { ...validPayload.document, sha256: "fake" }],

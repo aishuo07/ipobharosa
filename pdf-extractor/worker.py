@@ -35,11 +35,20 @@ def main() -> int:
         name = document["companyName"]
         print(f"\n=== {name} ===")
         result = None
-        for position, source_url in enumerate(filing_source_candidates(document["sourceUrl"])):
-            if position > 0:
-                print(f"OFFICIAL MIRROR: retrying from {source_url}")
-            result = extract_from_pdf(source_url, document["ipoId"], document["documentType"])
+        selected_source = None
+        for candidate in filing_source_candidates(document["sourceUrl"], document["documentType"]):
+            if candidate.is_mirror:
+                print(
+                    "OFFICIAL MIRROR: retrying "
+                    f"as {candidate.document_type} from {candidate.source_url}"
+                )
+            result = extract_from_pdf(
+                candidate.source_url,
+                document["ipoId"],
+                candidate.document_type,
+            )
             if result.get("rawExtractions"):
+                selected_source = candidate
                 break
             issues = result.get("issues", [])
             if not any("HTTP 403" in issue or "HTTP 406" in issue for issue in issues):
@@ -50,14 +59,17 @@ def main() -> int:
             skipped += 1
             print(f"SKIP: {'; '.join(result.get('issues', [])) or 'no complete summary rows'}")
             continue
+        payload = {
+            "ipoId": document["ipoId"],
+            "document": result["document"],
+            "extractions": rows,
+        }
+        if selected_source is not None and selected_source.is_mirror:
+            payload["supersedesDocumentId"] = document["documentId"]
         response = requests.post(
             f"{base_url}/api/admin/submit-extracted-financials",
             headers={**headers, "Content-Type": "application/json"},
-            json={
-                "ipoId": document["ipoId"],
-                "document": result["document"],
-                "extractions": rows,
-            },
+            json=payload,
             timeout=45,
         )
         if response.ok:

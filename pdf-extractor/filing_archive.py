@@ -3,6 +3,7 @@
 import io
 import re
 import zipfile
+from typing import NamedTuple
 
 MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024
 MAX_PDF_BYTES = 50 * 1024 * 1024
@@ -10,9 +11,25 @@ MAX_ZIP_ENTRIES = 100
 MAX_TOTAL_PDF_BYTES = 75 * 1024 * 1024
 FILING_REQUEST_TIMEOUT = (15, 180)
 
+
+class FilingSourceCandidate(NamedTuple):
+    source_url: str
+    document_type: str
+    is_mirror: bool
+
+
 OFFICIAL_FILING_MIRRORS = {
     "https://www.manipalhospitals.com/assets/pdf/drhp-manipal-hospitals.pdf": (
-        "https://nsearchives.nseindia.com/corporate/Registration_24032026122414_MHEL_DRHP.pdf",
+        FilingSourceCandidate(
+            "https://investmentbank.kotak.com//kib-cms/sites/default/files/offer-documets/Manipal%20Health%20Enterprises%20Limited-%20RHP%20%28July%2023%2C%202026%29.pdf",
+            "RHP",
+            True,
+        ),
+        FilingSourceCandidate(
+            "https://nsearchives.nseindia.com/corporate/Registration_24032026122414_MHEL_DRHP.pdf",
+            "DRHP",
+            True,
+        ),
     ),
 }
 
@@ -25,9 +42,12 @@ def filing_request_headers() -> dict[str, str]:
     }
 
 
-def filing_source_candidates(source_url: str) -> tuple[str, ...]:
+def filing_source_candidates(source_url: str, document_type: str) -> tuple[FilingSourceCandidate, ...]:
     """Return the captured source followed only by explicitly verified official mirrors."""
-    return (source_url, *OFFICIAL_FILING_MIRRORS.get(source_url, ()))
+    return (
+        FilingSourceCandidate(source_url, document_type, False),
+        *OFFICIAL_FILING_MIRRORS.get(source_url, ()),
+    )
 
 
 def filing_name_score(name: str, doc_type: str) -> int:
