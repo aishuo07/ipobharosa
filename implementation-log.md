@@ -8,6 +8,11 @@
 - Implemented canonical-origin alignment, metadata, browser headers, safe environment template and Preview origin checks.
 - Validation: 42 test files / 282 tests passed, lint passed, TypeScript passed and the Production build completed.
 - Local header inspection passed. Full local smoke could not query the configured remote database from this sandbox, so canonical/database-backed route proof remains a Vercel Preview gate.
+- PR #53 passed CI, migration smoke, GitGuardian and Vercel checks. Preview smoke verified board/detail responses, fail-closed admin mutation, canonical/robots/sitemap agreement and live security headers.
+- Squash-merged PR #53 as `b7500e6`; started the installable-PWA release from that exact `origin/main`.
+- Implemented the PWA manifest, branded standard/maskable/Apple icons, service-worker route, install UI and explicit offline page.
+- The worker caches only `/offline`, does not intercept API/admin/login/watchlist navigation and removes obsolete app caches on activation.
+- PWA validation: 44 test files / 287 tests, lint, TypeScript and Production build passed. Runtime checks confirmed manifest fields/icons, JavaScript content type, root worker scope and offline route.
 
 ## PR 6 — public correctness, trust contract and date board
 

@@ -1,5 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { resolveSiteUrl } from "@/lib/site-url";
+import { PwaRegistration } from "@/components/InstallApp";
 import "./globals.css";
 
 const siteUrl = resolveSiteUrl();
@@ -14,6 +15,18 @@ export const metadata: Metadata = {
   },
   description: siteDescription,
   applicationName: "IPOBharosa",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "IPOBharosa",
+  },
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/icons/icon-512.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: [{ url: "/icons/apple-touch-icon.png", type: "image/png", sizes: "180x180" }],
+  },
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
@@ -33,10 +46,20 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
+export const viewport: Viewport = {
+  themeColor: "#173C32",
+  colorScheme: "light",
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <PwaRegistration />
+        {children}
+      </body>
     </html>
   );
 }

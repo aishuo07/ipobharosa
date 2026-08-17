@@ -208,6 +208,31 @@ a, button { font-family: inherit; }
   text-transform: uppercase; color: var(--ink-faint);
   padding-left: 12px; border-left: 1px solid var(--border-strong);
 }
+.install-app-button { padding: 6px 10px; white-space: nowrap; }
+.install-app-dialog {
+  width: min(430px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg); background: var(--surface); color: var(--ink);
+  box-shadow: 0 22px 70px rgba(23, 33, 27, .22);
+}
+.install-app-dialog::backdrop { background: rgba(23, 33, 27, .42); backdrop-filter: blur(3px); }
+.install-app-dialog form { position: relative; display: grid; gap: 16px; padding: 28px; }
+.install-app-dialog h2 { margin: 0; font: 650 28px/1.05 var(--font-display); letter-spacing: -.02em; }
+.install-app-dialog ol { display: grid; gap: 10px; margin: 0; padding-left: 22px; color: var(--ink-muted); }
+.install-app-close {
+  position: absolute; top: 12px; right: 12px; width: 36px; height: 36px; border: 0;
+  border-radius: 50%; background: var(--surface-2); color: var(--ink); font-size: 22px; cursor: pointer;
+}
+.offline-page {
+  width: min(620px, calc(100% - 40px)); min-height: 100dvh; margin: 0 auto; padding: 12vh 0 64px;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
+}
+.offline-mark {
+  width: 72px; height: 72px; margin-bottom: 28px; display: grid; place-items: center;
+  border-radius: 18px; background: var(--trust); color: var(--paper);
+  font: 650 30px/1 var(--font-display); box-shadow: inset 0 -5px 0 var(--accent);
+}
+.offline-page h1 { max-width: 560px; margin: 0; font: 650 clamp(38px, 8vw, 64px)/.98 var(--font-display); letter-spacing: -.035em; }
+.offline-page > p:not(.board-kicker) { max-width: 540px; margin: 22px 0 28px; color: var(--ink-muted); font-size: 17px; }
 /* ticker */
 .ticker { border-top: 1px solid var(--border); overflow: hidden; background: var(--surface-2); }
 .ticker-view { max-width: 1180px; margin: 0 auto; overflow: hidden; }

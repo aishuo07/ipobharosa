@@ -15,6 +15,7 @@ import {
   type VerificationFilter,
 } from "@/lib/board-filter";
 import { Badge, SegmentedTabs, StatePanel, TabButton, TextInput } from "@/components/ui";
+import { InstallApp } from "@/components/InstallApp";
 import { calendarFeedUrl, googleCalendarSubscriptionUrl } from "@/lib/calendar";
 import {
   calendarEventTimingLabel,
@@ -223,6 +224,7 @@ export default function IpoBoard({
             <span className="eyebrow">Lot Size · GMP · Dates · Allotment</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 13 }}>
+            <InstallApp />
             {user ? (
               <>
                 <a href="/watchlist" className="btn btn-ghost" style={{ padding: "6px 12px" }}>
