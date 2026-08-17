@@ -2,7 +2,13 @@ import io
 import unittest
 import zipfile
 
-from filing_archive import FILING_REQUEST_TIMEOUT, extract_filing_pdf_bytes, filing_request_headers, filing_source_candidates
+from filing_archive import (
+    FILING_REQUEST_TIMEOUT,
+    FilingSourceCandidate,
+    extract_filing_pdf_bytes,
+    filing_request_headers,
+    filing_source_candidates,
+)
 
 
 def archive(entries):
@@ -24,13 +30,25 @@ class FilingDownloadTests(unittest.TestCase):
     def test_uses_only_verified_official_mirror_after_captured_source(self):
         blocked = "https://www.manipalhospitals.com/assets/pdf/drhp-manipal-hospitals.pdf"
         self.assertEqual(
-            filing_source_candidates(blocked),
+            filing_source_candidates(blocked, "DRHP"),
             (
-                blocked,
-                "https://nsearchives.nseindia.com/corporate/Registration_24032026122414_MHEL_DRHP.pdf",
+                FilingSourceCandidate(blocked, "DRHP", False),
+                FilingSourceCandidate(
+                    "https://investmentbank.kotak.com//kib-cms/sites/default/files/offer-documets/Manipal%20Health%20Enterprises%20Limited-%20RHP%20%28July%2023%2C%202026%29.pdf",
+                    "RHP",
+                    True,
+                ),
+                FilingSourceCandidate(
+                    "https://nsearchives.nseindia.com/corporate/Registration_24032026122414_MHEL_DRHP.pdf",
+                    "DRHP",
+                    True,
+                ),
             ),
         )
-        self.assertEqual(filing_source_candidates("https://official.example/rhp.pdf"), ("https://official.example/rhp.pdf",))
+        self.assertEqual(
+            filing_source_candidates("https://official.example/rhp.pdf", "RHP"),
+            (FilingSourceCandidate("https://official.example/rhp.pdf", "RHP", False),),
+        )
 
     def test_keeps_direct_pdf_bytes(self):
         content = b"%PDF-direct"

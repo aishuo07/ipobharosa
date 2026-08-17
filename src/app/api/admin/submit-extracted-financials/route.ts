@@ -27,6 +27,7 @@ type SubmittedExtraction = {
 
 type SubmissionBody = {
   ipoId: string;
+  supersedesDocumentId?: string;
   document: {
     sourceUrl: string;
     documentType: FinancialDocumentType;
@@ -87,9 +88,16 @@ export function parseFinancialSubmission(value: unknown): SubmissionBody | null 
   }
 
   if (extractions.length === 0 || extractions.length > 500) return null;
+  if (
+    value.supersedesDocumentId !== undefined &&
+    (typeof value.supersedesDocumentId !== "string" ||
+      value.supersedesDocumentId.length < 1 ||
+      value.supersedesDocumentId.length > 128)
+  ) return null;
 
   return {
     ipoId: value.ipoId,
+    ...(typeof value.supersedesDocumentId === "string" ? { supersedesDocumentId: value.supersedesDocumentId } : {}),
     document: {
       sourceUrl: document.sourceUrl,
       documentType: document.documentType as FinancialDocumentType,
@@ -135,7 +143,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid document evidence or extraction payload" }, { status: 400 });
   }
 
-  const { ipoId, document, extractions } = body;
+  const { ipoId, document, extractions, supersedesDocumentId } = body;
 
   try {
     // Get IPO to verify it exists
@@ -146,6 +154,21 @@ export async function POST(request: NextRequest) {
 
     if (!ipo) {
       return NextResponse.json({ error: "IPO not found" }, { status: 404 });
+    }
+
+    if (supersedesDocumentId) {
+      const superseded = await prisma.financialDocument.findUnique({
+        where: { id: supersedesDocumentId },
+        select: { ipoId: true, isLatestForType: true, _count: { select: { extractions: true } } },
+      });
+      if (
+        !superseded ||
+        superseded.ipoId !== ipoId ||
+        !superseded.isLatestForType ||
+        superseded._count.extractions !== 0
+      ) {
+        return NextResponse.json({ error: "Superseded filing is not an empty current document for this IPO" }, { status: 409 });
+      }
     }
 
     // The checksum must represent the downloaded PDF bytes, not a hash of the
@@ -173,6 +196,15 @@ export async function POST(request: NextRequest) {
     }));
 
     await processExtractions(ipoId, doc, raws);
+
+    // Only retire a blocked captured filing after its verified official mirror
+    // has been downloaded, persisted, and routed into the review workflow.
+    if (supersedesDocumentId && supersedesDocumentId !== doc) {
+      await prisma.financialDocument.update({
+        where: { id: supersedesDocumentId },
+        data: { isLatestForType: false },
+      });
+    }
 
     return NextResponse.json(
       {
@@ -215,6 +247,7 @@ export async function GET(request: NextRequest) {
   const documents = await prisma.financialDocument.findMany({
     where: { extractions: { none: {} }, isLatestForType: true },
     select: {
+      id: true,
       ipoId: true,
       documentType: true,
       sourceUrl: true,
@@ -225,6 +258,7 @@ export async function GET(request: NextRequest) {
   });
   return NextResponse.json({
     documents: documents.map((document) => ({
+      documentId: document.id,
       ipoId: document.ipoId,
       companyName: document.ipo.company.name,
       documentType: document.documentType,

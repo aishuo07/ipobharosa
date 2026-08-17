@@ -850,3 +850,20 @@ source page, explicit unit, annual fiscal period, restated audit status and a
 defensible scope. Multi-page metadata is carried for at most two pages and all
 old metric values and period columns are stripped before carry-forward, which
 prevents silent fiscal-year remapping. EPS remains intentionally excluded.
+
+## Manipal official-mirror closure
+
+- The captured Manipal company DRHP URL consistently returns HTTP 403 to the
+  production worker. The official NSE DRHP archive accepts the request but did
+  not complete within the bounded 180-second read timeout; increasing that
+  timeout would let one upstream filing monopolize the scheduled worker.
+- Kotak Investment Banking, an official BRLM, hosts the final Manipal RHP. A
+  live pinned-parser run downloaded all 717 pages and found the explicit
+  consolidated restated summaries on PDF pages 100–101.
+- The final RHP produced nine high-confidence candidates: Assets, Revenue and
+  PAT for FY2024, FY2025 and FY2026. The fallback is therefore persisted as an
+  `RHP`, not mislabeled as the older `DRHP`.
+- A mirror submission carries the exact empty captured document ID. The API
+  validates that it belongs to the same IPO and retires it only after the
+  mirror evidence and review candidates are persisted. A failed mirror remains
+  retryable and no public value is auto-published.
