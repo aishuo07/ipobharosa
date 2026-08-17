@@ -2,8 +2,7 @@ import io
 import unittest
 import zipfile
 
-from filing_archive import extract_filing_pdf_bytes
-from extract import filing_request_headers
+from filing_archive import extract_filing_pdf_bytes, filing_request_headers
 
 
 def archive(entries):

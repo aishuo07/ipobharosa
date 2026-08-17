@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 import hashlib
 from io import BytesIO
 from pypdf import PdfReader
-from filing_archive import MAX_DOWNLOAD_BYTES, extract_filing_pdf_bytes
+from filing_archive import MAX_DOWNLOAD_BYTES, extract_filing_pdf_bytes, filing_request_headers
 from targeted import extract_from_pages
 
 # Financial metric keywords
@@ -49,13 +49,6 @@ FY_PATTERNS = [
     r"FY\s*(\d{2,4})[–\-](\d{2,4})",
 ]
 
-
-def filing_request_headers() -> Dict[str, str]:
-    """Identify the product and explicitly request filing bytes."""
-    return {
-        "User-Agent": "Mozilla/5.0 (compatible; IPOBharosa/1.0; +https://ipobharosa.vercel.app)",
-        "Accept": "application/pdf,application/zip,application/octet-stream;q=0.9,*/*;q=0.5",
-    }
 
 def parse_number(text: str) -> Optional[float]:
     """Parse Indian financial numbers: ₹3,449.96 Mn → 3449.96"""

@@ -10,6 +10,14 @@ MAX_ZIP_ENTRIES = 100
 MAX_TOTAL_PDF_BYTES = 75 * 1024 * 1024
 
 
+def filing_request_headers() -> dict[str, str]:
+    """Identify the product and explicitly request official filing bytes."""
+    return {
+        "User-Agent": "Mozilla/5.0 (compatible; IPOBharosa/1.0; +https://ipobharosa.vercel.app)",
+        "Accept": "application/pdf,application/zip,application/octet-stream;q=0.9,*/*;q=0.5",
+    }
+
+
 def filing_name_score(name: str, doc_type: str) -> int:
     words = re.sub(r"[^a-z0-9]+", " ", name.lower()).strip().split()
     joined = " ".join(words)
