@@ -50,3 +50,15 @@ export function computeAlertReasons(summary: IngestionSummary): string[] {
 
   return reasons;
 }
+
+/** Safely reads the persisted checkpoint without making /api/health fragile. */
+export function computeStoredCheckpointAlertReasons(value: unknown): string[] | null {
+  if (!value || typeof value !== "object" || !("summary" in value)) return null;
+  const summary = (value as { summary?: unknown }).summary;
+  if (!summary || typeof summary !== "object") return null;
+  try {
+    return computeAlertReasons(summary as IngestionSummary);
+  } catch {
+    return null;
+  }
+}
