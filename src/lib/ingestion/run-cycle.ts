@@ -17,15 +17,16 @@ import { syncOfficialFilingCatalogue, type FilingCatalogueSync } from "@/lib/dis
 import { countRevalidationCandidates, revalidateOldestCandidate } from "@/lib/discovery/revalidate";
 import { countPublishedRevalidationCandidates, revalidateOldestPublished } from "@/lib/discovery/revalidate-published";
 import { recordSourceFailure, recordSourceSuccess } from "@/lib/ingestion/source-operation";
+import { withTransientRetries } from "@/lib/ingestion/source-operation";
+import { providerErrorResult, providerResultMessage } from "@/lib/ingestion/provider-result";
 import { sendDailyDigestIfDue } from "@/lib/ingestion/digest";
 import { resolveSiteUrl } from "@/lib/site-url";
+import { marketFinalizationCutoff } from "@/lib/ingestion/market-window";
 
 const ALERT_RECIPIENT = "aish.iiitb@gmail.com";
 const SITE_URL = resolveSiteUrl();
 const BATCH_SIZE = 3;
 const GMP_ADAPTERS: GmpAdapter[] = [ipoWatchAdapter, sahiAdapter, ipojiAdapter, investorGainAdapter];
-const GMP_ELIGIBLE_STATUSES = ["UPCOMING", "OPEN", "CLOSED"] as const;
-const SUBSCRIPTION_ELIGIBLE_STATUSES = ["OPEN", "CLOSED"] as const;
 // Candidate checks are bounded so the workflow still has ample calls for GMP,
 // subscription and finalization. Remote PDF work is intentionally excluded
 // from this budget and runs in the daily filing-evidence worker.
@@ -40,8 +41,8 @@ export type IngestionStage = "prepare" | "revalidation" | "publishedRevalidation
 export type IngestionSummary = {
   ipoCount: number;
   gmp: { snapshotsWritten: number; ipoWithNoData: number };
-  subscription: { snapshotsWritten: number; failed: number };
-  perSource: Record<string, { success: number; failure: number }>;
+  subscription: { snapshotsWritten: number; failed: number; notYetAvailable: number; notCovered: number };
+  perSource: Record<string, { success: number; failure: number; notYetAvailable: number; notCovered: number }>;
   statusTransitions: number;
   reminders: { sent: number; failed: number; skipped: number };
   discovery: DiscoverySummary | { error: string };
@@ -70,7 +71,7 @@ export type IngestionStepResult = {
 export const EMPTY_SUMMARY: IngestionSummary = {
   ipoCount: 0,
   gmp: { snapshotsWritten: 0, ipoWithNoData: 0 },
-  subscription: { snapshotsWritten: 0, failed: 0 },
+  subscription: { snapshotsWritten: 0, failed: 0, notYetAvailable: 0, notCovered: 0 },
   perSource: {},
   statusTransitions: 0,
   reminders: { sent: 0, failed: 0, skipped: 0 },
@@ -101,6 +102,16 @@ export function readCheckpoint(value: unknown): IngestionCheckpoint {
       revalidation: candidate.summary.revalidation ?? structuredClone(EMPTY_SUMMARY.revalidation),
       publishedRevalidation: candidate.summary.publishedRevalidation ?? structuredClone(EMPTY_SUMMARY.publishedRevalidation),
       filings: candidate.summary.filings ?? structuredClone(EMPTY_SUMMARY.filings),
+      subscription: {
+        ...structuredClone(EMPTY_SUMMARY.subscription),
+        ...candidate.summary.subscription,
+      },
+      perSource: Object.fromEntries(Object.entries(candidate.summary.perSource ?? {}).map(([key, source]) => [key, {
+        success: source.success ?? 0,
+        failure: source.failure ?? 0,
+        notYetAvailable: source.notYetAvailable ?? 0,
+        notCovered: source.notCovered ?? 0,
+      }])),
     },
   };
 }
@@ -183,7 +194,7 @@ async function runPrepare(checkpoint: IngestionCheckpoint): Promise<IngestionChe
     discovery = { error: error instanceof Error ? error.message : String(error) };
     await recordSourceFailure("ipowatch:discovery", "IPO Watch", "discovery", error);
   }
-  const ipoCount = await prisma.ipo.count({ where: { status: { in: [...GMP_ELIGIBLE_STATUSES] } } });
+  const ipoCount = await prisma.ipo.count({ where: gmpEligibilityWhere() });
   const revalidationTarget = Math.min(await countRevalidationCandidates(), REVALIDATION_PER_RUN);
   const publishedRevalidationTarget = Math.min(await countPublishedRevalidationCandidates(), PUBLISHED_REVALIDATION_PER_RUN);
   return nextStage({
@@ -197,7 +208,7 @@ async function runPrepare(checkpoint: IngestionCheckpoint): Promise<IngestionChe
       discovery,
       revalidation: { ...checkpoint.summary.revalidation, target: revalidationTarget },
       publishedRevalidation: { ...checkpoint.summary.publishedRevalidation, target: publishedRevalidationTarget },
-      perSource: Object.fromEntries(GMP_ADAPTERS.map((adapter) => [adapter.key, { success: 0, failure: 0 }])),
+      perSource: Object.fromEntries(GMP_ADAPTERS.map((adapter) => [adapter.key, { success: 0, failure: 0, notYetAvailable: 0, notCovered: 0 }])),
     },
   }, "revalidation");
 }
@@ -256,9 +267,28 @@ async function ensureSources() {
   return new Map(rows.map((row) => [row.adapterKey, row.id]));
 }
 
+function gmpEligibilityWhere(now = new Date()) {
+  return {
+    OR: [
+      { status: "UPCOMING" as const },
+      { status: "OPEN" as const },
+      { status: "CLOSED" as const, listingDate: { gte: marketFinalizationCutoff(now) } },
+    ],
+  };
+}
+
+function subscriptionEligibilityWhere(now = new Date()) {
+  return {
+    OR: [
+      { status: "OPEN" as const },
+      { status: "CLOSED" as const, listingDate: { gte: marketFinalizationCutoff(now) } },
+    ],
+  };
+}
+
 async function runGmpBatch(runId: string, capturedAt: Date, checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
   const ipos = await prisma.ipo.findMany({
-    where: { status: { in: [...GMP_ELIGIBLE_STATUSES] } },
+    where: gmpEligibilityWhere(),
     include: { company: true },
     orderBy: { id: "asc" },
     skip: checkpoint.cursor,
@@ -272,7 +302,13 @@ async function runGmpBatch(runId: string, capturedAt: Date, checkpoint: Ingestio
     const values = successfulValues(observations);
     const snapshot = computeGmpSnapshot(values);
     const summary = structuredClone(next.summary);
-    for (const observation of observations) summary.perSource[observation.sourceKey][observation.success ? "success" : "failure"]++;
+    for (const observation of observations) {
+      const source = summary.perSource[observation.sourceKey];
+      if (observation.kind === "VALUE") source.success++;
+      else if (observation.kind === "NOT_YET_AVAILABLE") source.notYetAvailable++;
+      else if (observation.kind === "NOT_COVERED") source.notCovered++;
+      else source.failure++;
+    }
     if (snapshot) summary.gmp.snapshotsWritten++;
     else summary.gmp.ipoWithNoData++;
     const advanced = { ...next, cursor: next.cursor + 1, summary };
@@ -285,19 +321,25 @@ async function runGmpBatch(runId: string, capturedAt: Date, checkpoint: Ingestio
           if (!sourceId) continue;
           await tx.gmpObservation.create({ data: {
             ipoId: ipo.id, sourceId, capturedAt,
-            value: observation.success ? observation.value : null,
-            success: observation.success,
-            errorMessage: observation.success ? null : observation.error,
+            value: observation.kind === "VALUE" ? observation.value : null,
+            success: observation.kind === "VALUE",
+            errorMessage: observation.kind === "VALUE" ? null : providerResultMessage(observation),
           } });
-          await tx.sourceHealth.upsert({
-            where: { sourceId },
-            update: observation.success
-              ? { lastSuccessAt: capturedAt, lastError: null, consecutiveFailures: 0, degraded: false }
-              : { lastError: observation.error, consecutiveFailures: { increment: 1 } },
-            create: observation.success
-              ? { sourceId, lastSuccessAt: capturedAt, consecutiveFailures: 0, degraded: false }
-              : { sourceId, lastError: observation.error, consecutiveFailures: 1 },
-          });
+          if (observation.kind === "VALUE") {
+            await tx.sourceHealth.upsert({
+              where: { sourceId },
+              update: { lastSuccessAt: capturedAt, lastError: null, consecutiveFailures: 0, degraded: false },
+              create: { sourceId, lastSuccessAt: capturedAt, consecutiveFailures: 0, degraded: false },
+            });
+          } else if (observation.kind === "ERROR") {
+            const current = await tx.sourceHealth.findUnique({ where: { sourceId }, select: { consecutiveFailures: true } });
+            const failures = (current?.consecutiveFailures ?? 0) + 1;
+            await tx.sourceHealth.upsert({
+              where: { sourceId },
+              update: { lastError: observation.reason, consecutiveFailures: failures, degraded: failures >= 3 },
+              create: { sourceId, lastError: observation.reason, consecutiveFailures: failures, degraded: failures >= 3 },
+            });
+          }
         }
         if (snapshot) await tx.gmpSnapshot.create({ data: { ipoId: ipo.id, ...snapshot, capturedAt } });
       }
@@ -310,7 +352,7 @@ async function runGmpBatch(runId: string, capturedAt: Date, checkpoint: Ingestio
 
 async function runSubscriptionBatch(runId: string, capturedAt: Date, checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
   const ipos = await prisma.ipo.findMany({
-    where: { status: { in: [...SUBSCRIPTION_ELIGIBLE_STATUSES] } },
+    where: subscriptionEligibilityWhere(),
     include: { company: true },
     orderBy: { id: "asc" },
     skip: checkpoint.cursor,
@@ -319,14 +361,19 @@ async function runSubscriptionBatch(runId: string, capturedAt: Date, checkpoint:
   if (ipos.length === 0) return nextStage(checkpoint, "finalize");
   let next = checkpoint;
   for (const ipo of ipos) {
-    let result: Awaited<ReturnType<typeof sahiSubscriptionAdapter.fetchSubscription>> | null = null;
-    let failure: unknown = null;
-    try { result = await sahiSubscriptionAdapter.fetchSubscription(ipo.company.name); }
-    catch (error) { failure = error; }
+    let result: Awaited<ReturnType<typeof sahiSubscriptionAdapter.fetchSubscription>>;
+    try { result = await withTransientRetries(() => sahiSubscriptionAdapter.fetchSubscription(ipo.company.name)); }
+    catch (error) { result = providerErrorResult(error); }
     const summary = structuredClone(next.summary);
-    if (failure) {
+    if (result.kind === "ERROR") {
       summary.subscription.failed++;
-      await recordSourceFailure("sahi:subscription", "Sahi", "subscription", failure);
+      await recordSourceFailure("sahi:subscription", "Sahi", "subscription", result.reason);
+    } else if (result.kind === "NOT_YET_AVAILABLE") {
+      summary.subscription.notYetAvailable++;
+      await recordSourceSuccess("sahi:subscription", "Sahi", "subscription");
+    } else if (result.kind === "NOT_COVERED") {
+      summary.subscription.notCovered++;
+      await recordSourceSuccess("sahi:subscription", "Sahi", "subscription");
     } else {
       summary.subscription.snapshotsWritten++;
       await recordSourceSuccess("sahi:subscription", "Sahi", "subscription");
@@ -334,7 +381,7 @@ async function runSubscriptionBatch(runId: string, capturedAt: Date, checkpoint:
     const advanced = { ...next, cursor: next.cursor + 1, summary };
     await prisma.$transaction(async (tx) => {
       const alreadyDone = await tx.subscriptionSnapshot.count({ where: { ipoId: ipo.id, capturedAt } });
-      if (result && alreadyDone === 0) await tx.subscriptionSnapshot.create({ data: { ipoId: ipo.id, ...result, capturedAt } });
+      if (result.kind === "VALUE" && alreadyDone === 0) await tx.subscriptionSnapshot.create({ data: { ipoId: ipo.id, ...result.value, capturedAt } });
       await tx.ingestionRun.update({ where: { id: runId }, data: { summary: advanced } });
     });
     next = advanced;

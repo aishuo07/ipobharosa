@@ -13,18 +13,19 @@ const GMP_PATTERN = /GMP\s+today[^₹]{0,80}₹\s*(-?\d+(?:\.\d+)?)/i;
 export const sahiAdapter: GmpAdapter = {
   key: "sahi",
   name: "Sahi",
-  async fetchGmp(companyName: string): Promise<number> {
+  async fetchGmp(companyName: string) {
     const slug = toIpoSlug(companyName);
     const url = `https://www.sahi.com/blogs/${slug}-ipo-gmp-today`;
 
     const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
+    if (res.status === 404) return { kind: "NOT_COVERED", reason: `Sahi has no GMP page for ${companyName}` };
     if (!res.ok) throw new Error(`sahi: HTTP ${res.status} for ${url}`);
     const html = await res.text();
 
     const match = html.match(GMP_PATTERN);
     if (!match) {
-      throw new Error(`sahi: could not find a GMP figure for "${companyName}" at ${url}`);
+      return { kind: "NOT_YET_AVAILABLE", reason: `Sahi page exists but has no published GMP quote for ${companyName}` };
     }
-    return parseFloat(match[1]);
+    return { kind: "VALUE", value: parseFloat(match[1]) };
   },
 };

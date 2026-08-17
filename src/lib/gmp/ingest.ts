@@ -1,4 +1,6 @@
 import type { GmpAdapter, SourceObservation } from "./types";
+import { providerErrorResult } from "@/lib/ingestion/provider-result";
+import { withTransientRetries } from "@/lib/ingestion/source-operation";
 
 /**
  * Runs every adapter concurrently and isolates failures per-source —
@@ -12,7 +14,7 @@ export async function collectObservations(
   adapters: GmpAdapter[],
 ): Promise<SourceObservation[]> {
   const results = await Promise.allSettled(
-    adapters.map((adapter) => adapter.fetchGmp(companyName)),
+    adapters.map((adapter) => withTransientRetries(() => adapter.fetchGmp(companyName))),
   );
 
   return results.map((result, i) => {
@@ -21,24 +23,19 @@ export async function collectObservations(
       return {
         sourceKey: adapter.key,
         sourceName: adapter.name,
-        success: true,
-        value: result.value,
+        ...result.value,
       };
     }
     return {
       sourceKey: adapter.key,
       sourceName: adapter.name,
-      success: false,
-      error:
-        result.reason instanceof Error
-          ? result.reason.message
-          : String(result.reason),
+      ...providerErrorResult(result.reason),
     };
   });
 }
 
 export function successfulValues(observations: SourceObservation[]): number[] {
   return observations
-    .filter((o): o is SourceObservation & { success: true } => o.success)
+    .filter((o): o is SourceObservation & { kind: "VALUE" } => o.kind === "VALUE")
     .map((o) => o.value);
 }

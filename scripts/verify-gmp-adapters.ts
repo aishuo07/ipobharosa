@@ -9,8 +9,8 @@ async function main() {
   for (const company of companies) {
     for (const adapter of [ipoWatchAdapter, sahiAdapter, ipojiAdapter, investorGainAdapter]) {
       try {
-        const value = await adapter.fetchGmp(company);
-        console.log(`${adapter.key.padEnd(10)} ${company.padEnd(28)} -> ₹${value}`);
+        const result = await adapter.fetchGmp(company);
+        console.log(`${adapter.key.padEnd(12)} ${company.padEnd(28)} -> ${result.kind === "VALUE" ? `₹${result.value}` : `${result.kind}: ${result.reason}`}`);
       } catch (e) {
         console.log(`${adapter.key.padEnd(10)} ${company.padEnd(28)} -> ERROR: ${(e as Error).message}`);
       }

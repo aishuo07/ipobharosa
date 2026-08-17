@@ -81,6 +81,7 @@ describe("notifyWatchersOfTransitions", () => {
 
     expect(summary).toEqual({ sent: 1, failed: 0, skipped: 0 });
     expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock.mock.calls[0]?.[0].html).toContain("/ipo/test-co");
     expect(deliveries).toEqual([
       expect.objectContaining({ userId: "u1", ipoId: "ipo1", transition: "UPCOMING->OPEN", status: "SENT" }),
     ]);

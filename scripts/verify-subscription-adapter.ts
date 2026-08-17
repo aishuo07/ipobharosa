@@ -6,9 +6,14 @@ async function main() {
   for (const company of companies) {
     try {
       const result = await sahiSubscriptionAdapter.fetchSubscription(company);
+      if (result.kind !== "VALUE") {
+        console.log(company, `-> ${result.kind}:`, result.reason);
+        continue;
+      }
+      const value = result.value;
       console.log(
         company,
-        `-> QIB ${result.qibX}x, NII ${result.niiX}x, Retail ${result.retailX}x, EMP ${result.employeeX ?? "n/a"}, source ${result.sourceExchange}`,
+        `-> QIB ${value.qibX}x, NII ${value.niiX}x, Retail ${value.retailX}x, EMP ${value.employeeX ?? "n/a"}, source ${value.sourceExchange}`,
       );
     } catch (e) {
       console.log(company, "-> ERROR:", (e as Error).message);

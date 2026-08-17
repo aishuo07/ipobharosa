@@ -367,7 +367,7 @@ export default async function AdminPage({
 
         <details className="admin-operations" open>
           <summary>Pipeline operations and source health</summary>
-          <p>Automated discovery runs every two hours. These diagnostics are for investigating source failures—not for approving IPOs.</p>
+          <p>Market discovery and signals run every hour. Expected non-coverage is shown separately from real source failures.</p>
           <h3>GMP source health</h3>
           <div className="table-wrap"><table className="dates"><thead><tr><th>Source</th><th>Last success</th><th>Failures</th><th>Status</th></tr></thead>
             <tbody>{sources.map((s) => <tr key={s.id}><td>{s.name}</td><td>{fmtDate(s.health?.lastSuccessAt)}</td><td>{s.health?.consecutiveFailures ?? 0}</td><td>{s.health?.degraded ? <span className="status-bad">Degraded</span> : <span className="status-good">Healthy</span>}</td></tr>)}</tbody>
@@ -377,14 +377,19 @@ export default async function AdminPage({
             <tbody>{operationHealth.map((health) => <tr key={health.key}><td>{health.source}</td><td>{health.operation}</td><td>{fmtDate(health.lastSuccessAt)}</td><td>{health.consecutiveFailures}</td><td>{fmtDate(health.nextRetryAt)}</td><td title={health.lastError ?? ""}>{health.lastError ? health.lastError.slice(0, 100) : "—"}</td></tr>)}</tbody>
           </table></div>
           <h3>Recent ingestion runs</h3>
-          <div className="table-wrap"><table className="dates"><thead><tr><th>Started</th><th>Duration</th><th>Result</th><th>Discovery</th><th>GMP</th></tr></thead>
+          <div className="table-wrap"><table className="dates"><thead><tr><th>Started</th><th>Duration</th><th>Result</th><th>Discovery</th><th>GMP values</th><th>GMP absence</th><th>GMP errors</th><th>Demand</th></tr></thead>
             <tbody>{recentRuns.map((r) => {
               const checkpoint = r.summary as Record<string, unknown> | null;
               const summary = (checkpoint?.summary as Record<string, unknown> | undefined) ?? checkpoint;
               const discovery = summary?.discovery as Record<string, unknown> | undefined;
               const gmp = summary?.gmp as Record<string, unknown> | undefined;
+              const subscription = summary?.subscription as Record<string, unknown> | undefined;
+              const perSource = (summary?.perSource as Record<string, Record<string, unknown>> | undefined) ?? {};
+              const gmpNotYet = Object.values(perSource).reduce((sum, source) => sum + Number(source.notYetAvailable ?? 0), 0);
+              const gmpNotCovered = Object.values(perSource).reduce((sum, source) => sum + Number(source.notCovered ?? 0), 0);
+              const gmpErrors = Object.values(perSource).reduce((sum, source) => sum + Number(source.failure ?? 0), 0);
               const durationMs = r.finishedAt ? r.finishedAt.getTime() - r.startedAt.getTime() : null;
-              return <tr key={r.id}><td>{fmtDate(r.startedAt)}</td><td>{durationMs !== null ? `${(durationMs / 1000).toFixed(1)}s` : "—"}</td><td>{r.skippedDueToLock ? "Skipped" : r.ok ? <span className="status-good">OK</span> : <span className="status-bad" title={r.error ?? ""}>Failed</span>}</td><td>{discovery ? `+${discovery.autoPublished ?? 0} public, +${discovery.draftsCreated ?? 0} draft` : "—"}</td><td>{gmp ? `${gmp.snapshotsWritten ?? 0} written` : "—"}</td></tr>;
+              return <tr key={r.id}><td>{fmtDate(r.startedAt)}</td><td>{durationMs !== null ? `${(durationMs / 1000).toFixed(1)}s` : "—"}</td><td>{r.skippedDueToLock ? "Skipped" : r.ok ? <span className="status-good">OK</span> : <span className="status-bad" title={r.error ?? ""}>Failed</span>}</td><td>{discovery ? `+${discovery.autoPublished ?? 0} public, +${discovery.draftsCreated ?? 0} draft` : "—"}</td><td>{gmp ? `${gmp.snapshotsWritten ?? 0} IPOs` : "—"}</td><td>{gmp ? `${gmpNotYet} pending · ${gmpNotCovered} uncovered` : "—"}</td><td>{gmp ? <span className={gmpErrors ? "status-bad" : "status-good"}>{gmpErrors}</span> : "—"}</td><td>{subscription ? `${subscription.snapshotsWritten ?? 0} values · ${subscription.notYetAvailable ?? 0} pending · ${subscription.notCovered ?? 0} uncovered · ${subscription.failed ?? 0} errors` : "—"}</td></tr>;
             })}</tbody>
           </table></div>
         </details>

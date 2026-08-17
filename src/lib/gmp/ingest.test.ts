@@ -9,7 +9,7 @@ function fakeAdapter(key: string, behavior: number | Error): GmpAdapter {
     name: key,
     fetchGmp: async () => {
       if (behavior instanceof Error) throw behavior;
-      return behavior;
+      return { kind: "VALUE", value: behavior };
     },
   };
 }
@@ -25,7 +25,7 @@ describe("collectObservations", () => {
     const observations = await collectObservations("Vahana Mobility", adapters);
 
     expect(observations).toHaveLength(3);
-    expect(observations.every((o) => o.success)).toBe(true);
+    expect(observations.every((o) => o.kind === "VALUE")).toBe(true);
     expect(successfulValues(observations)).toEqual([84, 86, 88]);
   });
 
@@ -40,9 +40,9 @@ describe("collectObservations", () => {
 
     expect(observations).toHaveLength(3);
     const failed = observations.find((o) => o.sourceKey === "ipocentral");
-    expect(failed?.success).toBe(false);
-    if (!failed?.success) {
-      expect(failed?.error).toContain("layout changed");
+    expect(failed?.kind).toBe("ERROR");
+    if (failed?.kind === "ERROR") {
+      expect(failed.reason).toContain("layout changed");
     }
     expect(successfulValues(observations)).toEqual([84, 88]);
   });
@@ -71,7 +71,17 @@ describe("collectObservations", () => {
     const observations = await collectObservations("Vahana Mobility", adapters);
     const snapshot = computeGmpSnapshot(successfulValues(observations));
 
-    expect(observations.every((o) => !o.success)).toBe(true);
+    expect(observations.every((o) => o.kind === "ERROR")).toBe(true);
     expect(snapshot).toBeNull();
+  });
+
+  it("keeps non-coverage and not-yet-published quotes out of outage errors", async () => {
+    const adapters: GmpAdapter[] = [
+      { key: "a", name: "A", fetchGmp: async () => ({ kind: "NOT_COVERED", reason: "no row" }) },
+      { key: "b", name: "B", fetchGmp: async () => ({ kind: "NOT_YET_AVAILABLE", reason: "quote is blank" }) },
+    ];
+    const observations = await collectObservations("Example", adapters);
+    expect(observations.map((value) => value.kind)).toEqual(["NOT_COVERED", "NOT_YET_AVAILABLE"]);
+    expect(successfulValues(observations)).toEqual([]);
   });
 });

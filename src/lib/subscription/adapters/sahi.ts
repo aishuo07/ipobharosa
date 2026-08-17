@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import type { SubscriptionAdapter, SubscriptionResult } from "../types";
+import type { SubscriptionAdapter } from "../types";
 import { toIpoSlug } from "@/lib/ipo-slug";
 
 import { ipobharosaUserAgent } from "@/lib/site-url";
@@ -24,11 +24,12 @@ function parseNum(text: string): number | null {
 export const sahiSubscriptionAdapter: SubscriptionAdapter = {
   key: "sahi-subscription",
   name: "Sahi (NSE-sourced subscription table)",
-  async fetchSubscription(companyName: string): Promise<SubscriptionResult> {
+  async fetchSubscription(companyName: string) {
     const slug = toIpoSlug(companyName);
     const url = `https://www.sahi.com/blogs/${slug}-ipo-gmp-today`;
 
     const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
+    if (res.status === 404) return { kind: "NOT_COVERED", reason: `Sahi has no subscription page for ${companyName}` };
     if (!res.ok) throw new Error(`sahi-subscription: HTTP ${res.status} for ${url}`);
     const html = await res.text();
     const $ = cheerio.load(html);
@@ -40,7 +41,7 @@ export const sahiSubscriptionAdapter: SubscriptionAdapter = {
         return /QIB/i.test(headerText) && /NII/i.test(headerText) && /Retail/i.test(headerText);
       });
     if (!tableEl) {
-      throw new Error(`sahi-subscription: could not locate subscription table for "${companyName}" at ${url}`);
+      return { kind: "NOT_COVERED", reason: `Sahi page does not provide a subscription table for ${companyName}` };
     }
     const table = $(tableEl);
 
@@ -66,12 +67,9 @@ export const sahiSubscriptionAdapter: SubscriptionAdapter = {
     }
 
     if (!latestComplete) {
-      throw new Error(`sahi-subscription: no completed subscription day found for "${companyName}" at ${url}`);
+      return { kind: "NOT_YET_AVAILABLE", reason: `No completed exchange subscription row is published yet for ${companyName}` };
     }
 
-    return {
-      ...latestComplete,
-      sourceExchange: "nse",
-    };
+    return { kind: "VALUE", value: { ...latestComplete, sourceExchange: "nse" } };
   },
 };

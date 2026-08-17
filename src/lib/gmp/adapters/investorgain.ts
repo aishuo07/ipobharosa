@@ -1,6 +1,7 @@
 import { toIpoSlug } from "@/lib/ipo-slug";
 import { ipobharosaUserAgent } from "@/lib/site-url";
 import type { GmpAdapter } from "../types";
+import type { ProviderResult } from "@/lib/ingestion/provider-result";
 
 const REPORT_URL = "https://www.investorgain.com/report/ipo-gmp-live/331/";
 const API_ROOT = "https://webnodejs.investorgain.com/cloud/v2/report/data-read/331/1";
@@ -46,18 +47,18 @@ function normalizedSourceName(companyName: string): string {
   return NAME_ALIASES[normalized] ?? normalized;
 }
 
-export function findInvestorGainGmp(companyName: string, rows: InvestorGainRow[]): number {
+export function findInvestorGainGmp(companyName: string, rows: InvestorGainRow[]): ProviderResult<number> {
   const expected = normalizedSourceName(companyName);
   const row = rows.find((candidate) =>
     typeof candidate["~ipo_name"] === "string" && toIpoSlug(candidate["~ipo_name"]) === expected,
   );
   if (!row) {
-    throw new Error(`investorgain: no matching IPO row for "${companyName}"`);
+    return { kind: "NOT_COVERED", reason: `InvestorGain has no matching IPO row for ${companyName}` };
   }
 
   const raw = typeof row.GMP === "string" ? row.GMP : "";
   if (!raw || /(?:^|>)\s*--\s*(?:<|$)/.test(raw)) {
-    throw new Error(`investorgain: no active GMP quote for "${companyName}"`);
+    return { kind: "NOT_YET_AVAILABLE", reason: `InvestorGain has not published an active GMP quote for ${companyName}` };
   }
   const boldValue = raw.match(/<b>\s*(-?\d+(?:\.\d+)?)\s*<\/b>/i);
   if (!boldValue) {
@@ -67,7 +68,7 @@ export function findInvestorGainGmp(companyName: string, rows: InvestorGainRow[]
   if (!Number.isFinite(value)) {
     throw new Error(`investorgain: GMP was not numeric for "${companyName}"`);
   }
-  return value;
+  return { kind: "VALUE", value };
 }
 
 async function fetchRows(): Promise<InvestorGainRow[]> {
@@ -97,7 +98,7 @@ async function fetchRows(): Promise<InvestorGainRow[]> {
 export const investorGainAdapter: GmpAdapter = {
   key: "investorgain",
   name: "InvestorGain",
-  async fetchGmp(companyName: string): Promise<number> {
+  async fetchGmp(companyName: string): Promise<ProviderResult<number>> {
     return findInvestorGainGmp(companyName, await fetchRows());
   },
 };

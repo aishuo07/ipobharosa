@@ -3,6 +3,7 @@ import { sendEmail } from "@/lib/email/resend";
 import type { StatusTransition } from "@/lib/ipo-status";
 import { getEmailReadiness } from "@/lib/email/readiness";
 import { resolveSiteUrl } from "@/lib/site-url";
+import { toIpoSlug } from "@/lib/ipo-slug";
 
 const SITE_URL = resolveSiteUrl();
 const MAX_ATTEMPTS = 3;
@@ -54,9 +55,10 @@ export async function notifyWatchersOfTransitions(transitions: StatusTransition[
     if (watchers.length === 0) continue;
 
     const { subject, body } = template(t.companyName);
+    const detailUrl = `${SITE_URL}/ipo/${toIpoSlug(t.companyName)}`;
     const html = `
       <p>${body}</p>
-      <p><a href="${SITE_URL}">View on IPOBharosa</a></p>
+      <p><a href="${detailUrl}">View ${t.companyName} details</a></p>
       <p style="color:#888;font-size:12px">
         You're getting this because you added ${t.companyName} to your IPOBharosa watchlist.
         <a href="${SITE_URL}/watchlist">Manage your watchlist</a> to stop these.

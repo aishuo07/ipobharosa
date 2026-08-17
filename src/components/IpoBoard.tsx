@@ -44,6 +44,7 @@ import {
   fmtINR,
   gmpPct,
   gmpAvailabilityText,
+  gmpAvailabilityDetailText,
   gmpUpdatedText,
   isStale,
   lifecycleDoneUpTo,
@@ -664,7 +665,7 @@ function DateLedgerRow({ event, now }: { event: IpoCalendarEvent<BoardIpo>; now:
         <small>{ipo.lotSize} shares · {fmtINR(ipo.lotSize * ipo.priceBandHigh)}</small>
       </td>
       <td data-label="GMP · unofficial" className="date-ledger-gmp">
-        {gmp ? <><strong>{fmtINR(gmp.medianValue)} ({gmpPct(ipo)}%)</strong><small>{confidenceLabel(gmp.confidence)} · {gmpUpdatedText(gmp.capturedAt, now)}</small></> : <><strong>{gmpAvailabilityText(ipo)}</strong><small>Unofficial quote not published by tracked sources</small></>}
+        {gmp ? <><strong>{fmtINR(gmp.medianValue)} ({gmpPct(ipo)}%)</strong><small>{confidenceLabel(gmp.confidence)} · {gmpUpdatedText(gmp.capturedAt, now)}</small></> : <><strong>{gmpAvailabilityText(ipo)}</strong><small>{gmpAvailabilityDetailText(ipo)}</small></>}
       </td>
       <td data-label="Demand" className="date-ledger-demand">
         <strong>{subSummary(ipo)}</strong>
@@ -813,7 +814,7 @@ function MajorIpoFacts({ ipo, now }: { ipo: BoardIpo; now: number }) {
     ? "Listing performance"
     : ipo.gmp
       ? `${isStale(ipo.gmp.capturedAt, now) ? "Stale · " : ""}${gmpUpdatedText(ipo.gmp.capturedAt, now)} · ${ipo.gmp.sourceCount} source${ipo.gmp.sourceCount === 1 ? "" : "s"}`
-      : "No GMP observation captured";
+      : gmpAvailabilityDetailText(ipo);
   return (
     <dl className="catalogue-facts">
       <div><dt>Price</dt><dd>₹{ipo.priceBandLow}–₹{ipo.priceBandHigh}</dd></div>
@@ -1278,8 +1279,7 @@ export function OverviewPanel({
             </div>
           ) : (
             <p style={{ color: "var(--ink-muted)", fontSize: 13.5 }}>
-              No GMP data captured yet — the ingestion pipeline runs every hour during market
-              hours.
+              {gmpAvailabilityText(ipo)} — {gmpAvailabilityDetailText(ipo)}.
             </p>
           )}
         </>
@@ -1377,9 +1377,9 @@ export function SubscriptionPanel({ ipo }: { ipo: BoardIpo }) {
 export function GmpPanel({ ipo, now }: { ipo: BoardIpo; now: number }) {
   if (!ipo.gmp) {
     return (
-      <StatePanel title="No GMP signal has been captured yet">
-        No GMP data captured yet for this IPO. The ingestion pipeline scrapes multiple public
-        sources every hour during market hours — check back soon.
+      <StatePanel title={gmpAvailabilityText(ipo)}>
+        {gmpAvailabilityDetailText(ipo)}. GMP is unofficial and is never inferred when a source
+        has not published a quote.
       </StatePanel>
     );
   }

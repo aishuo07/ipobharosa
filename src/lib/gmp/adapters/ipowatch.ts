@@ -9,11 +9,12 @@ const USER_AGENT = ipobharosaUserAgent();
 export const ipoWatchAdapter: GmpAdapter = {
   key: "ipowatch",
   name: "IPO Watch",
-  async fetchGmp(companyName: string): Promise<number> {
+  async fetchGmp(companyName: string) {
     const slug = toIpoSlug(companyName);
     const url = `https://ipowatch.in/${slug}-ipo-gmp-grey-market-premium/`;
 
     const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
+    if (res.status === 404) return { kind: "NOT_COVERED", reason: `IPO Watch has no GMP page for ${companyName}` };
     if (!res.ok) throw new Error(`ipowatch: HTTP ${res.status} for ${url}`);
     const html = await res.text();
     const $ = cheerio.load(html);
@@ -34,8 +35,8 @@ export const ipoWatchAdapter: GmpAdapter = {
     });
 
     if (latestGmp === null) {
-      throw new Error(`ipowatch: could not locate GMP table for "${companyName}" at ${url}`);
+      return { kind: "NOT_YET_AVAILABLE", reason: `IPO Watch page exists but has no published GMP quote for ${companyName}` };
     }
-    return latestGmp;
+    return { kind: "VALUE", value: latestGmp };
   },
 };
