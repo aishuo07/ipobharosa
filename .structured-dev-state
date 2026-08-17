@@ -1,3 +1,3 @@
-phase=implementation
-checkpoint=launch-trust-closure-pr2-local-validation
+phase=verification
+checkpoint=launch-trust-closure-invite-beta-gate
 feature=launch-trust-closure

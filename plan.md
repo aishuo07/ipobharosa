@@ -1066,10 +1066,10 @@ After PR 1, PR 2, one clean hourly Production cycle and the recovery proof:
 - [x] PR 1 Preview proof and merge (PR #69, squash `194bc79`).
 - [x] PR 2 source-policy registry and no-write policy coverage implemented; authenticated Production inventory remains part of release verification.
 - [x] PR 2 implementation and local tests/build (332 tests, lint, TypeScript and production build green).
-- [ ] PR 2 Preview proof and merge.
-- [ ] One complete hourly Production cycle observed within the one-hour release window.
+- [x] PR 2 Preview proof and merge (PR #70, squash `7373229`).
+- [x] One complete hourly Production cycle observed within the one-hour release window (run `32022075569`).
 - [ ] Two additional cycles collected non-blockingly during invite beta.
-- [ ] Isolated Neon restore rehearsal completed and evidence reviewed.
+- [x] Isolated Neon restore rehearsal completed; redacted evidence recorded in `docs/reports/2026-08-17-neon-restore-rehearsal.md`.
 - [ ] Invite beta completed for 5–7 days.
 - [ ] Public-launch go/no-go review.
 
