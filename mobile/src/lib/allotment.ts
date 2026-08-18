@@ -1,4 +1,4 @@
-import { BIGSHARE_COMPANIES, KFIN_COMPANIES, type RegistrarCompany } from "@/src/lib/registrar-catalog";
+import { BIGSHARE_COMPANIES, KFIN_COMPANIES, MAASHITLA_COMPANIES, type RegistrarCompany } from "@/src/lib/registrar-catalog";
 import type { BoardIpo } from "@/src/lib/types";
 
 export type AllotmentStatus = "ALLOTTED" | "NOT_ALLOTTED" | "NOT_APPLIED" | "ERROR";
@@ -33,7 +33,6 @@ const MUFG_ENDPOINTS = {
 const PORTAL_LINKS: Record<string, string> = {
   Cameo: "https://ipostatus.cameoindia.com",
   Skyline: "https://www.skylinerta.com/ipo.php",
-  Maashitla: "https://maashitla.com/allotment-status/public-issues",
   Purva: "https://www.purvashare.com/investor-service/ipo-query",
 };
 
@@ -46,15 +45,18 @@ const AUTOMATABLE: Record<string, { portalUrl: string }> = {
   "kfin technologies": { portalUrl: "https://ipostatus.kfintech.com" },
   bigshare: { portalUrl: "https://ipo.bigshareonline.com/ipo_status.html" },
   "bigshare services": { portalUrl: "https://ipo.bigshareonline.com/ipo_status.html" },
+  maashitla: { portalUrl: "https://maashitla.com/allotment-status/public-issues" },
+  "maashitla securities": { portalUrl: "https://maashitla.com/allotment-status/public-issues" },
 };
 
-export type RegistrarKind = "mufg" | "kfintech" | "bigshare" | "manual";
+export type RegistrarKind = "mufg" | "kfintech" | "bigshare" | "maashitla" | "manual";
 
 export function registrarKind(ipo: BoardIpo): RegistrarKind {
   const registrar = ipo.registrar?.toLowerCase() ?? "";
   if (registrar.includes("mufg") || registrar.includes("intime") || registrar.includes("link intime")) return "mufg";
   if (registrar.includes("kfin")) return "kfintech";
   if (registrar.includes("bigshare")) return "bigshare";
+  if (registrar.includes("maashitla")) return "maashitla";
   return "manual";
 }
 
@@ -439,6 +441,73 @@ export async function checkBigshareAllotmentForPans(ipo: BoardIpo, pans: string[
   return results;
 }
 
+const MAASHITLA_API = "https://api.maashitla.com";
+
+/**
+ * Maashitla Securities allotment lookup. Their public API at api.maashitla.com
+ * is fully open — no CAPTCHA, CORS enabled, no auth required.
+ * Endpoints: GET /api/public-issue/companies, GET /api/public-issue/search?company_name=X&pan=Y
+ */
+async function maashitlaSearch(companyId: string, pan: string): Promise<Record<string, unknown> | null> {
+  const response = await fetch(`${MAASHITLA_API}/api/public-issue/search?company_name=${encodeURIComponent(companyId)}&pan=${encodeURIComponent(pan)}`, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+    },
+  });
+  if (!response.ok) throw new Error(`Maashitla lookup HTTP ${response.status}`);
+  const json = (await response.json()) as { detail?: string; company_name?: string; pan?: string; name?: string; shares_applied?: number; shares_alloted?: number; application_no?: string; dpid_client_id?: string };
+  if (json.detail === "No records found.") return null;
+  if (json.name) return json as unknown as Record<string, unknown>;
+  return null;
+}
+
+function maashitlaResult(ipo: BoardIpo, pan: string, row: Record<string, unknown>): AllotmentResult {
+  const applied = pick(row, ["SHARES_APPLIED", "shares_applied"]);
+  const allotted = pick(row, ["SHARES_ALLOTED", "SHARES_ALLOTTED", "shares_alloted"]);
+  const applicant = pick(row, ["NAME", "name"]);
+  const applnNo = pick(row, ["APPLICATION_NO", "application_no"]);
+  const allottedNum = parseInt(String(allotted ?? "0").replace(/[^0-9-]/g, ""), 10) || 0;
+  return {
+    pan,
+    companyName: ipo.companyName,
+    registrar: ipo.registrar,
+    status: allottedNum > 0 ? "ALLOTTED" : "NOT_ALLOTTED",
+    applied: applied ?? "",
+    allotted: allotted ?? "0",
+    applicant: applicant ?? "",
+    amount: applnNo ?? "",
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+export async function checkMaashitlaAllotmentForPans(ipo: BoardIpo, pans: string[]): Promise<AllotmentResult[]> {
+  if (pans.length === 0) return [];
+  const base = (pan: string): AllotmentResult => ({
+    pan,
+    companyName: ipo.companyName,
+    registrar: ipo.registrar,
+    status: "ERROR",
+    checkedAt: new Date().toISOString(),
+  });
+  const companyId = findCompanyId(MAASHITLA_COMPANIES, ipo.companyName);
+  if (!companyId) {
+    const error = "Company not found in Maashitla list (allotment may not be out yet)";
+    return pans.map((pan) => ({ ...base(pan), error }));
+  }
+  const results: AllotmentResult[] = [];
+  for (const pan of pans) {
+    try {
+      const row = await maashitlaSearch(companyId, pan);
+      results.push(row ? maashitlaResult(ipo, pan, row) : { ...base(pan), status: "NOT_APPLIED" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      results.push({ ...base(pan), error: message });
+    }
+  }
+  return results;
+}
+
 /**
  * Dispatches a batch allotment check to the right registrar adapter based on
  * the IPO's registrar. IPOs on non-automatable registrars get an ERROR result
@@ -452,6 +521,8 @@ export async function checkAllotmentForPans(ipo: BoardIpo, pans: string[]): Prom
       return checkKfintechAllotmentForPans(ipo, pans);
     case "bigshare":
       return checkBigshareAllotmentForPans(ipo, pans);
+    case "maashitla":
+      return checkMaashitlaAllotmentForPans(ipo, pans);
     default: {
       const base = (pan: string): AllotmentResult => ({
         pan,

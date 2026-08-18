@@ -144,3 +144,17 @@ export const BIGSHARE_COMPANIES: RegistrarCompany[] = [
   { id: "530", name: "VASHISHTHA LUXURY FASHION LIMITED" },
   { id: "529", name: "SHARVAYA METALS LIMITED" },
 ];
+
+/**
+ * Maashitla Securities allotment portal catalogue.
+ * Public API at https://api.maashitla.com — no CAPTCHA, CORS enabled.
+ * company_id is the UUID from /api/public-issue/companies.
+ */
+export const MAASHITLA_COMPANIES: RegistrarCompany[] = [
+  { id: "1630e118-e0b9-4e16-90dd-13d13d95deca", name: "FUSION KLASSROOM EDUTECH LIMITED" },
+  { id: "500ad4e9-f42e-4743-860a-49f9e0529a77", name: "LAPL AUTOMOTIVE LIMITED" },
+  { id: "f363734f-379d-4fc2-a8d0-e98ec0c68074", name: "ONEINDIG TECHNOLOGIES LIMITED" },
+  { id: "69263a5c-4074-498a-8f7e-595ea8c66b77", name: "OPTIMYSTIX ENTERTAINMENT INDIA LIMITED" },
+  { id: "43d288b4-e518-4475-af17-c7d77944c05f", name: "SAFETY CONTROL & DEVICES LIMITED" },
+  { id: "285c3952-80b2-4380-a673-f9b8f8df68cb", name: "SAMPARK INDIA LOGISTICS LIMITED" },
+];
