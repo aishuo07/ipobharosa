@@ -186,10 +186,10 @@ auditable correction path.
 | Bank sites | Secondary confirmation | Never the sole source of truth |
 | IPOWatch | Historical unofficial GMP provenance | Hard-disabled; terms conflict for commercial use |
 | Sahi | Historical unofficial GMP provenance | Hard-disabled; written permission required |
- | IPOJi | Optional unofficial GMP provider | Disabled unless explicitly approved in `GMP_SOURCE_ALLOWLIST` |
- | InvestorGain | Optional unofficial GMP provider | Disabled unless explicitly approved in `GMP_SOURCE_ALLOWLIST` |
- | IPO Track | Optional unofficial GMP provider | Disabled unless explicitly approved in `GMP_SOURCE_ALLOWLIST` |
- | NSE past-issues | Official listing price/date (CLOSED→LISTED) | Enabled; powers `syncIpoListings` |
+| IPOJi | Owner-approved unofficial GMP provider | Enabled by default; `GMP_SOURCE_ALLOWLIST` overrides |
+  | InvestorGain | Owner-approved unofficial GMP provider | Enabled by default; `GMP_SOURCE_ALLOWLIST` overrides |
+  | IPO Track | Owner-approved unofficial GMP provider | Enabled by default; `GMP_SOURCE_ALLOWLIST` overrides |
+  | NSE past-issues | Official listing price/date (CLOSED→LISTED) | Enabled; powers `syncIpoListings` |
 
 Historical GMP observations remain in the database for provenance. A disabled
 source must not be rendered as fresh/current merely because an old row exists.
@@ -197,14 +197,12 @@ Never scrape around a block or bypass terms to make the UI look populated.
 
 ### 5.3 GMP
 
-GMP is unofficial and unregulated. When approved providers are available, the
-system stores source observations, computes a median/spread and derives a
-confidence tier based on source agreement and freshness. A source failure
-degrades confidence; it must not break the entire run.
-
-Until commercial-use approval exists, the honest public result is an explicit
-“No tracked GMP quote yet”/source-policy reason. Do not restore old adapters
-just to remove empty states.
+GMP is unofficial and unregulated. The owner has approved IPOJi, InvestorGain
+and IPO Track as production GMP providers (default allowlist in
+`src/lib/source-policy.ts`). The system stores source observations, computes a
+median/spread and derives a confidence tier based on source agreement and
+freshness. A source failure degrades confidence; it must not break the entire
+run. Never present GMP as official, guaranteed or investment advice.
 
 ### 5.4 Subscription/demand
 
@@ -369,7 +367,8 @@ Required categories:
 - optional email: `EMAIL_USER_FEATURES_ENABLED`, `RESEND_API_KEY`,
   `AUTH_EMAIL_FROM`;
 - protected automation: `CRON_SECRET`, `ADMIN_BEARER_TOKEN`;
-- approved unofficial providers: `GMP_SOURCE_ALLOWLIST`.
+- optional GMP provider override: `GMP_SOURCE_ALLOWLIST` (defaults to the
+  owner-approved `ipoji,investorgain,ipotrack` in code).
 
 Known repository configuration names include GitHub secrets
 `ADMIN_BEARER_TOKEN`, `CRON_SECRET`, `DEV_DATABASE_URL`, and variable `SITE_URL`.

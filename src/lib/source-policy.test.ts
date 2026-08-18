@@ -13,7 +13,11 @@ describe("launch source policy", () => {
     expect(enabledGmpAdapters(adapters, "ipowatch,sahi,ipoji").map((adapter) => adapter.key)).toEqual(["ipoji"]);
   });
 
-  it("enables no unofficial GMP provider without an explicit allowlist", () => {
+  it("enables the owner-approved GMP providers by default in production", () => {
+    expect(enabledGmpAdapters(adapters).map((adapter) => adapter.key)).toEqual(["ipoji", "investorgain", "ipotrack"]);
+  });
+
+  it("an explicit allowlist can override the default to disable all GMP", () => {
     expect(enabledGmpAdapters(adapters, "")).toEqual([]);
   });
 
