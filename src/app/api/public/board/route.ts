@@ -16,6 +16,9 @@ export async function GET(request: Request) {
   const ipos = await getPublicIpos();
   const boardIpos = filterIposByBoard(ipos, board);
   return NextResponse.json(boardIpos, {
-    headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" },
+    headers: {
+      "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
+      "Access-Control-Allow-Origin": "*",
+    },
   });
 }
