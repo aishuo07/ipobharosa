@@ -1,5 +1,4 @@
 import * as SecureStore from "expo-secure-store";
-import { Platform } from "react-native";
 
 export type PanCard = {
   id: string;
@@ -24,8 +23,10 @@ export function generatePanId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+const isWeb = typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+
 async function readStore(key: string): Promise<string | null> {
-  if (Platform.OS === "web") {
+  if (isWeb) {
     try {
       return window.localStorage.getItem(key);
     } catch {
@@ -36,7 +37,7 @@ async function readStore(key: string): Promise<string | null> {
 }
 
 async function writeStore(key: string, value: string): Promise<void> {
-  if (Platform.OS === "web") {
+  if (isWeb) {
     try {
       window.localStorage.setItem(key, value);
     } catch {
