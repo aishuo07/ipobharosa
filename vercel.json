@@ -1,3 +1,21 @@
 {
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, X-Requested-With, Accept, Origin, Referer, User-Agent, Sec-Fetch-Mode, Sec-Fetch-Site, client_id, reqparam" },
+        { "key": "Access-Control-Max-Age", "value": "86400" }
+      ]
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/refresh-catalogues",
+      "schedule": "0 * * * *",
+      "timezone": "Asia/Kolkata"
+    }
+  ]
 }
