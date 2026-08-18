@@ -13,7 +13,8 @@
     "db:validate": "prisma validate",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed:dev": "prisma generate && tsx prisma/seed.ts",
-    "smoke:preview": "node scripts/smoke-preview.mjs"
+    "smoke:preview": "node scripts/smoke-preview.mjs",
+    "mobile:check": "cd mobile && npx tsc --noEmit && npx expo lint && npx vitest run"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
