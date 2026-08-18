@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { checkMufgAllotment, checkMufgAllotmentForPans, registrarCheck } from "@/src/lib/allotment";
+import {
+  checkAllotmentForPans,
+  checkBigshareAllotmentForPans,
+  checkKfintechAllotmentForPans,
+  checkMufgAllotment,
+  checkMufgAllotmentForPans,
+  registrarCheck,
+  registrarKind,
+} from "@/src/lib/allotment";
 import type { BoardIpo } from "@/src/lib/types";
 
 function makeIpo(overrides: Partial<BoardIpo> = {}): BoardIpo {
@@ -42,14 +50,31 @@ describe("registrarCheck", () => {
     });
   });
 
-  it("flags CAPTCHA-gated registrars as non-automatable with a portal link", () => {
+  it("flags KFinTech as automatable via its public API", () => {
     expect(registrarCheck(makeIpo({ registrar: "KFin Technologies Ltd" }))).toEqual({
-      automatable: false,
+      automatable: true,
       portalUrl: "https://ipostatus.kfintech.com",
     });
+  });
+
+  it("flags Bigshare as automatable via its JSON API", () => {
     expect(registrarCheck(makeIpo({ registrar: "Bigshare Services Pvt Ltd" }))).toEqual({
-      automatable: false,
+      automatable: true,
       portalUrl: "https://ipo.bigshareonline.com/ipo_status.html",
+    });
+  });
+
+  it("classifies registrar kinds for dispatching", () => {
+    expect(registrarKind(makeIpo({ registrar: "MUFG Intime India Pvt Ltd" }))).toBe("mufg");
+    expect(registrarKind(makeIpo({ registrar: "KFin Technologies Ltd" }))).toBe("kfintech");
+    expect(registrarKind(makeIpo({ registrar: "Bigshare Services Pvt Ltd" }))).toBe("bigshare");
+    expect(registrarKind(makeIpo({ registrar: "Cameo Corporate Services Ltd" }))).toBe("manual");
+  });
+
+  it("flags CAPTCHA-gated registrars as non-automatable with a portal link", () => {
+    expect(registrarCheck(makeIpo({ registrar: "Cameo Corporate Services Ltd" }))).toEqual({
+      automatable: false,
+      portalUrl: "https://ipostatus.cameoindia.com",
     });
   });
 
@@ -162,5 +187,170 @@ describe("checkMufgAllotmentForPans (batch)", () => {
   it("returns an empty list when there are no PANs", async () => {
     const results = await checkMufgAllotmentForPans(ipo, []);
     expect(results).toEqual([]);
+  });
+});
+
+describe("checkKfintechAllotmentForPans", () => {
+  const ipo = makeIpo({
+    companyName: "Shiprocket Ltd",
+    registrar: "Kfin Technologies Ltd.",
+  });
+
+  it("reports ALLOTTED when All_Shares > 0 and NOT_ALLOTTED when 0", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: [{ All_Shares: "52", App_Shares: "154", Name: "AISH KANODIA", Pan_No: "HFQPK9233H" }] }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: [{ All_Shares: "0", App_Shares: "154", Name: "AISH KANODIA", Pan_No: "HFQPK9233H" }] }), {
+          status: 200,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const results = await checkKfintechAllotmentForPans(ipo, ["HFQPK9233H", "ABCDE1234F"]);
+    expect(results.map((r) => r.status)).toEqual(["ALLOTTED", "NOT_ALLOTTED"]);
+    expect(results[0].applicant).toBe("AISH KANODIA");
+    expect(results[0].allotted).toBe("52");
+    // every call carries the client_id header for the issue
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const firstCall = fetchMock.mock.calls[0][1] as RequestInit;
+    const headers = firstCall.headers as Record<string, string>;
+    expect(headers.client_id).toBe("86153103110");
+    expect(headers.reqparam).toBe("HFQPK9233H");
+
+    vi.unstubAllGlobals();
+  });
+
+  it("reports NOT_APPLIED when the API returns Record Not Found", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ error: "Record Not Found" }), { status: 200 })));
+    const results = await checkKfintechAllotmentForPans(ipo, ["HFQPK9233H"]);
+    expect(results[0].status).toBe("NOT_APPLIED");
+    vi.unstubAllGlobals();
+  });
+
+  it("returns an ERROR for every PAN when the company is not in the KFinTech catalogue", async () => {
+    const unknownIpo = makeIpo({ companyName: "Not In Catalogue Ltd", registrar: "Kfin Technologies Ltd." });
+    const results = await checkKfintechAllotmentForPans(unknownIpo, ["HFQPK9233H", "ABCDE1234F"]);
+    expect(results.every((r) => r.status === "ERROR" && r.error)).toBe(true);
+    expect(results).toHaveLength(2);
+  });
+
+  it("returns an empty list when there are no PANs", async () => {
+    const results = await checkKfintechAllotmentForPans(ipo, []);
+    expect(results).toEqual([]);
+  });
+});
+
+describe("checkBigshareAllotmentForPans", () => {
+  const ipo = makeIpo({
+    companyName: "Technocraft Ventures Ltd",
+    registrar: "Bigshare Services Private Limited",
+  });
+
+  it("reports ALLOTTED when ALLOTED > 0 and NOT_ALLOTTED when 0", async () => {
+    const row = (alloted: string) =>
+      JSON.stringify({
+        d: { __type: "Data+Company", APPLICATION_NO: "AB123", DPID: "1208160064064954", Name: "AISH KANODIA", APPLIED: "50", ALLOTED: alloted },
+      });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(row("50"), { status: 200 }))
+      .mockResolvedValueOnce(new Response(row("0"), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const results = await checkBigshareAllotmentForPans(ipo, ["HFQPK9233H", "ABCDE1234F"]);
+    expect(results.map((r) => r.status)).toEqual(["ALLOTTED", "NOT_ALLOTTED"]);
+    expect(results[0].applicant).toBe("AISH KANODIA");
+    expect(results[1].allotted).toBe("0");
+    // the request body carries the company code 9043 and PAN mode PN
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const body = String(fetchMock.mock.calls[0][1]?.body);
+    expect(body).toContain("Company: '9043'");
+    expect(body).toContain("SelectionType: 'PN'");
+    expect(body).toContain("PanNo: 'HFQPK9233H'");
+
+    vi.unstubAllGlobals();
+  });
+
+  it("reports NOT_APPLIED when DPID is No data found", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(
+        new Response(JSON.stringify({ d: { __type: "Data+Company", DPID: "No data found", Name: "", APPLIED: "", ALLOTED: "" } }), { status: 200 }),
+      ),
+    );
+    const results = await checkBigshareAllotmentForPans(ipo, ["HFQPK9233H"]);
+    expect(results[0].status).toBe("NOT_APPLIED");
+    vi.unstubAllGlobals();
+  });
+
+  it("returns an ERROR for every PAN when the company is not in the Bigshare catalogue", async () => {
+    const unknownIpo = makeIpo({ companyName: "Not In Catalogue Ltd", registrar: "Bigshare Services Pvt Ltd" });
+    const results = await checkBigshareAllotmentForPans(unknownIpo, ["HFQPK9233H"]);
+    expect(results[0].status).toBe("ERROR");
+    expect(results[0].error).toContain("Bigshare");
+    vi.unstubAllGlobals();
+  });
+
+  it("returns an empty list when there are no PANs", async () => {
+    const results = await checkBigshareAllotmentForPans(ipo, []);
+    expect(results).toEqual([]);
+  });
+});
+
+describe("checkAllotmentForPans (dispatcher)", () => {
+  it("routes MUFG IPOs to the MUFG adapter", async () => {
+    const ipo = makeIpo({ companyName: "Behari Lal Engineering Limited - IPO", registrar: "MUFG Intime India Private Limited" });
+    const listXml = `{"d":"<NewDataSet><Table><company_id>11922</company_id><companyname>Behari Lal Engineering Limited - IPO</companyname></Table></NewDataSet>"}`;
+    const searchXml = `{"d":"<NewDataSet><Table><id>11922</id><NAME1>AISH KANODIA</NAME1><ALLOT>52</ALLOT><SHARES>52</SHARES></Table></NewDataSet>"}`;
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(listXml, { status: 200 }))
+        .mockResolvedValueOnce(new Response(searchXml, { status: 200 })),
+    );
+    const results = await checkAllotmentForPans(ipo, ["HFQPK9233H"]);
+    expect(results[0].status).toBe("ALLOTTED");
+    vi.unstubAllGlobals();
+  });
+
+  it("routes KFinTech IPOs to the KFinTech adapter", async () => {
+    const ipo = makeIpo({ companyName: "Shiprocket Ltd", registrar: "Kfin Technologies Ltd." });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: [{ All_Shares: "0", App_Shares: "154", Name: "AISH KANODIA", Pan_No: "HFQPK9233H" }] }), { status: 200 }),
+      ),
+    );
+    const results = await checkAllotmentForPans(ipo, ["HFQPK9233H"]);
+    expect(results[0].status).toBe("NOT_ALLOTTED");
+    vi.unstubAllGlobals();
+  });
+
+  it("routes Bigshare IPOs to the Bigshare adapter", async () => {
+    const ipo = makeIpo({ companyName: "Technocraft Ventures Ltd", registrar: "Bigshare Services Pvt Ltd" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(
+        new Response(JSON.stringify({ d: { __type: "Data+Company", APPLICATION_NO: "AB1", DPID: "123", Name: "AISH KANODIA", APPLIED: "50", ALLOTED: "50" } }), {
+          status: 200,
+        }),
+      ),
+    );
+    const results = await checkAllotmentForPans(ipo, ["HFQPK9233H"]);
+    expect(results[0].status).toBe("ALLOTTED");
+    vi.unstubAllGlobals();
+  });
+
+  it("returns an ERROR for non-automatable registrars instead of querying", async () => {
+    const ipo = makeIpo({ companyName: "Some Issue Ltd", registrar: "Cameo Corporate Services Ltd" });
+    const results = await checkAllotmentForPans(ipo, ["HFQPK9233H"]);
+    expect(results[0].status).toBe("ERROR");
+    expect(results[0].error).toContain("not supported");
   });
 });
