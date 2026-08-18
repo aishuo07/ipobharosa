@@ -23,8 +23,33 @@ export function generatePanId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+const isWeb = typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+
+async function readStore(key: string): Promise<string | null> {
+  if (isWeb) {
+    try {
+      return window.localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+  return SecureStore.getItemAsync(key);
+}
+
+async function writeStore(key: string, value: string): Promise<void> {
+  if (isWeb) {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch {
+      /* storage may be unavailable */
+    }
+    return;
+  }
+  await SecureStore.setItemAsync(key, value);
+}
+
 export async function loadPanCards(): Promise<PanCard[]> {
-  const raw = await SecureStore.getItemAsync(STORAGE_KEY);
+  const raw = await readStore(STORAGE_KEY);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
@@ -35,7 +60,7 @@ export async function loadPanCards(): Promise<PanCard[]> {
 }
 
 export async function savePanCards(cards: PanCard[]): Promise<void> {
-  await SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(cards));
+  await writeStore(STORAGE_KEY, JSON.stringify(cards));
 }
 
 export async function addPanCard(pan: string, holderName: string): Promise<PanCard> {

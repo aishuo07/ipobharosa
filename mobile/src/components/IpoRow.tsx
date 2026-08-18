@@ -22,9 +22,15 @@ function formatDate(iso: string): string {
   return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }
 
+function gmpPremiumPct(ipo: BoardIpo): number | null {
+  if (!ipo.gmp || ipo.priceBandHigh <= 0) return null;
+  return Math.round((ipo.gmp.medianValue / ipo.priceBandHigh) * 1000) / 10;
+}
+
 function gmpText(ipo: BoardIpo): string {
   if (ipo.gmp) {
-    return `₹${ipo.gmp.medianValue}`;
+    const pct = gmpPremiumPct(ipo);
+    return pct !== null ? `₹${ipo.gmp.medianValue} (+${pct}%)` : `₹${ipo.gmp.medianValue}`;
   }
   if (ipo.gmpAvailability) {
     if (ipo.gmpAvailability.state === "AVAILABLE") return "—";

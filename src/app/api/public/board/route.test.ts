@@ -56,4 +56,9 @@ describe("public board API", () => {
     const response = await GET(new Request("https://ipobharosa.vercel.app/api/public/board"));
     expect(response.headers.get("Cache-Control")).toContain("max-age=60");
   });
+
+  it("allows cross-origin reads for the public board", async () => {
+    const response = await GET(new Request("https://ipobharosa.vercel.app/api/public/board"));
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
 });

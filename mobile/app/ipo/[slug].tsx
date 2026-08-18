@@ -95,9 +95,24 @@ export default function IpoDetailScreen() {
           <Text style={styles.sectionTitle}>GMP</Text>
           {ipo.gmp ? (
             <>
-              <Row label="Median" value={`₹${ipo.gmp.medianValue}`} />
+              <Row label="Median quote" value={`₹${ipo.gmp.medianValue}`} />
+              {ipo.priceBandHigh > 0 && (
+                <Row
+                  label="Premium"
+                  value={`+${Math.round((ipo.gmp.medianValue / ipo.priceBandHigh) * 1000) / 10}%`}
+                />
+              )}
+              {ipo.priceBandHigh > 0 && (
+                <Row
+                  label="Est. listing"
+                  value={`₹${ipo.priceBandHigh + ipo.gmp.medianValue}`}
+                />
+              )}
               <Row label="Source count" value={String(ipo.gmp.sourceCount)} />
               <Row label="Confidence" value={ipo.gmp.confidence} />
+              <Text style={[styles.muted, styles.spaced]}>
+                GMP is unofficial market sentiment, not a guarantee of listing price.
+              </Text>
             </>
           ) : (
             <Text style={styles.muted}>
