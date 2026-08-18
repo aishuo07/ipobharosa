@@ -3,6 +3,12 @@ import { NextResponse } from "next/server";
 const MUFG_ORIGIN = "https://in.mpms.mufg.com";
 const MUFG_REFERER = "https://in.mpms.mufg.com/Initial_Offer/public-issues.html";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
 function headers() {
   return {
     "User-Agent": "IPOBharosa/1.0",
@@ -47,12 +53,16 @@ function parseXmlRows(xml: string): Record<string, string>[] {
   return rows;
 }
 
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { clientid, PAN, IFSC = "", CHKVAL = "1", token = "" } = body;
     if (!clientid || !PAN) {
-      return NextResponse.json({ error: "clientid and PAN required" }, { status: 400 });
+      return NextResponse.json({ error: "clientid and PAN required" }, { status: 400, headers: corsHeaders });
     }
     const upstream = await fetch(`${MUFG_ORIGIN}/Initial_Offer/IPO.aspx/SearchOnPan`, {
       method: "POST",
@@ -60,12 +70,12 @@ export async function POST(request: Request) {
       body: JSON.stringify({ clientid, PAN, IFSC, CHKVAL, token }),
     });
     if (!upstream.ok) {
-      return NextResponse.json({ error: `Upstream HTTP ${upstream.status}` }, { status: 502 });
+      return NextResponse.json({ error: `Upstream HTTP ${upstream.status}` }, { status: 502, headers: corsHeaders });
     }
     const data = unwrapD(await upstream.json());
     const rows = Array.isArray(data) ? data : (data as { Table?: unknown[] })?.Table ?? [];
-    return NextResponse.json(rows, { headers: { "Access-Control-Allow-Origin": "*" } });
+    return NextResponse.json(rows, { headers: corsHeaders });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown error" }, { status: 500 });
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown error" }, { status: 500, headers: corsHeaders });
   }
 }

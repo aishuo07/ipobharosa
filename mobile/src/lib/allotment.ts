@@ -1,5 +1,6 @@
 import { BIGSHARE_COMPANIES, KFIN_COMPANIES, MAASHITLA_COMPANIES, type RegistrarCompany } from "@/src/lib/registrar-catalog";
 import type { BoardIpo } from "@/src/lib/types";
+import { getApiUrl } from "@/src/lib/api";
 
 export type AllotmentStatus = "ALLOTTED" | "NOT_ALLOTTED" | "NOT_APPLIED" | "ERROR";
 
@@ -21,12 +22,23 @@ export type RegistrarCheck = {
   portalUrl: string | null;
 };
 
-const MUFG_ENDPOINTS = {
-  companyList: "https://in.mpms.mufg.com/Initial_Offer/IPO.aspx/GetDetails",
-  search: "https://in.mpms.mufg.com/Initial_Offer/IPO.aspx/SearchOnPan",
-  origin: "https://in.mpms.mufg.com",
-  referer: "https://in.mpms.mufg.com/Initial_Offer/public-issues.html",
-};
+function getProxyBase(): string {
+  return `${getApiUrl()}/api/registrar`;
+}
+
+function mufgEndpoints() {
+  const base = getProxyBase();
+  return {
+    companyList: `${base}/mufg/companies`,
+    search: `${base}/mufg/search`,
+    origin: "https://in.mpms.mufg.com",
+    referer: "https://in.mpms.mufg.com/Initial_Offer/public-issues.html",
+  };
+}
+
+function bigshareEndpoint(): string {
+  return `${getProxyBase()}/bigshare/search`;
+}
 
 // Registrars that enforce a CAPTCHA must not be automated (source-policy:
 // never bypass provider access controls). They are surfaced as deep links.
@@ -119,15 +131,13 @@ function pick(obj: Record<string, unknown> | undefined, keys: string[]): string 
 type MufgCompany = RegistrarCompany;
 
 async function mufgCompanyList(): Promise<MufgCompany[]> {
-  const response = await fetch(MUFG_ENDPOINTS.companyList, {
+  const { companyList } = mufgEndpoints();
+  const response = await fetch(companyList, {
     method: "POST",
     headers: {
       "User-Agent": "IPOBharosa-mobile/1.0",
-      "X-Requested-With": "XMLHttpRequest",
-      Origin: MUFG_ENDPOINTS.origin,
-      Referer: MUFG_ENDPOINTS.referer,
-      "Content-Type": "application/json; charset=UTF-8",
-      Accept: "application/json, text/javascript, */*; q=0.01",
+      "Content-Type": "application/json",
+      Accept: "application/json",
     },
     body: JSON.stringify({ clienttype: "-1" }),
   });
@@ -181,15 +191,13 @@ function findCompanyId(companies: RegistrarCompany[], companyName: string): stri
 }
 
 async function mufgSearch(companyId: string, pan: string): Promise<Record<string, unknown> | null> {
-  const response = await fetch(MUFG_ENDPOINTS.search, {
+  const { search } = mufgEndpoints();
+  const response = await fetch(search, {
     method: "POST",
     headers: {
       "User-Agent": "IPOBharosa-mobile/1.0",
-      "X-Requested-With": "XMLHttpRequest",
-      Origin: MUFG_ENDPOINTS.origin,
-      Referer: MUFG_ENDPOINTS.referer,
-      "Content-Type": "application/json; charset=UTF-8",
-      Accept: "application/json, text/javascript, */*; q=0.01",
+      "Content-Type": "application/json",
+      Accept: "application/json",
     },
     body: JSON.stringify({
       clientid: companyId,
@@ -362,23 +370,28 @@ export async function checkKfintechAllotmentForPans(ipo: BoardIpo, pans: string[
   return results;
 }
 
-const BIGSHARE_ENDPOINT = "https://ipo.bigshareonline.com/Data.aspx/FetchIpodetails";
-
 /**
  * Bigshare allotment lookup. Their portal's CAPTCHA is validated purely
  * client-side (never sent to the server), so the JSON API is callable
  * directly. PAN lookup uses SelectionType "PN".
  */
 async function bigshareSearch(companyCode: string, pan: string): Promise<Record<string, unknown> | null> {
-  const body = `{ Applicationno: '',Company: '${companyCode}',SelectionType: 'PN',PanNo: '${pan}', txtcsdl: '', txtDPID: '', txtClId: '',ddlType:'',lang: 'en' }`;
-  const response = await fetch(BIGSHARE_ENDPOINT, {
+  const body = JSON.stringify({
+    Applicationno: "",
+    Company: companyCode,
+    SelectionType: "PN",
+    PanNo: pan,
+    txtcsdl: "",
+    txtDPID: "",
+    txtClId: "",
+    ddlType: "",
+    lang: "en",
+  });
+  const response = await fetch(bigshareEndpoint(), {
     method: "POST",
     headers: {
       "User-Agent": "IPOBharosa-mobile/1.0",
-      "Content-Type": "application/json; charset=utf-8",
-      "X-Requested-With": "XMLHttpRequest",
-      Origin: "https://ipo.bigshareonline.com",
-      Referer: "https://ipo.bigshareonline.com/ipo_status.html",
+      "Content-Type": "application/json",
       Accept: "application/json",
     },
     body,
