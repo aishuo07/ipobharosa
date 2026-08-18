@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   checkAllotmentForPans,
-  checkBigshareAllotmentForPans,
-  checkKfintechAllotmentForPans,
-  checkMufgAllotment,
-  checkMufgAllotmentForPans,
   registrarCheck,
   registrarKind,
 } from "@/src/lib/allotment";
@@ -40,6 +36,10 @@ function makeIpo(overrides: Partial<BoardIpo> = {}): BoardIpo {
     provenance: { discovery: [], gmp: [], subscription: null },
     ...overrides,
   };
+}
+
+function mockServerResponse(data: unknown) {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(data), { status: 200 })));
 }
 
 describe("registrarCheck", () => {
@@ -86,271 +86,75 @@ describe("registrarCheck", () => {
   });
 });
 
-describe("checkMufgAllotment (XML payloads)", () => {
-  const ipo = makeIpo({
-    companyName: "Behari Lal Engineering Limited - IPO",
-    registrar: "MUFG Intime India Private Limited",
-  });
-
-  it("parses the XML company list and reports ALLOTTED when ALLOT > 0", async () => {
-    const listXml = `{"d":"<NewDataSet><Table><company_id>11922</company_id><companyname>Behari Lal Engineering Limited - IPO</companyname></Table></NewDataSet>"}`;
-    const searchXml = `{"d":"<NewDataSet><Table><id>11922</id><offer_price>285</offer_price><NAME1>AISH KANODIA</NAME1><companyname>Behari Lal Engineering Limited - IPO</companyname><ALLOT>52</ALLOT><SHARES>52</SHARES><AMTADJ>0</AMTADJ><PEMNDG>Retail</PEMNDG></Table></NewDataSet>"}`;
-
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(listXml, { status: 200 }))
-      .mockResolvedValueOnce(new Response(searchXml, { status: 200 }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    const result = await checkMufgAllotment(ipo, "HFQPK9233H");
-    expect(result.status).toBe("ALLOTTED");
-    expect(result.applicant).toBe("AISH KANODIA");
-    expect(result.applied).toBe("52");
-    expect(result.allotted).toBe("52");
-
-    vi.unstubAllGlobals();
-  });
-
-  it("reports NOT_ALLOTTED when ALLOT is 0", async () => {
-    const listXml = `{"d":"<NewDataSet><Table><company_id>11922</company_id><companyname>Behari Lal Engineering Limited - IPO</companyname></Table></NewDataSet>"}`;
-    const searchXml = `{"d":"<NewDataSet><Table><id>11922</id><NAME1>AISH KANODIA</NAME1><ALLOT>0</ALLOT><SHARES>52</SHARES><AMTADJ>0</AMTADJ></Table></NewDataSet>"}`;
-
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(listXml, { status: 200 }))
-      .mockResolvedValueOnce(new Response(searchXml, { status: 200 }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    const result = await checkMufgAllotment(ipo, "HFQPK9233H");
-    expect(result.status).toBe("NOT_ALLOTTED");
-    expect(result.allotted).toBe("0");
-    expect(result.applicant).toBe("AISH KANODIA");
-
-    vi.unstubAllGlobals();
-  });
-
-  it("reports NOT_APPLIED when the search returns no rows", async () => {
-    const listXml = `{"d":"<NewDataSet><Table><company_id>11922</company_id><companyname>Behari Lal Engineering Limited - IPO</companyname></Table></NewDataSet>"}`;
-    const searchXml = `{"d":"<NewDataSet></NewDataSet>"}`;
-
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(listXml, { status: 200 }))
-      .mockResolvedValueOnce(new Response(searchXml, { status: 200 }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    const result = await checkMufgAllotment(ipo, "HFQPK9233H");
-    expect(result.status).toBe("NOT_APPLIED");
-
-    vi.unstubAllGlobals();
-  });
-});
-
-describe("checkMufgAllotmentForPans (batch)", () => {
-  const ipo = makeIpo({
-    companyName: "Behari Lal Engineering Limited - IPO",
-    registrar: "MUFG Intime India Private Limited",
-  });
-
-  it("fetches the company list once and checks every PAN", async () => {
-    const listXml = `{"d":"<NewDataSet><Table><company_id>11922</company_id><companyname>Behari Lal Engineering Limited - IPO</companyname></Table></NewDataSet>"}`;
-    const searchXml = (allot: number) =>
-      `{"d":"<NewDataSet><Table><id>11922</id><NAME1>AISH KANODIA</NAME1><ALLOT>${allot}</ALLOT><SHARES>52</SHARES><AMTADJ>0</AMTADJ></Table></NewDataSet>"}`;
-
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(listXml, { status: 200 }))
-      .mockResolvedValueOnce(new Response(searchXml(52), { status: 200 }))
-      .mockResolvedValueOnce(new Response(searchXml(0), { status: 200 }))
-      .mockResolvedValueOnce(new Response(`{"d":"<NewDataSet></NewDataSet>"}`, { status: 200 }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    const results = await checkMufgAllotmentForPans(ipo, ["HFQPK9233H", "ABCDE1234F", "ZYXWV9876Q"]);
-    expect(results.map((r) => r.status)).toEqual(["ALLOTTED", "NOT_ALLOTTED", "NOT_APPLIED"]);
-    // 1 company-list call + 3 search calls
-    expect(fetchMock).toHaveBeenCalledTimes(4);
-    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes("SearchOnPan"))).toHaveLength(3);
-
-    vi.unstubAllGlobals();
-  });
-
-  it("returns a NOT_FOUND-style error for every PAN when the company is missing from MUFG", async () => {
-    const listXml = `{"d":"<NewDataSet><Table><company_id>999</company_id><companyname>Some Other IPO</companyname></Table></NewDataSet>"}`;
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response(listXml, { status: 200 })));
-
-    const results = await checkMufgAllotmentForPans(ipo, ["HFQPK9233H", "ABCDE1234F"]);
-    expect(results.every((r) => r.status === "ERROR" && r.error)).toBe(true);
-
-    vi.unstubAllGlobals();
-  });
-
-  it("returns an empty list when there are no PANs", async () => {
-    const results = await checkMufgAllotmentForPans(ipo, []);
-    expect(results).toEqual([]);
-  });
-});
-
-describe("checkKfintechAllotmentForPans", () => {
-  const ipo = makeIpo({
-    companyName: "Shiprocket Ltd",
-    registrar: "Kfin Technologies Ltd.",
-  });
-
-  it("reports ALLOTTED when All_Shares > 0 and NOT_ALLOTTED when 0", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ data: [{ All_Shares: "52", App_Shares: "154", Name: "AISH KANODIA", Pan_No: "HFQPK9233H" }] }), {
-          status: 200,
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ data: [{ All_Shares: "0", App_Shares: "154", Name: "AISH KANODIA", Pan_No: "HFQPK9233H" }] }), {
-          status: 200,
-        }),
-      );
-    vi.stubGlobal("fetch", fetchMock);
-
-    const results = await checkKfintechAllotmentForPans(ipo, ["HFQPK9233H", "ABCDE1234F"]);
-    expect(results.map((r) => r.status)).toEqual(["ALLOTTED", "NOT_ALLOTTED"]);
+describe("checkAllotmentForPans (delegates to server)", () => {
+  it("returns ALLOTTED results from the server", async () => {
+    const ipo = makeIpo({ companyName: "Shiprocket Ltd", registrar: "Kfin Technologies Ltd." });
+    mockServerResponse([
+      { pan: "HFQPK9233H", companyName: "Shiprocket Ltd", registrar: "Kfin Technologies Ltd.", status: "ALLOTTED", allotted: "52", applicant: "AISH KANODIA", applied: "154", checkedAt: "2026-08-20T00:00:00.000Z" },
+    ]);
+    const results = await checkAllotmentForPans(ipo, ["HFQPK9233H"]);
+    expect(results[0].status).toBe("ALLOTTED");
     expect(results[0].applicant).toBe("AISH KANODIA");
     expect(results[0].allotted).toBe("52");
-    // every call carries the client_id header for the issue
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const firstCall = fetchMock.mock.calls[0][1] as RequestInit;
-    const headers = firstCall.headers as Record<string, string>;
-    expect(headers.client_id).toBe("86153103110");
-    expect(headers.reqparam).toBe("HFQPK9233H");
-
     vi.unstubAllGlobals();
   });
 
-  it("reports NOT_APPLIED when the API returns Record Not Found", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ error: "Record Not Found" }), { status: 200 })));
-    const results = await checkKfintechAllotmentForPans(ipo, ["HFQPK9233H"]);
-    expect(results[0].status).toBe("NOT_APPLIED");
-    vi.unstubAllGlobals();
-  });
-
-  it("returns an ERROR for every PAN when the company is not in the KFinTech catalogue", async () => {
-    const unknownIpo = makeIpo({ companyName: "Not In Catalogue Ltd", registrar: "Kfin Technologies Ltd." });
-    const results = await checkKfintechAllotmentForPans(unknownIpo, ["HFQPK9233H", "ABCDE1234F"]);
-    expect(results.every((r) => r.status === "ERROR" && r.error)).toBe(true);
-    expect(results).toHaveLength(2);
-  });
-
-  it("returns an empty list when there are no PANs", async () => {
-    const results = await checkKfintechAllotmentForPans(ipo, []);
-    expect(results).toEqual([]);
-  });
-});
-
-describe("checkBigshareAllotmentForPans", () => {
-  const ipo = makeIpo({
-    companyName: "Technocraft Ventures Ltd",
-    registrar: "Bigshare Services Private Limited",
-  });
-
-  it("reports ALLOTTED when ALLOTED > 0 and NOT_ALLOTTED when 0", async () => {
-    const row = (alloted: string) =>
-      JSON.stringify({
-        d: { __type: "Data+Company", APPLICATION_NO: "AB123", DPID: "1208160064064954", Name: "AISH KANODIA", APPLIED: "50", ALLOTED: alloted },
-      });
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(row("50"), { status: 200 }))
-      .mockResolvedValueOnce(new Response(row("0"), { status: 200 }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    const results = await checkBigshareAllotmentForPans(ipo, ["HFQPK9233H", "ABCDE1234F"]);
-    expect(results.map((r) => r.status)).toEqual(["ALLOTTED", "NOT_ALLOTTED"]);
-    expect(results[0].applicant).toBe("AISH KANODIA");
-    expect(results[1].allotted).toBe("0");
-    // the request body carries the company code 9043 and PAN mode PN
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const body = String(fetchMock.mock.calls[0][1]?.body);
-    expect(body).toContain("Company: '9043'");
-    expect(body).toContain("SelectionType: 'PN'");
-    expect(body).toContain("PanNo: 'HFQPK9233H'");
-
-    vi.unstubAllGlobals();
-  });
-
-  it("reports NOT_APPLIED when DPID is No data found", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValueOnce(
-        new Response(JSON.stringify({ d: { __type: "Data+Company", DPID: "No data found", Name: "", APPLIED: "", ALLOTED: "" } }), { status: 200 }),
-      ),
-    );
-    const results = await checkBigshareAllotmentForPans(ipo, ["HFQPK9233H"]);
-    expect(results[0].status).toBe("NOT_APPLIED");
-    vi.unstubAllGlobals();
-  });
-
-  it("returns an ERROR for every PAN when the company is not in the Bigshare catalogue", async () => {
-    const unknownIpo = makeIpo({ companyName: "Not In Catalogue Ltd", registrar: "Bigshare Services Pvt Ltd" });
-    const results = await checkBigshareAllotmentForPans(unknownIpo, ["HFQPK9233H"]);
-    expect(results[0].status).toBe("ERROR");
-    expect(results[0].error).toContain("Bigshare");
-    vi.unstubAllGlobals();
-  });
-
-  it("returns an empty list when there are no PANs", async () => {
-    const results = await checkBigshareAllotmentForPans(ipo, []);
-    expect(results).toEqual([]);
-  });
-});
-
-describe("checkAllotmentForPans (dispatcher)", () => {
-  it("routes MUFG IPOs to the MUFG adapter", async () => {
-    const ipo = makeIpo({ companyName: "Behari Lal Engineering Limited - IPO", registrar: "MUFG Intime India Private Limited" });
-    const listXml = `{"d":"<NewDataSet><Table><company_id>11922</company_id><companyname>Behari Lal Engineering Limited - IPO</companyname></Table></NewDataSet>"}`;
-    const searchXml = `{"d":"<NewDataSet><Table><id>11922</id><NAME1>AISH KANODIA</NAME1><ALLOT>52</ALLOT><SHARES>52</SHARES></Table></NewDataSet>"}`;
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn()
-        .mockResolvedValueOnce(new Response(listXml, { status: 200 }))
-        .mockResolvedValueOnce(new Response(searchXml, { status: 200 })),
-    );
-    const results = await checkAllotmentForPans(ipo, ["HFQPK9233H"]);
-    expect(results[0].status).toBe("ALLOTTED");
-    vi.unstubAllGlobals();
-  });
-
-  it("routes KFinTech IPOs to the KFinTech adapter", async () => {
+  it("returns NOT_ALLOTTED results from the server", async () => {
     const ipo = makeIpo({ companyName: "Shiprocket Ltd", registrar: "Kfin Technologies Ltd." });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValueOnce(
-        new Response(JSON.stringify({ data: [{ All_Shares: "0", App_Shares: "154", Name: "AISH KANODIA", Pan_No: "HFQPK9233H" }] }), { status: 200 }),
-      ),
-    );
+    mockServerResponse([
+      { pan: "HFQPK9233H", companyName: "Shiprocket Ltd", registrar: "Kfin Technologies Ltd.", status: "NOT_ALLOTTED", allotted: "0", checkedAt: "2026-08-20T00:00:00.000Z" },
+    ]);
     const results = await checkAllotmentForPans(ipo, ["HFQPK9233H"]);
     expect(results[0].status).toBe("NOT_ALLOTTED");
+    expect(results[0].allotted).toBe("0");
     vi.unstubAllGlobals();
   });
 
-  it("routes Bigshare IPOs to the Bigshare adapter", async () => {
-    const ipo = makeIpo({ companyName: "Technocraft Ventures Ltd", registrar: "Bigshare Services Pvt Ltd" });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValueOnce(
-        new Response(JSON.stringify({ d: { __type: "Data+Company", APPLICATION_NO: "AB1", DPID: "123", Name: "AISH KANODIA", APPLIED: "50", ALLOTED: "50" } }), {
-          status: 200,
-        }),
-      ),
-    );
+  it("returns NOT_APPLIED results from the server", async () => {
+    const ipo = makeIpo({ companyName: "Shiprocket Ltd", registrar: "Kfin Technologies Ltd." });
+    mockServerResponse([
+      { pan: "HFQPK9233H", companyName: "Shiprocket Ltd", registrar: "Kfin Technologies Ltd.", status: "NOT_APPLIED", checkedAt: "2026-08-20T00:00:00.000Z" },
+    ]);
     const results = await checkAllotmentForPans(ipo, ["HFQPK9233H"]);
-    expect(results[0].status).toBe("ALLOTTED");
+    expect(results[0].status).toBe("NOT_APPLIED");
     vi.unstubAllGlobals();
   });
 
-  it("returns an ERROR for non-automatable registrars instead of querying", async () => {
+  it("returns ERROR results when the company is missing from the registrar catalogue", async () => {
+    const ipo = makeIpo({ companyName: "Not In Catalogue Ltd", registrar: "Kfin Technologies Ltd." });
+    mockServerResponse([
+      { pan: "HFQPK9233H", companyName: "Not In Catalogue Ltd", registrar: "Kfin Technologies Ltd.", status: "ERROR", error: "Company not found in KFinTech list (allotment may not be out yet)", checkedAt: "2026-08-20T00:00:00.000Z" },
+      { pan: "ABCDE1234F", companyName: "Not In Catalogue Ltd", registrar: "Kfin Technologies Ltd.", status: "ERROR", error: "Company not found in KFinTech list (allotment may not be out yet)", checkedAt: "2026-08-20T00:00:00.000Z" },
+    ]);
+    const results = await checkAllotmentForPans(ipo, ["HFQPK9233H", "ABCDE1234F"]);
+    expect(results.every((r) => r.status === "ERROR" && r.error)).toBe(true);
+    expect(results).toHaveLength(2);
+    vi.unstubAllGlobals();
+  });
+
+  it("returns ERROR for non-automatable registrars", async () => {
     const ipo = makeIpo({ companyName: "Some Issue Ltd", registrar: "Cameo Corporate Services Ltd" });
+    mockServerResponse([
+      { pan: "HFQPK9233H", companyName: "Some Issue Ltd", registrar: "Cameo Corporate Services Ltd", status: "ERROR", error: "Automatic checking is not supported for Cameo Corporate Services Ltd. Open the registrar's portal instead.", checkedAt: "2026-08-20T00:00:00.000Z" },
+    ]);
     const results = await checkAllotmentForPans(ipo, ["HFQPK9233H"]);
     expect(results[0].status).toBe("ERROR");
     expect(results[0].error).toContain("not supported");
+    vi.unstubAllGlobals();
+  });
+
+  it("returns an empty list when there are no PANs", async () => {
+    const ipo = makeIpo({ companyName: "Shiprocket Ltd", registrar: "Kfin Technologies Ltd." });
+    const results = await checkAllotmentForPans(ipo, []);
+    expect(results).toEqual([]);
+  });
+
+  it("reports ERROR when the server returns 500", async () => {
+    const ipo = makeIpo({ companyName: "Shiprocket Ltd", registrar: "Kfin Technologies Ltd." });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response("Internal Server Error", { status: 500 })));
+    const results = await checkAllotmentForPans(ipo, ["HFQPK9233H"]);
+    expect(results[0].status).toBe("ERROR");
+    expect(results[0].error).toContain("Server allotment check failed");
+    vi.unstubAllGlobals();
   });
 });
