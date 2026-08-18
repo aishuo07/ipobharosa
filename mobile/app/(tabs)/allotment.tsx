@@ -3,7 +3,7 @@ import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpac
 import { fetchBoard } from "@/src/lib/api";
 import type { BoardIpo } from "@/src/lib/types";
 import { loadPanCards, type PanCard } from "@/src/lib/pan-store";
-import { checkMufgAllotmentForPans, registrarCheck, type AllotmentResult } from "@/src/lib/allotment";
+import { checkAllotmentForPans, registrarCheck, type AllotmentResult } from "@/src/lib/allotment";
 import { cacheAllotmentResult, loadAllotmentCache, type IpoAllotmentCache } from "@/src/lib/allotment-store";
 
 const STATUS_LABELS: Record<AllotmentResult["status"], string> = {
@@ -57,7 +57,7 @@ export default function AllotmentScreen() {
     setChecking(true);
     setCheckingFor(ipo.id);
     try {
-      const results = await checkMufgAllotmentForPans(
+      const results = await checkAllotmentForPans(
         ipo,
         cards.map((card) => card.pan),
       );
@@ -155,9 +155,7 @@ export default function AllotmentScreen() {
       {selectedIpo && registrarCheck(selectedIpo).automatable && (
         <View style={styles.sourceNote}>
           <Text style={styles.sourceNoteText}>
-            {registrarCheck(selectedIpo).automatable
-              ? "MUFG / Link Intime supports automatic allotment lookup by PAN. Tap \"Check all PANs\" and results will be cached on this device."
-              : "This registrar uses a CAPTCHA-protected portal. Use the registrar's official site to check allotment."}
+            Automatic lookup by PAN is supported for MUFG / Link Intime, KFinTech and Bigshare issues. Tap {"\""}Check all PANs{"\""} and results are cached on this device.
           </Text>
         </View>
       )}
