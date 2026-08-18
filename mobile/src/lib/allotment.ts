@@ -60,13 +60,33 @@ function unwrapD(json: unknown): unknown {
   let d = (json as { d?: unknown })?.d;
   if (d === undefined) d = json;
   if (typeof d === "string") {
+    const trimmed = d.trim();
+    if (trimmed.startsWith("<")) {
+      return parseXmlRows(d);
+    }
     try {
-      d = JSON.parse(d);
+      return JSON.parse(d);
     } catch {
       /* leave as string */
     }
   }
   return d;
+}
+
+function parseXmlRows(xml: string): Record<string, string>[] {
+  const rows: Record<string, string>[] = [];
+  const tableRe = /<Table\b[^>]*>([\s\S]*?)<\/Table>/gi;
+  const fieldRe = /<([A-Za-z0-9_]+)\b[^>]*>([\s\S]*?)<\/\1>/gi;
+  let tableMatch: RegExpExecArray | null;
+  while ((tableMatch = tableRe.exec(xml)) !== null) {
+    const record: Record<string, string> = {};
+    let fieldMatch: RegExpExecArray | null;
+    while ((fieldMatch = fieldRe.exec(tableMatch[1])) !== null) {
+      record[fieldMatch[1].toUpperCase()] = fieldMatch[2];
+    }
+    if (Object.keys(record).length) rows.push(record);
+  }
+  return rows;
 }
 
 function pick(obj: Record<string, unknown> | undefined, keys: string[]): string | undefined {
@@ -102,7 +122,7 @@ async function mufgCompanyList(): Promise<MufgCompany[]> {
     .map((row) => {
       const record = row as Record<string, unknown>;
       return {
-        id: pick(record, ["CLIENTID", "CLIENT_ID", "COMPANYID", "ID"]) ?? "",
+        id: pick(record, ["CLIENTID", "CLIENT_ID", "COMPANYID", "COMPANY_ID", "ID"]) ?? "",
         name: pick(record, ["COMPANYNAME", "COMPANY_NAME", "NAME"]) ?? "",
       };
     })
@@ -163,10 +183,10 @@ export async function checkMufgAllotment(ipo: BoardIpo, pan: string): Promise<Al
     const rows = Array.isArray(data) ? data : (data as { Table?: unknown[] })?.Table ?? [];
     if (!rows.length) return { ...base, status: "NOT_APPLIED" };
     const row = rows[0] as Record<string, unknown>;
-    const applied = pick(row, ["APPLIED", "APPLIED_QTY", "SHARES_APPLIED", "QTY"]);
+    const applied = pick(row, ["APPLIED", "APPLIED_QTY", "SHARES_APPLIED", "SHARES", "QTY"]);
     const allotted = pick(row, ["ALLOT", "ALLOTED", "ALLOTTED", "SHARES_ALLOTTED", "ALLOT_QTY"]);
     const amount = pick(row, ["AMTADJ", "AMOUNTADJUSTED", "AMT_ADJUSTED", "AMOUNT"]);
-    const applicant = pick(row, ["NAME", "APPLICANTNAME", "APPLICANT_NAME"]);
+    const applicant = pick(row, ["NAME1", "NAME", "APPLICANTNAME", "APPLICANT_NAME"]);
     const allottedNum = parseInt(String(allotted ?? "0").replace(/[^0-9-]/g, ""), 10) || 0;
     return {
       ...base,

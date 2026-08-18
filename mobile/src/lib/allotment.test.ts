@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { registrarCheck } from "@/src/lib/allotment";
+import { describe, expect, it, vi } from "vitest";
+import { checkMufgAllotment, registrarCheck } from "@/src/lib/allotment";
 import type { BoardIpo } from "@/src/lib/types";
 
 function makeIpo(overrides: Partial<BoardIpo> = {}): BoardIpo {
@@ -58,5 +58,65 @@ describe("registrarCheck", () => {
       automatable: false,
       portalUrl: "https://www.bseindia.com/investors/appli_check.aspx",
     });
+  });
+});
+
+describe("checkMufgAllotment (XML payloads)", () => {
+  const ipo = makeIpo({
+    companyName: "Behari Lal Engineering Limited - IPO",
+    registrar: "MUFG Intime India Private Limited",
+  });
+
+  it("parses the XML company list and reports ALLOTTED when ALLOT > 0", async () => {
+    const listXml = `{"d":"<NewDataSet><Table><company_id>11922</company_id><companyname>Behari Lal Engineering Limited - IPO</companyname></Table></NewDataSet>"}`;
+    const searchXml = `{"d":"<NewDataSet><Table><id>11922</id><offer_price>285</offer_price><NAME1>AISH KANODIA</NAME1><companyname>Behari Lal Engineering Limited - IPO</companyname><ALLOT>52</ALLOT><SHARES>52</SHARES><AMTADJ>0</AMTADJ><PEMNDG>Retail</PEMNDG></Table></NewDataSet>"}`;
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(listXml, { status: 200 }))
+      .mockResolvedValueOnce(new Response(searchXml, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await checkMufgAllotment(ipo, "HFQPK9233H");
+    expect(result.status).toBe("ALLOTTED");
+    expect(result.applicant).toBe("AISH KANODIA");
+    expect(result.applied).toBe("52");
+    expect(result.allotted).toBe("52");
+
+    vi.unstubAllGlobals();
+  });
+
+  it("reports NOT_ALLOTTED when ALLOT is 0", async () => {
+    const listXml = `{"d":"<NewDataSet><Table><company_id>11922</company_id><companyname>Behari Lal Engineering Limited - IPO</companyname></Table></NewDataSet>"}`;
+    const searchXml = `{"d":"<NewDataSet><Table><id>11922</id><NAME1>AISH KANODIA</NAME1><ALLOT>0</ALLOT><SHARES>52</SHARES><AMTADJ>0</AMTADJ></Table></NewDataSet>"}`;
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(listXml, { status: 200 }))
+      .mockResolvedValueOnce(new Response(searchXml, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await checkMufgAllotment(ipo, "HFQPK9233H");
+    expect(result.status).toBe("NOT_ALLOTTED");
+    expect(result.allotted).toBe("0");
+    expect(result.applicant).toBe("AISH KANODIA");
+
+    vi.unstubAllGlobals();
+  });
+
+  it("reports NOT_APPLIED when the search returns no rows", async () => {
+    const listXml = `{"d":"<NewDataSet><Table><company_id>11922</company_id><companyname>Behari Lal Engineering Limited - IPO</companyname></Table></NewDataSet>"}`;
+    const searchXml = `{"d":"<NewDataSet></NewDataSet>"}`;
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(listXml, { status: 200 }))
+      .mockResolvedValueOnce(new Response(searchXml, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await checkMufgAllotment(ipo, "HFQPK9233H");
+    expect(result.status).toBe("NOT_APPLIED");
+
+    vi.unstubAllGlobals();
   });
 });
