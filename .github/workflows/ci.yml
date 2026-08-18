@@ -64,7 +64,7 @@ jobs:
         run: npx tsc --noEmit
       - name: Lint mobile app
         working-directory: mobile
-        run: npx expo lint
+        run: npm run lint
       - name: Run mobile tests
         working-directory: mobile
         run: npx vitest run
