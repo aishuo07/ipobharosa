@@ -74,6 +74,14 @@ eas login
 eas build -p android --profile preview
 ```
 
+The `eas.json` defines the build profiles:
+
+- `preview` — internal Android `.apk` (share with anyone via "install from
+  unknown sources") and an iOS simulator build.
+- `development` — Expo Go dev-client build.
+- `production` — signed Play Store `app-bundle` + App Store Connect iOS build,
+  ready for `eas submit`.
+
 The resulting `.apk` can be installed by anyone with "install from unknown
 sources" enabled. iOS standalone builds require an Apple Developer account.
 
