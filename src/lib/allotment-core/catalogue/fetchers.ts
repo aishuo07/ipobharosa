@@ -1,4 +1,5 @@
 import type { RegistrarCompany, RegistrarKey } from "./types";
+import { parseXmlRows } from "../utils";
 
 const RETRY_DELAY = 1000;
 const TIMEOUT = 15000;
@@ -34,9 +35,9 @@ export async function fetchKfinCatalogue(): Promise<RegistrarCompany[]> {
   const jsRes = await fetchWithRetry(jsUrl);
   const js = await jsRes.text();
   
-  // Pattern: {id:"86153103110",name:"SHIPROCKET LIMITED"}
+  // Pattern: clientId":"86153103110","name":"SHIPROCKET LIMITED"
   const companies: RegistrarCompany[] = [];
-  const regex = /\{id:"(\d+)",name:"([^"]+)"\}/g;
+  const regex = /clientId":"(\d+)","name":"([^"]+)"/g;
   let match: RegExpExecArray | null;
   while ((match = regex.exec(js)) !== null) {
     companies.push({ id: match[1], name: match[2] });
@@ -50,9 +51,9 @@ export async function fetchBigshareCatalogue(): Promise<RegistrarCompany[]> {
   const res = await fetchWithRetry("https://ipo.bigshareonline.com/ipo_status.html");
   const html = await res.text();
   
-  // Extract <select id="Company"> options
-  const selectMatch = html.match(/<select[^>]*id=["']Company["'][^>]*>([\s\S]*?)<\/select>/i);
-  if (!selectMatch) throw new Error("Bigshare: Could not find Company dropdown");
+  // The dropdown has id="ddlCompany" (not "Company" as the old snapshot expected)
+  const selectMatch = html.match(/<select[^>]*id=["']ddlCompany["'][^>]*>([\s\S]*?)<\/select>/i);
+  if (!selectMatch) throw new Error("Bigshare: Could not find ddlCompany dropdown");
   
   const companies: RegistrarCompany[] = [];
   const optionRegex = /<option[^>]*value=["']([^"']+)["'][^>]*>([^<]+)<\/option>/gi;
@@ -60,7 +61,7 @@ export async function fetchBigshareCatalogue(): Promise<RegistrarCompany[]> {
   while ((match = optionRegex.exec(selectMatch[1])) !== null) {
     const value = match[1].trim();
     const name = match[2].trim();
-    if (value && name && value !== "" && name !== "Select") {
+    if (value && name && value !== "" && !name.startsWith("--Select")) {
       companies.push({ id: value, name });
     }
   }
@@ -98,15 +99,20 @@ export async function fetchMufgCatalogue(): Promise<RegistrarCompany[]> {
   let d = (json as { d?: unknown })?.d;
   if (d === undefined) d = json;
   if (typeof d === "string") {
-    try { d = JSON.parse(d); } catch {}
+    const trimmed = d.trim();
+    if (trimmed.startsWith("<")) {
+      d = parseXmlRows(d);
+    } else {
+      try { d = JSON.parse(d); } catch {}
+    }
   }
   
   const rows = Array.isArray(d) ? d : (d as { Table?: unknown[] })?.Table ?? [];
   
   return rows
     .map((row: { [key: string]: unknown }) => ({
-      id: String(row.CLIENTID ?? row.CLIENT_ID ?? row.COMPANYID ?? row.COMPANY_ID ?? row.ID ?? ""),
-      name: String(row.COMPANYNAME ?? row.COMPANY_NAME ?? row.NAME ?? ""),
+      id: String(row.company_id ?? row.COMPANYID ?? row.COMPANY_ID ?? row.ID ?? ""),
+      name: String(row.companyname ?? row.COMPANYNAME ?? row.COMPANY_NAME ?? row.NAME ?? ""),
     }))
     .filter((c) => c.id && c.name);
 }

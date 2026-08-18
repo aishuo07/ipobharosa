@@ -1,6 +1,6 @@
 import type { BoardIpo, AllotmentResult } from "../types";
 import { getCatalogue } from "../catalogue";
-import { registrarKind, findCompanyId } from "../utils";
+import { registrarKind, findCompanyId, parseXmlRows } from "../utils";
 
 const MUFG_ENDPOINTS = {
   origin: "https://in.mpms.mufg.com",
@@ -36,13 +36,18 @@ async function mufgCompanyList(): Promise<{ id: string; name: string }[]> {
   let d = (data as { d?: unknown })?.d;
   if (d === undefined) d = data;
   if (typeof d === "string") {
-    try { d = JSON.parse(d); } catch {}
+    const trimmed = d.trim();
+    if (trimmed.startsWith("<")) {
+      d = parseXmlRows(d);
+    } else {
+      try { d = JSON.parse(d); } catch {}
+    }
   }
-   const rows = Array.isArray(d) ? d : (data as { Table?: unknown[] })?.Table ?? [];
+  const rows = Array.isArray(d) ? d : (d as { Table?: unknown[] })?.Table ?? [];
   return rows
     .map((row: { [key: string]: unknown }) => ({
-      id: String(row.CLIENTID ?? row.CLIENT_ID ?? row.COMPANYID ?? row.COMPANY_ID ?? row.ID ?? ""),
-      name: String(row.COMPANYNAME ?? row.COMPANY_NAME ?? row.NAME ?? ""),
+      id: String(row.company_id ?? row.COMPANYID ?? row.COMPANY_ID ?? row.ID ?? ""),
+      name: String(row.companyname ?? row.COMPANYNAME ?? row.COMPANY_NAME ?? row.NAME ?? ""),
     }))
     .filter((c) => c.id && c.name);
 }
@@ -58,9 +63,14 @@ async function mufgSearch(companyId: string, pan: string): Promise<Record<string
   let d = (data as { d?: unknown })?.d;
   if (d === undefined) d = data;
   if (typeof d === "string") {
-    try { d = JSON.parse(d); } catch {}
+    const trimmed = d.trim();
+    if (trimmed.startsWith("<")) {
+      d = parseXmlRows(d);
+    } else {
+      try { d = JSON.parse(d); } catch {}
+    }
   }
-  const rows = Array.isArray(d) ? d : (data as { Table?: unknown[] })?.Table ?? [];
+  const rows = Array.isArray(d) ? d : (d as { Table?: unknown[] })?.Table ?? [];
   return rows.length ? (rows[0] as Record<string, unknown>) : null;
 }
 
