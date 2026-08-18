@@ -6,7 +6,8 @@ const MUFG_REFERER = "https://in.mpms.mufg.com/Initial_Offer/public-issues.html"
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Headers": "Content-Type, X-Requested-With, Accept",
+  "Access-Control-Max-Age": "86400",
 };
 
 function headers() {
