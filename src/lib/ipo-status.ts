@@ -3,15 +3,15 @@ import { prisma } from "@/lib/prisma";
 export type StatusTransition = {
   ipoId: string;
   companyName: string;
-  from: "UPCOMING" | "OPEN";
-  to: "OPEN" | "CLOSED";
+  from: "UPCOMING" | "OPEN" | "CLOSED";
+  to: "OPEN" | "CLOSED" | "LISTED";
+  listingPrice?: number;
 };
 
 /**
- * Advances IPO status as real dates pass. CLOSED -> LISTED is
- * deliberately not handled here — it requires a real listing price,
- * which isn't scraped automatically yet, so that transition stays
- * manual rather than firing without real data.
+ * Advances IPO status as real dates pass. CLOSED -> LISTED is handled
+ * separately by syncIpoListings (src/lib/ipo-listing.ts), which only fires
+ * once NSE publishes the real post-allotment listing price.
  */
 export async function syncIpoStatuses(now: Date = new Date()): Promise<StatusTransition[]> {
   const transitions: StatusTransition[] = [];

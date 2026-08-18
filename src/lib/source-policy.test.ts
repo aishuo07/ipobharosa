@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { GmpAdapter } from "@/lib/gmp/types";
 import { enabledGmpAdapters, isGmpSourceEnabled, sourcePolicyFor } from "./source-policy";
 
-const adapters = ["ipowatch", "sahi", "ipoji", "investorgain"].map((key) => ({
+const adapters = ["ipowatch", "sahi", "ipoji", "investorgain", "ipotrack"].map((key) => ({
   key,
   name: key,
   fetchGmp: async () => ({ kind: "NOT_COVERED" as const, reason: "fixture" }),
@@ -18,7 +18,11 @@ describe("launch source policy", () => {
   });
 
   it("allows only configured providers whose use is not hard-blocked", () => {
-    expect(enabledGmpAdapters(adapters, "investorgain, ipoji").map((adapter) => adapter.key)).toEqual(["ipoji", "investorgain"]);
+    expect(enabledGmpAdapters(adapters, "investorgain, ipoji, ipotrack").map((adapter) => adapter.key)).toEqual([
+      "ipoji",
+      "investorgain",
+      "ipotrack",
+    ]);
   });
 
   it("records an exact disabled-policy reason", () => {

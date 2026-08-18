@@ -5,8 +5,10 @@ import { ipoWatchAdapter } from "@/lib/gmp/adapters/ipowatch";
 import { sahiAdapter } from "@/lib/gmp/adapters/sahi";
 import { ipojiAdapter } from "@/lib/gmp/adapters/ipoji";
 import { investorGainAdapter } from "@/lib/gmp/adapters/investorgain";
+import { ipoTrackAdapter } from "@/lib/gmp/adapters/ipotrack";
 import { nseSubscriptionAdapter } from "@/lib/subscription/adapters/nse";
 import { syncIpoStatuses } from "@/lib/ipo-status";
+import { syncIpoListings } from "@/lib/ipo-listing";
 import { notifyWatchersOfTransitions } from "@/lib/email/reminders";
 import type { DiscoverySummary } from "@/lib/discovery/discover";
 import { acquireIngestionLock, releaseIngestionLock } from "@/lib/ingestion/lock";
@@ -27,7 +29,7 @@ import { enabledGmpAdapters } from "@/lib/source-policy";
 const ALERT_RECIPIENT = "aish.iiitb@gmail.com";
 const SITE_URL = resolveSiteUrl();
 const BATCH_SIZE = 3;
-const ALL_GMP_ADAPTERS: GmpAdapter[] = [ipoWatchAdapter, sahiAdapter, ipojiAdapter, investorGainAdapter];
+const ALL_GMP_ADAPTERS: GmpAdapter[] = [ipoWatchAdapter, sahiAdapter, ipojiAdapter, investorGainAdapter, ipoTrackAdapter];
 const activeGmpAdapters = () => enabledGmpAdapters(ALL_GMP_ADAPTERS);
 // Candidate checks are bounded so the workflow still has ample calls for GMP,
 // subscription and finalization. Remote PDF work is intentionally excluded
@@ -46,6 +48,7 @@ export type IngestionSummary = {
   subscription: { snapshotsWritten: number; failed: number; notYetAvailable: number; notCovered: number };
   perSource: Record<string, { success: number; failure: number; notYetAvailable: number; notCovered: number }>;
   statusTransitions: number;
+  listedTransitions: number;
   reminders: { sent: number; failed: number; skipped: number };
   discovery: DiscoverySummary | { error: string };
   catalogue: FilingCatalogueSync;
@@ -76,6 +79,7 @@ export const EMPTY_SUMMARY: IngestionSummary = {
   subscription: { snapshotsWritten: 0, failed: 0, notYetAvailable: 0, notCovered: 0 },
   perSource: {},
   statusTransitions: 0,
+  listedTransitions: 0,
   reminders: { sent: 0, failed: 0, skipped: 0 },
   discovery: { candidatesSeen: 0, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, rejectedWrongType: 0, fetchFailed: [], dbErrors: [], queueCapped: false, deferredCandidates: 0 },
   catalogue: { seen: 0, stored: 0, linked: 0 },
@@ -186,12 +190,14 @@ export async function runIngestionStep(startedBy = "cron"): Promise<IngestionSte
 
 async function runPrepare(checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
   const transitions = await syncIpoStatuses();
-  const reminders = await notifyWatchersOfTransitions(transitions);
+  const listings = await syncIpoListings();
+  const reminders = await notifyWatchersOfTransitions([...transitions, ...listings]);
   return nextStage({
     ...checkpoint,
     summary: {
       ...checkpoint.summary,
       statusTransitions: transitions.length,
+      listedTransitions: listings.length,
       reminders,
     },
   }, "catalogue");

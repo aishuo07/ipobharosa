@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { NseOfficialSource, parseNseDetail, selectHistoricalNseIssue, selectNseIssue } from "./nse";
+import { NseOfficialSource, parseNseDetail, selectHistoricalNseIssue, selectNseIssue, selectNseListing } from "./nse";
 
 const catalogue = [
   {
@@ -85,6 +85,34 @@ describe("NSE official adapter parsing", () => {
     expect(selectHistoricalNseIssue([
       ...historicalCatalogue,
       { ...historicalCatalogue[0], company: "Teja Engineering Projects Limited", symbol: "OTHER" },
+    ], "Teja Engineering")).toBeNull();
+  });
+
+  it("resolves a real listing price + date once NSE has published them", () => {
+    const listing = selectNseListing([
+      ...historicalCatalogue,
+      {
+        company: "Milky Mist Dairy Food Limited",
+        ipoEndDate: "13-AUG-2026",
+        issuePrice: "   140",
+        listingDate: "18-AUG-2026",
+        securityType: "EQ",
+        symbol: "MILKYMIST",
+      },
+    ], "Milky Mist Dairy Food Ltd");
+    expect(listing).toEqual({ listingPrice: 140, listingDate: new Date(Date.UTC(2026, 7, 18)) });
+  });
+
+  it("returns null before NSE publishes a listing price (issuePrice is '-')", () => {
+    expect(selectNseListing([
+      { company: "Credent Connect N Care Limited", issuePrice: "-", listingDate: "-", securityType: "SME", symbol: "CREDENT" },
+    ], "Credent Connect N Care Limited")).toBeNull();
+  });
+
+  it("returns null when the historical row cannot be uniquely matched", () => {
+    expect(selectNseListing([
+      { company: "Teja Engineering Industries Limited", issuePrice: "220", listingDate: "06-JUL-2026", symbol: "TEJA" },
+      { company: "Teja Engineering Projects Limited", issuePrice: "220", listingDate: "06-JUL-2026", symbol: "OTHER" },
     ], "Teja Engineering")).toBeNull();
   });
 

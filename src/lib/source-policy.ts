@@ -18,6 +18,7 @@ const SOURCE_POLICIES: SourcePolicy[] = [
   { key: "sahi", name: "Sahi", purpose: "legacy-subscription", status: "PERMISSION_REQUIRED", productionEnabled: false, reason: "Disabled for new collection until commercial/public reuse permission is confirmed" },
   { key: "ipoji", name: "IPO Ji", purpose: "gmp", status: "ALLOWLIST_REQUIRED", productionEnabled: false, reason: "Unofficial GMP provider; explicit launch allowlist and usage review required" },
   { key: "investorgain", name: "InvestorGain", purpose: "gmp", status: "ALLOWLIST_REQUIRED", productionEnabled: false, reason: "Unofficial GMP provider; explicit launch allowlist and usage review required" },
+  { key: "ipotrack", name: "IPO Track", purpose: "gmp", status: "ALLOWLIST_REQUIRED", productionEnabled: false, reason: "Unofficial GMP provider; explicit launch allowlist and usage review required" },
 ];
 
 export function sourcePolicies(): SourcePolicy[] {

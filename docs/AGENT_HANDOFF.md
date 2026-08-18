@@ -186,8 +186,10 @@ auditable correction path.
 | Bank sites | Secondary confirmation | Never the sole source of truth |
 | IPOWatch | Historical unofficial GMP provenance | Hard-disabled; terms conflict for commercial use |
 | Sahi | Historical unofficial GMP provenance | Hard-disabled; written permission required |
-| IPOJi | Optional unofficial GMP provider | Disabled unless explicitly approved in `GMP_SOURCE_ALLOWLIST` |
-| InvestorGain | Optional unofficial GMP provider | Disabled unless explicitly approved in `GMP_SOURCE_ALLOWLIST` |
+ | IPOJi | Optional unofficial GMP provider | Disabled unless explicitly approved in `GMP_SOURCE_ALLOWLIST` |
+ | InvestorGain | Optional unofficial GMP provider | Disabled unless explicitly approved in `GMP_SOURCE_ALLOWLIST` |
+ | IPO Track | Optional unofficial GMP provider | Disabled unless explicitly approved in `GMP_SOURCE_ALLOWLIST` |
+ | NSE past-issues | Official listing price/date (CLOSED→LISTED) | Enabled; powers `syncIpoListings` |
 
 Historical GMP observations remain in the database for provenance. A disabled
 source must not be rendered as fresh/current merely because an old row exists.

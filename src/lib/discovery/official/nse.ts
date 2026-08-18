@@ -1,4 +1,4 @@
-import { extractHttpsUrl, issuerNamesMatch, normalizeIssuerName, parseDecimal, parseIndianDate, parseInteger, parsePriceBand, splitManagers } from "./normalization";
+import { extractHttpsUrl, issuerNamesMatch, normalizeIssuerName, parseDecimal, parseFlexibleIndianDate, parseIndianDate, parseInteger, parsePriceBand, splitManagers } from "./normalization";
 import type { OfficialDemandSnapshot, OfficialDocument, OfficialEvidenceResult, OfficialIpoEnrichment, OfficialIpoEvidence, OfficialIpoSource } from "./types";
 import { withTransientRetries } from "@/lib/ingestion/source-operation";
 
@@ -35,6 +35,7 @@ export type NseHistoricalIssue = {
   priceRange?: string | null;
   securityType?: string;
   symbol?: string;
+  listingDate?: string;
 };
 
 type NseDetail = {
@@ -107,6 +108,29 @@ export function selectHistoricalNseIssue(rows: NseHistoricalIssue[], companyName
   if (exact.length > 1) return null;
   const compatible = named.filter((row) => issuerNamesMatch(row.company ?? row.companyName!, companyName));
   return compatible.length === 1 ? compatible[0] : null;
+}
+
+export type NseListing = {
+  listingPrice: number;
+  listingDate: Date;
+};
+
+/**
+ * Resolves the real listing price + listing date for a company from NSE's
+ * public past-issues catalogue. Returns null when the issue is closed but
+ * not yet listed (NSE shows "-" for issuePrice before listing) or the row
+ * cannot be uniquely matched.
+ */
+export function selectNseListing(rows: NseHistoricalIssue[], companyName: string): NseListing | null {
+  const issue = selectHistoricalNseIssue(rows, companyName);
+  if (!issue) return null;
+  const rawPrice = issue.issuePrice?.trim();
+  if (!rawPrice || rawPrice === "-") return null;
+  const listingPrice = parseDecimal(rawPrice);
+  if (listingPrice === null || listingPrice <= 0) return null;
+  const listingDate = issue.listingDate ? parseFlexibleIndianDate(issue.listingDate) : null;
+  if (!listingDate) return null;
+  return { listingPrice, listingDate };
 }
 
 function historicalAsCatalogueIssue(issue: NseHistoricalIssue): NseCatalogueIssue {
@@ -241,6 +265,20 @@ export class NseOfficialSource implements OfficialIpoSource {
       return { status: "FOUND", evidence: parseNseDetail(issue, detail) };
     } catch (error) {
       return { status: "UNAVAILABLE", reason: (error as Error).message };
+    }
+  }
+
+  /**
+   * Looks up the real listing price + date from NSE's public past-issues
+   * catalogue. Used to finish CLOSED -> LISTED with real data once NSE
+   * publishes the post-allotment issue price.
+   */
+  async findListing(companyName: string): Promise<NseListing | null> {
+    try {
+      const historicalCatalogue = await this.getHistoricalCatalogue();
+      return selectNseListing(historicalCatalogue, companyName);
+    } catch (error) {
+      throw new Error(`NSE historical catalogue unavailable: ${(error as Error).message}`);
     }
   }
 }

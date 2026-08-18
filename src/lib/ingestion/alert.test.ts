@@ -13,6 +13,7 @@ function makeSummary(overrides: Partial<IngestionSummary> = {}): IngestionSummar
       ipoji: { success: 5, failure: 0, notYetAvailable: 0, notCovered: 0 },
     },
     statusTransitions: 0,
+    listedTransitions: 0,
     reminders: { sent: 0, failed: 0, skipped: 0 },
     discovery: { candidatesSeen: 0, alreadyTracked: 0, autoPublished: 0, draftsCreated: 0, quarantined: 0, rejectedWrongType: 0, fetchFailed: [], dbErrors: [], queueCapped: false, deferredCandidates: 0 },
     catalogue: { seen: 0, stored: 0, linked: 0 },
