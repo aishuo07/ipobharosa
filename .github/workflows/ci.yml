@@ -48,6 +48,30 @@ jobs:
       - run: npm run db:seed:dev
       - run: npm run build
 
+  mobile-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+      - name: Typecheck mobile app
+        working-directory: mobile
+        run: npx tsc --noEmit
+      - name: Lint mobile app
+        working-directory: mobile
+        run: npm run lint
+      - name: Run mobile tests
+        working-directory: mobile
+        run: npx vitest run
+      - name: Verify mobile Android bundle
+        working-directory: mobile
+        run: npx expo export --platform android && rm -rf dist
+
   migration-smoke-test:
     runs-on: ubuntu-latest
     timeout-minutes: 10

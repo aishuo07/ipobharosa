@@ -24,6 +24,14 @@ release workflow, and small-PR delivery sequence.
 - PostgreSQL (Neon, via Vercel) + Prisma 7 (driver adapter: `@prisma/adapter-pg`)
 - Vitest for ingestion/normalization logic
 
+## Mobile app
+
+A companion Expo / React Native app for Android + iOS lives in
+[`mobile/`](mobile/README.md). It reads the public board API
+(`GET /api/public/board`), stores PAN cards locally on-device, and checks
+allotment via official registrar endpoints (MUFG/Link Intime) or official
+registrar portal links for CAPTCHA-gated registrars.
+
 ## Getting started
 
 ```bash
