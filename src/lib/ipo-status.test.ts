@@ -92,7 +92,7 @@ describe("syncIpoStatuses idempotency", () => {
     expect(repeatAfterClose).toEqual([]);
   });
 
-  it("never touches LISTED IPOs — CLOSED -> LISTED stays manual", async () => {
+  it("never touches CLOSED IPOs — CLOSED -> LISTED is handled separately by syncIpoListings", async () => {
     store.push(
       makeIpo({
         id: "1",

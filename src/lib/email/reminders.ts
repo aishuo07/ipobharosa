@@ -18,6 +18,10 @@ const TEMPLATES: Record<string, (companyName: string) => { subject: string; body
     subject: `${name} IPO has closed`,
     body: `${name}'s IPO bidding window just closed. Allotment is next — we'll email you again once that's finalized.`,
   }),
+  "CLOSED->LISTED": (name) => ({
+    subject: `${name} has listed on the exchange`,
+    body: `${name} has listed. Check its listing price and how it compares to the IPO price band on IPOBharosa.`,
+  }),
 };
 
 function sleep(ms: number): Promise<void> {
