@@ -3,7 +3,8 @@ import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpac
 import { fetchBoard } from "@/src/lib/api";
 import type { BoardIpo } from "@/src/lib/types";
 import { loadPanCards, type PanCard } from "@/src/lib/pan-store";
-import { checkMufgAllotment, registrarCheck, type AllotmentResult } from "@/src/lib/allotment";
+import { checkMufgAllotmentForPans, registrarCheck, type AllotmentResult } from "@/src/lib/allotment";
+import { cacheAllotmentResult, loadAllotmentCache, type IpoAllotmentCache } from "@/src/lib/allotment-store";
 
 const STATUS_LABELS: Record<AllotmentResult["status"], string> = {
   ALLOTTED: "Allotted",
@@ -19,24 +20,30 @@ const STATUS_COLORS: Record<AllotmentResult["status"], string> = {
   ERROR: "#B91C1C",
 };
 
+function statusCounts(results: AllotmentResult[]) {
+  const counts = { ALLOTTED: 0, NOT_ALLOTTED: 0, NOT_APPLIED: 0, ERROR: 0 };
+  for (const result of results) counts[result.status]++;
+  return counts;
+}
+
 export default function AllotmentScreen() {
   const [ipos, setIpos] = useState<BoardIpo[]>([]);
   const [cards, setCards] = useState<PanCard[]>([]);
+  const [cache, setCache] = useState<IpoAllotmentCache>({});
   const [selectedIpoId, setSelectedIpoId] = useState<string | null>(null);
-  const [selectedPan, setSelectedPan] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
-  const [result, setResult] = useState<AllotmentResult | null>(null);
+  const [checkingFor, setCheckingFor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     void (async () => {
       try {
-        const [board, pans] = await Promise.all([fetchBoard("ALL"), loadPanCards()]);
+        const [board, pans, allotmentCache] = await Promise.all([fetchBoard("ALL"), loadPanCards(), loadAllotmentCache()]);
         const eligible = board.filter((ipo) => ipo.status === "CLOSED" || ipo.status === "LISTED");
         setIpos(eligible);
         setCards(pans);
+        setCache(allotmentCache);
         if (eligible[0]) setSelectedIpoId(eligible[0].id);
-        if (pans[0]) setSelectedPan(pans[0].pan);
       } finally {
         setLoading(false);
       }
@@ -45,22 +52,32 @@ export default function AllotmentScreen() {
 
   const selectedIpo = ipos.find((ipo) => ipo.id === selectedIpoId) ?? null;
 
-  async function handleCheck() {
-    if (!selectedIpo || !selectedPan) return;
+  async function handleCheck(ipo: BoardIpo) {
+    if (cards.length === 0 || checking) return;
     setChecking(true);
-    setResult(null);
+    setCheckingFor(ipo.id);
     try {
-      setResult(await checkMufgAllotment(selectedIpo, selectedPan));
+      const results = await checkMufgAllotmentForPans(
+        ipo,
+        cards.map((card) => card.pan),
+      );
+      let nextCache = cache;
+      for (const result of results) {
+        nextCache = await cacheAllotmentResult(ipo.id, result);
+      }
+      setCache(nextCache);
     } finally {
       setChecking(false);
+      setCheckingFor(null);
     }
   }
 
-  function openRegistrar() {
-    if (!selectedIpo) return;
-    const check = registrarCheck(selectedIpo);
+  function openRegistrar(ipo: BoardIpo) {
+    const check = registrarCheck(ipo);
     if (check.portalUrl) void Linking.openURL(check.portalUrl);
   }
+
+  const cachedResults = (ipo: BoardIpo): AllotmentResult[] => Object.values(cache[ipo.id] ?? {});
 
   if (loading) {
     return (
@@ -72,94 +89,75 @@ export default function AllotmentScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.label}>IPO</Text>
-      <View style={styles.pickerBox}>
-        {ipos.length === 0 ? (
-          <Text style={styles.muted}>No closed/listed IPOs available right now.</Text>
-        ) : (
-          ipos.slice(0, 8).map((ipo) => (
+      <Text style={styles.heading}>Allotment status</Text>
+      <Text style={styles.subheading}>
+        {cards.length === 0
+          ? "Save a PAN card in the PAN Cards tab first, then check each IPO."
+          : `Checking allotment for ${cards.length} saved PAN card${cards.length === 1 ? "" : "s"}. Results are saved on this device, so you only need to check each IPO once.`}
+      </Text>
+
+      {ipos.length === 0 ? (
+        <Text style={styles.muted}>No closed/listed IPOs available right now.</Text>
+      ) : (
+        ipos.map((ipo) => {
+          const results = cachedResults(ipo);
+          const counts = statusCounts(results);
+          const isSelected = ipo.id === selectedIpoId;
+          const isChecking = checking && checkingFor === ipo.id;
+          const isAutomatable = registrarCheck(ipo).automatable;
+          return (
             <TouchableOpacity
               key={ipo.id}
+              style={[styles.ipoCard, isSelected && styles.ipoCardActive]}
               onPress={() => setSelectedIpoId(ipo.id)}
-              style={[styles.option, selectedIpoId === ipo.id && styles.optionActive]}
             >
-              <Text style={[styles.optionText, selectedIpoId === ipo.id && styles.optionTextActive]}>
-                {ipo.companyName}
-              </Text>
-              <Text style={[styles.optionMeta, selectedIpoId === ipo.id && styles.optionTextActive]}>
-                {ipo.registrar ?? "Registrar TBD"}
-              </Text>
-            </TouchableOpacity>
-          ))
-        )}
-      </View>
+              <View style={styles.ipoHeader}>
+                <Text style={styles.ipoName}>{ipo.companyName}</Text>
+                <Text style={styles.ipoMeta}>{ipo.registrar ?? "Registrar TBD"}</Text>
+              </View>
 
-      <Text style={styles.label}>PAN card</Text>
-      <View style={styles.pickerBox}>
-        {cards.length === 0 ? (
-          <Text style={styles.muted}>Save a PAN card in the PAN Cards tab first.</Text>
-        ) : (
-          cards.map((card) => (
-            <TouchableOpacity
-              key={card.id}
-              onPress={() => setSelectedPan(card.pan)}
-              style={[styles.option, selectedPan === card.pan && styles.optionActive]}
-            >
-              <Text style={[styles.optionText, selectedPan === card.pan && styles.optionTextActive]}>
-                {card.pan}
-              </Text>
-              <Text style={[styles.optionMeta, selectedPan === card.pan && styles.optionTextActive]}>
-                {card.holderName || "Unnamed"}
-              </Text>
-            </TouchableOpacity>
-          ))
-        )}
-      </View>
+              {results.length > 0 && (
+                <View style={styles.panList}>
+                  {results.map((result) => (
+                    <View key={result.pan} style={styles.panRow}>
+                      <Text style={styles.panText}>{result.pan}</Text>
+                      <Text style={[styles.panStatus, { color: STATUS_COLORS[result.status] }]}>
+                        {STATUS_LABELS[result.status]}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
 
-      {selectedIpo && (
+              <View style={styles.ipoFooter}>
+                <Text style={styles.ipoSummary}>
+                  {results.length === 0
+                    ? "Not checked yet"
+                    : `${counts.ALLOTTED} allotted · ${counts.NOT_ALLOTTED} not · ${counts.NOT_APPLIED} no application`}
+                </Text>
+                {isChecking ? (
+                  <ActivityIndicator size="small" color="#0E6B3A" />
+                ) : isAutomatable ? (
+                  <TouchableOpacity style={styles.checkButton} onPress={() => void handleCheck(ipo)}>
+                    <Text style={styles.checkButtonText}>Check all PANs</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity style={styles.checkButton} onPress={() => openRegistrar(ipo)}>
+                    <Text style={styles.checkButtonText}>Open registrar</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </TouchableOpacity>
+          );
+        })
+      )}
+
+      {selectedIpo && registrarCheck(selectedIpo).automatable && (
         <View style={styles.sourceNote}>
           <Text style={styles.sourceNoteText}>
-            Registrar: <Text style={styles.sourceNoteStrong}>{selectedIpo.registrar ?? "Unknown"}</Text>
-            {"\n"}
             {registrarCheck(selectedIpo).automatable
-              ? "This registrar (MUFG / Link Intime) supports automatic allotment lookup by PAN."
-              : "This registrar uses a CAPTCHA-protected portal. Tap below to check on the official registrar site."}
-          </Text>
-        </View>
-      )}
-
-      <TouchableOpacity
-        style={[styles.checkButton, (!selectedIpo || !selectedPan) && styles.checkButtonDisabled]}
-        onPress={handleCheck}
-        disabled={!selectedIpo || !selectedPan || checking}
-      >
-        <Text style={styles.checkButtonText}>
-          {checking ? "Checking…" : "Check allotment"}
-        </Text>
-      </TouchableOpacity>
-
-      {selectedIpo && (
-        <TouchableOpacity style={styles.linkButton} onPress={openRegistrar}>
-          <Text style={styles.linkButtonText}>Open official registrar portal</Text>
-        </TouchableOpacity>
-      )}
-
-      {result && (
-        <View style={styles.resultBox}>
-          <Text style={[styles.resultStatus, { color: STATUS_COLORS[result.status] }]}>
-            {STATUS_LABELS[result.status]}
-          </Text>
-          {result.applicant ? <Text style={styles.resultRow}>Applicant: {result.applicant}</Text> : null}
-          {result.applied !== undefined && result.applied !== "" ? (
-            <Text style={styles.resultRow}>Applied: {result.applied}</Text>
-          ) : null}
-          {result.allotted !== undefined && result.allotted !== "" && result.status !== "ERROR" ? (
-            <Text style={styles.resultRow}>Allotted: {result.allotted}</Text>
-          ) : null}
-          {result.error ? <Text style={styles.resultError}>{result.error}</Text> : null}
-          <Text style={styles.resultNote}>
-            Result reflects the official registrar lookup for {result.companyName}. Always confirm large decisions
-            on the official registrar site.
+              ? "MUFG / Link Intime supports automatic allotment lookup by PAN. Tap \"Check all PANs\" and results will be cached on this device."
+              : "This registrar uses a CAPTCHA-protected portal. Use the registrar's official site to check allotment."}
           </Text>
         </View>
       )}
@@ -181,115 +179,98 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  label: {
-    fontSize: 13,
-    color: "#4B5563",
-    fontWeight: "700",
-    marginBottom: 6,
-    marginTop: 4,
-  },
-  pickerBox: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    marginBottom: 14,
-  },
-  option: {
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#E5E7EB",
-  },
-  optionActive: {
-    backgroundColor: "#E8F5EE",
-    borderRadius: 8,
-    paddingHorizontal: 8,
-  },
-  optionText: {
-    fontSize: 15,
+  heading: {
+    fontSize: 22,
+    fontWeight: "800",
     color: "#111827",
-    fontWeight: "500",
+    marginBottom: 4,
   },
-  optionTextActive: {
-    color: "#0E6B3A",
-    fontWeight: "700",
-  },
-  optionMeta: {
-    fontSize: 12,
+  subheading: {
+    fontSize: 13,
     color: "#6B7280",
-    marginTop: 2,
+    lineHeight: 19,
+    marginBottom: 16,
   },
   muted: {
     color: "#6B7280",
     fontSize: 13,
     paddingVertical: 12,
   },
+  ipoCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  ipoCardActive: {
+    borderColor: "#0E6B3A",
+  },
+  ipoHeader: {
+    marginBottom: 8,
+  },
+  ipoName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  ipoMeta: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 2,
+  },
+  ipoFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+  ipoSummary: {
+    fontSize: 13,
+    color: "#6B7280",
+  },
+  panList: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#E5E7EB",
+    paddingTop: 8,
+    marginBottom: 8,
+  },
+  panRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 5,
+  },
+  panText: {
+    fontSize: 14,
+    color: "#111827",
+    fontWeight: "600",
+  },
+  panStatus: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  checkButton: {
+    backgroundColor: "#0E6B3A",
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  checkButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+  },
   sourceNote: {
     backgroundColor: "#FFF7ED",
     borderRadius: 10,
     padding: 12,
-    marginBottom: 14,
+    marginTop: 8,
   },
   sourceNoteText: {
     fontSize: 13,
     color: "#374151",
     lineHeight: 19,
-  },
-  sourceNoteStrong: {
-    fontWeight: "700",
-  },
-  checkButton: {
-    backgroundColor: "#0E6B3A",
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  checkButtonDisabled: {
-    opacity: 0.5,
-  },
-  checkButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  linkButton: {
-    marginTop: 10,
-    paddingVertical: 13,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#0E6B3A",
-    borderRadius: 10,
-  },
-  linkButtonText: {
-    color: "#0E6B3A",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  resultBox: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 16,
-  },
-  resultStatus: {
-    fontSize: 20,
-    fontWeight: "800",
-    marginBottom: 8,
-  },
-  resultRow: {
-    fontSize: 14,
-    color: "#111827",
-    marginBottom: 4,
-  },
-  resultError: {
-    fontSize: 13,
-    color: "#B91C1C",
-    marginTop: 4,
-  },
-  resultNote: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginTop: 10,
-    lineHeight: 17,
   },
 });

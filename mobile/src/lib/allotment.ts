@@ -146,6 +146,50 @@ function findCompanyId(companies: MufgCompany[], companyName: string): string | 
   return best && best.overlap >= 2 ? best.company.id : null;
 }
 
+async function mufgSearch(companyId: string, pan: string): Promise<Record<string, unknown> | null> {
+  const response = await fetch(MUFG_ENDPOINTS.search, {
+    method: "POST",
+    headers: {
+      "User-Agent": "IPOBharosa-mobile/1.0",
+      "X-Requested-With": "XMLHttpRequest",
+      Origin: MUFG_ENDPOINTS.origin,
+      Referer: MUFG_ENDPOINTS.referer,
+      "Content-Type": "application/json; charset=UTF-8",
+      Accept: "application/json, text/javascript, */*; q=0.01",
+    },
+    body: JSON.stringify({
+      clientid: companyId,
+      PAN: pan,
+      IFSC: "",
+      CHKVAL: "1",
+      token: "",
+    }),
+  });
+  if (!response.ok) throw new Error(`MUFG lookup HTTP ${response.status}`);
+  const data = unwrapD(await response.json());
+  const rows = Array.isArray(data) ? data : (data as { Table?: unknown[] })?.Table ?? [];
+  return rows.length ? (rows[0] as Record<string, unknown>) : null;
+}
+
+function resultFromRow(ipo: BoardIpo, pan: string, row: Record<string, unknown>): AllotmentResult {
+  const applied = pick(row, ["APPLIED", "APPLIED_QTY", "SHARES_APPLIED", "SHARES", "QTY"]);
+  const allotted = pick(row, ["ALLOT", "ALLOTED", "ALLOTTED", "SHARES_ALLOTTED", "ALLOT_QTY"]);
+  const amount = pick(row, ["AMTADJ", "AMOUNTADJUSTED", "AMT_ADJUSTED", "AMOUNT"]);
+  const applicant = pick(row, ["NAME1", "NAME", "APPLICANTNAME", "APPLICANT_NAME"]);
+  const allottedNum = parseInt(String(allotted ?? "0").replace(/[^0-9-]/g, ""), 10) || 0;
+  return {
+    pan,
+    companyName: ipo.companyName,
+    registrar: ipo.registrar,
+    status: allottedNum > 0 ? "ALLOTTED" : "NOT_ALLOTTED",
+    applied: applied ?? "",
+    allotted: allotted ?? "0",
+    amount: amount ?? "",
+    applicant: applicant ?? "",
+    checkedAt: new Date().toISOString(),
+  };
+}
+
 export async function checkMufgAllotment(ipo: BoardIpo, pan: string): Promise<AllotmentResult> {
   const base: AllotmentResult = {
     pan,
@@ -160,44 +204,49 @@ export async function checkMufgAllotment(ipo: BoardIpo, pan: string): Promise<Al
     if (!companyId) {
       return { ...base, error: "Company not found in MUFG list (allotment may not be out yet)" };
     }
-    const response = await fetch(MUFG_ENDPOINTS.search, {
-      method: "POST",
-      headers: {
-        "User-Agent": "IPOBharosa-mobile/1.0",
-        "X-Requested-With": "XMLHttpRequest",
-        Origin: MUFG_ENDPOINTS.origin,
-        Referer: MUFG_ENDPOINTS.referer,
-        "Content-Type": "application/json; charset=UTF-8",
-        Accept: "application/json, text/javascript, */*; q=0.01",
-      },
-      body: JSON.stringify({
-        clientid: companyId,
-        PAN: pan,
-        IFSC: "",
-        CHKVAL: "1",
-        token: "",
-      }),
-    });
-    if (!response.ok) return { ...base, error: `MUFG lookup HTTP ${response.status}` };
-    const data = unwrapD(await response.json());
-    const rows = Array.isArray(data) ? data : (data as { Table?: unknown[] })?.Table ?? [];
-    if (!rows.length) return { ...base, status: "NOT_APPLIED" };
-    const row = rows[0] as Record<string, unknown>;
-    const applied = pick(row, ["APPLIED", "APPLIED_QTY", "SHARES_APPLIED", "SHARES", "QTY"]);
-    const allotted = pick(row, ["ALLOT", "ALLOTED", "ALLOTTED", "SHARES_ALLOTTED", "ALLOT_QTY"]);
-    const amount = pick(row, ["AMTADJ", "AMOUNTADJUSTED", "AMT_ADJUSTED", "AMOUNT"]);
-    const applicant = pick(row, ["NAME1", "NAME", "APPLICANTNAME", "APPLICANT_NAME"]);
-    const allottedNum = parseInt(String(allotted ?? "0").replace(/[^0-9-]/g, ""), 10) || 0;
-    return {
-      ...base,
-      status: allottedNum > 0 ? "ALLOTTED" : "NOT_ALLOTTED",
-      applied: applied ?? "",
-      allotted: allotted ?? "0",
-      amount: amount ?? "",
-      applicant: applicant ?? "",
-    };
+    const row = await mufgSearch(companyId, pan);
+    if (!row) return { ...base, status: "NOT_APPLIED" };
+    return resultFromRow(ipo, pan, row);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return { ...base, error: message };
+  }
+}
+
+/**
+ * Checks allotment for every saved PAN against one IPO in a single batch.
+ * The MUFG company list is fetched once and reused for all PANs. Each
+ * result should be cached (via the caller) keyed by PAN for the next visit.
+ */
+export async function checkMufgAllotmentForPans(ipo: BoardIpo, pans: string[]): Promise<AllotmentResult[]> {
+  if (pans.length === 0) return [];
+  const base = (pan: string): AllotmentResult => ({
+    pan,
+    companyName: ipo.companyName,
+    registrar: ipo.registrar,
+    status: "ERROR",
+    checkedAt: new Date().toISOString(),
+  });
+  try {
+    const companies = await mufgCompanyList();
+    const companyId = findCompanyId(companies, ipo.companyName);
+    if (!companyId) {
+      const error = "Company not found in MUFG list (allotment may not be out yet)";
+      return pans.map((pan) => ({ ...base(pan), error }));
+    }
+    const results: AllotmentResult[] = [];
+    for (const pan of pans) {
+      try {
+        const row = await mufgSearch(companyId, pan);
+        results.push(row ? resultFromRow(ipo, pan, row) : { ...base(pan), status: "NOT_APPLIED" });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        results.push({ ...base(pan), error: message });
+      }
+    }
+    return results;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return pans.map((pan) => ({ ...base(pan), error: message }));
   }
 }
