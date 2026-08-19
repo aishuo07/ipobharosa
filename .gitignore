@@ -53,5 +53,7 @@ next-env.d.ts
 skills-lock.json
 IPOBharosa.apk
 IPOBharosa-fixed.apk
+IPOBharosa-new.apk
+/logo/
 eas-build*.log
 expogo-qr.png

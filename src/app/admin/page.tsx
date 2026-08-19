@@ -9,7 +9,7 @@ import { filingEvidenceClass, filingEvidenceLabel, filingSourceHost } from "@/li
 import { getEmailReadiness } from "@/lib/email/readiness";
 import { resolveSiteUrl } from "@/lib/site-url";
 import { sourcePolicies } from "@/lib/source-policy";
-import { acceptOfficialCorrection, approveIpo, ignoreOfficialIncident, rejectIpo, retryOfficialVerification } from "./actions";
+import { acceptOfficialCorrection, approveIpo, ignoreOfficialIncident, rejectIpo, retryOfficialVerification, sendManualPush } from "./actions";
 
 export const revalidate = 0;
 
@@ -57,7 +57,7 @@ export default async function AdminPage({
   if (!session?.user) redirect(loginPathFor("/admin"));
   if (!isAdminEmail(session?.user?.email)) notFound();
 
-  const [stateCounts, sources, operationHealth, recentRuns, reviewQueue, openIncidents, excludedIssueTypes] = await Promise.all([
+  const [stateCounts, sources, operationHealth, recentRuns, reviewQueue, openIncidents, excludedIssueTypes, pushDeviceCount, recentBroadcasts] = await Promise.all([
     prisma.ipo.groupBy({ by: ["publicationState"], _count: true }),
     prisma.gmpSource.findMany({ include: { health: true }, orderBy: { name: "asc" } }),
     prisma.sourceOperationHealth.findMany({ orderBy: [{ source: "asc" }, { operation: "asc" }] }),
@@ -99,6 +99,8 @@ export default async function AdminPage({
       },
       orderBy: { updatedAt: "desc" },
     }),
+    prisma.pushDevice.count({ where: { disabled: false } }),
+    prisma.pushBroadcast.findMany({ orderBy: { createdAt: "desc" }, take: 5 }),
   ]);
 
   const countOf = (state: string) => stateCounts.find((s) => s.publicationState === state)?._count ?? 0;
@@ -179,6 +181,42 @@ export default async function AdminPage({
         {!emailReadiness.enabled && <div className="admin-flash admin-flash-warning" role="status">
           Email sign-in and watchlist reminders stay hidden until: {emailReadiness.reasons.join("; ")}.
         </div>}
+
+        <div className="review-section-head">
+          <div><h2>Push notifications</h2><p>Send the day&apos;s IPO update straight to every installed app. A scheduled daily push also runs automatically and is shown here when sent.</p></div>
+          <span className="ui-badge ui-badge-neutral">{pushDeviceCount} device{pushDeviceCount === 1 ? "" : "s"}</span>
+        </div>
+        <section className="admin-card">
+          <form action={sendManualPush} className="push-form">
+            <label className="review-field"><span>Notification title</span>
+              <input name="title" maxLength={80} required placeholder="e.g. Today's IPOs — 20 Aug" />
+            </label>
+            <label className="review-field"><span>Message</span>
+              <textarea name="body" maxLength={400} required rows={4} placeholder="Opening: … · Closing: … · Allotment: … · Listing: …" />
+            </label>
+            <label className="review-field"><span>Category (data tag)</span>
+              <select name="target" defaultValue="manual">
+                <option value="manual">General update</option>
+                <option value="allotment">Allotment alert</option>
+              </select>
+            </label>
+            <button type="submit" className="ui-button ui-button-primary">Send push to all devices</button>
+          </form>
+          {recentBroadcasts.length > 0 && (
+            <div className="push-history" aria-label="Recent pushes">
+              <h3>Recent broadcasts</h3>
+              {recentBroadcasts.map((broadcast) => (
+                <div key={broadcast.id} className="push-history-row">
+                  <div>
+                    <strong>{broadcast.title}</strong>
+                    <span>{broadcast.broadcastDate.toISOString().slice(0, 10)} · {broadcast.kind} · {broadcast.sentCount} delivered{broadcast.failedCount ? ` · ${broadcast.failedCount} failed` : ""}</span>
+                  </div>
+                  <p>{broadcast.body}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
         <div className="review-section-head">
           <div><h2>Official-source incidents</h2><p>Repeated identical conflicts are grouped. Published drift never changes public data until you approve it.</p></div>

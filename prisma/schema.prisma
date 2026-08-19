@@ -723,3 +723,47 @@ model DigestDelivery {
   @@unique([digestDate, recipient])
   @@index([status, digestDate])
 }
+
+// ---------- push notifications ----------
+
+// A device that has registered an Expo push token (typically an installed
+// APK). Tokens are scoped per user of the Expo push service and are how the
+// server reaches the app even when it's not open.
+model PushDevice {
+  id         String   @id @default(uuid())
+  token      String   @unique
+  platform   String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  disabled   Boolean  @default(false)
+
+  @@index([disabled, lastSeenAt])
+}
+
+// Dedup for allotment-launch announcements: an IPO is only announced once,
+// no matter how many 15-minute cron runs observe it in the catalogue.
+model AllotmentAnnouncement {
+  id          String   @id @default(uuid())
+  ipoId       String   @unique
+  companyName String
+  registrar   String?
+  announcedAt DateTime @default(now())
+}
+
+// One row per broadcast send (daily IPO push, manual admin blast). Tracks
+// delivery the same way DigestDelivery does so a broadcast never fires twice
+// for the same (kind, date).
+model PushBroadcast {
+  id         String   @id @default(uuid())
+  kind       String // "daily" | "manual"
+  broadcastDate DateTime
+  title      String
+  body       String
+  data       Json?
+  sentCount  Int      @default(0)
+  failedCount Int     @default(0)
+  createdAt  DateTime @default(now())
+
+  @@unique([kind, broadcastDate])
+  @@index([createdAt])
+}

@@ -174,3 +174,17 @@ export async function ignoreOfficialIncident(formData: FormData) {
   });
   revalidatePath("/admin");
 }
+
+export async function sendManualPush(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const title = (formData.get("title") as string | null)?.trim();
+  const body = (formData.get("body") as string | null)?.trim();
+  const target = formData.get("target") as string | null;
+
+  if (!title || !body) throw new Error("Title and message are required.");
+
+  const { sendPushBroadcast } = await import("@/lib/push/expo");
+  const result = await sendPushBroadcast({ title, body, data: { type: target === "allotment" ? "allotment" : "manual" } });
+  if (result.failed > 0 && result.accepted === 0) throw new Error("Push send failed for all devices.");
+  revalidatePath("/admin");
+}
