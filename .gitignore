@@ -51,3 +51,7 @@ next-env.d.ts
 /.claude
 /.windsurf
 skills-lock.json
+IPOBharosa.apk
+IPOBharosa-fixed.apk
+eas-build*.log
+expogo-qr.png
