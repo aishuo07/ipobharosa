@@ -15,10 +15,6 @@
     {
       "path": "/api/cron/refresh-catalogues",
       "schedule": "0 0 * * *"
-    },
-    {
-      "path": "/api/cron/allotment-launch",
-      "schedule": "30 */6 * * *"
     }
   ]
 }
