@@ -221,6 +221,14 @@ export default function IpoBoard({
       <div className="masthead">
         <div className="masthead-top">
           <div className="brand">
+            <span className="brand-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <path d="M3 20V11" />
+                <path d="M9 20V5" />
+                <path d="M15 20v-7" />
+                <path d="M21 20V8" />
+              </svg>
+            </span>
             <span className="wordmark">IPOBharosa</span>
             <span className="eyebrow">Lot Size · GMP · Dates · Allotment</span>
           </div>
@@ -253,6 +261,7 @@ export default function IpoBoard({
         <div>
           <p className="board-kicker">Indian IPO tracker</p>
           <h1 id="board-title">Dates, demand and GMP—without the noise.</h1>
+          <p className="board-sub">Every Indian mainboard &amp; SME IPO, verified against official sources every hour.</p>
         </div>
         <p className="board-coverage">
           <strong>{ipos.length} IPOs</strong> with complete terms · {filings.length} official filings · market signals checked hourly

@@ -1,0 +1,45 @@
+Resolved "preview" environment for the build. Learn more: https://docs.expo.dev/eas/environment-variables/#setting-the-environment-for-your-builds
+No environment variables with visibility "Plain text" and "Sensitive" found for the "preview" environment on EAS.
+
+
+
+✔ Using remote Android credentials (Expo server)
+✔ Using Keystore from configuration: Build Credentials 4hRvYfyOqW (default)
+
+Compressing project files and uploading to EAS Build. Learn more: https://expo.fyi/eas-build-archive
+- Compressing project files
+- Uploading to EAS Build (0 / 34.9 MB)
+✔ Uploaded to EAS 10s
+- Computing project fingerprint
+✔ Computed project fingerprint
+
+See logs: https://expo.dev/accounts/aishu007s-team/projects/ipobharosa/builds/25a1dc84-2318-48df-8f48-bc70c7b4d2d5
+
+Waiting for build to complete. You can press Ctrl+C to exit.
+- Waiting for build to complete.
+✔ Build finished
+
+  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+  █ ▄▄▄▄▄ █▀█▀█▄▄▀▀█▀▀▄▀▀█▄██▄▀██ ▄▄▄▄▄ █
+  █ █   █ █▀▀▀██▀▄▀▄▀  ▄▄  ▀▀█ ▀█ █   █ █
+  █ █▄▄▄█ █▀ █▄ ▄▄▀▄██▄▀ ▄▄▄▀ ▀▀█ █▄▄▄█ █
+  █▄▄▄▄▄▄▄█▄▀ █▄█▄▀ █▄▀▄▀▄▀ █ ▀ █▄▄▄▄▄▄▄█
+  █▄ ▄ ▄▀▄   ▀▀▄▄▄▄▀▄▀▀ █▄▀█▄ ▄ ▄█ █ ▀ ██
+  ██ ▀ ▀▀▄ ▄██▀ ▄▄ ██▄█▀▀ █▄▄▀ █▀▄▄█ ▄▀▄█
+  ███▄▄▄█▄▄▄▄▀▀▀▄▀█▄▄▄▀▀▀▄▀█ ██▀▄▄▀▄▄ ▀▄█
+  █▀▄ ▄▀ ▄▄ █▄█▄█▄ ▀█▄█▀▀█▀▀█ ▄▄▀▄  ▀▄▄ █
+  █  ▀█ █▄▄▀▀█▀▄ ▀▄▄▄▀ ▀█▄▀▄▄ ▄ ▄▄█▄▄ ▀▄█
+  █  ▄▄ ▄▄██▀▀█▄██  █▀█▄ ████▄ ▄ █▀▄█▄▄ █
+  ███▄▄ ▀▄▄ ▀▄▀▀ ███▄▀ ▀▀▄▀▄▄▄█▀ ▄ ▄▄▄ ▄█
+  █▀█   ▄▄█▀▀█▀ █  █▄▄█  ▀▀ █  ▄   ███▄ █
+  █▀█ ▄▄ ▄▀▄▀ ▀▄▄▄█▄ ▄▀ ▀  ▄▄▄▄▀▄▄▀▄▀  ▄█
+  █ █ █▀ ▄▀ ██▀█▄█ ▄█ ▀█▀█▀██▀▄ ▄█▀█▄█▄ █
+  █▄█▄██▄▄█ █▄▀▀▄▄▄▄▄▄▀▀█▄ ▄ ▄▀ ▄▄▄ ▀▄███
+  █ ▄▄▄▄▄ █▄█ ▀▀▄▀▄▄█▀▀ ▀ ▀ █ ▀ █▄█ ▄█▄ █
+  █ █   █ █ ▀ ▀▄▄▀▄▄   █▀ ▀█ █▄   ▄ ▄ ███
+  █ █▄▄▄█ █ ▄▄█ ▄ ▄████▄▀▀█ ▄ ▄▀ ▀▄▀▀▄▄ █
+  █▄▄▄▄▄▄▄█▄████▄█▄▄▄▄███▄██▄▄███▄▄▄▄▄▄▄█
+
+
+🤖 Open this link on your Android devices (or scan the QR code) to install the app:
+https://expo.dev/accounts/aishu007s-team/projects/ipobharosa/builds/25a1dc84-2318-48df-8f48-bc70c7b4d2d5
