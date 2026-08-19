@@ -54,6 +54,7 @@ export default function PanCardsScreen() {
 
   async function handleRemove(id: string) {
     await removePanCard(id);
+    posthog?.capture("pan_removed", { screen: "pan_cards" });
     setCards((current) => current.filter((card) => card.id !== id));
   }
 

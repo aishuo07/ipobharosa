@@ -81,7 +81,7 @@ export default function AllotmentScreen() {
             `Your browser could not open the registrar portal automatically.\n\n${check.portalUrl}\n\nUse the share sheet to copy the link and open it in your browser.`,
             [
               { text: "Cancel", style: "cancel" },
-              { text: "Share link", onPress: () => void shareLink(check.portalUrl!) },
+              { text: "Share link", onPress: () => shareLink(check.portalUrl!, ipo) },
             ],
           );
           return;
@@ -97,7 +97,8 @@ export default function AllotmentScreen() {
       });
   }
 
-  function shareLink(url: string) {
+  function shareLink(url: string, ipo: BoardIpo) {
+    posthog?.capture("registrar_link_shared", { ipo_slug: ipo.slug, ipo_board: ipo.board });
     void Share.share({ message: url }).catch(() => {
       /* share sheet may be unavailable */
     });

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, RefreshControl, SectionList, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { usePostHog } from "posthog-react-native";
 import { fetchBoard } from "@/src/lib/api";
 import type { BoardFilter, BoardIpo } from "@/src/lib/types";
 import { effectiveSection, type StatusSection } from "@/src/lib/status";
@@ -28,6 +29,7 @@ function compareDates(a: string, b: string): number {
 
 export default function BoardScreen() {
   const router = useRouter();
+  const posthog = usePostHog();
   const [filter, setFilter] = useState<BoardFilter>("ALL");
   const [ipos, setIpos] = useState<BoardIpo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,13 +41,14 @@ export default function BoardScreen() {
     setError(null);
     try {
       setIpos(await fetchBoard(filter));
+      if (isRefresh) posthog?.capture("board_refreshed", { board_filter: filter });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load the IPO board");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [filter]);
+  }, [filter, posthog]);
 
   useEffect(() => {
     void fetchBoard(filter)
@@ -97,7 +100,10 @@ export default function BoardScreen() {
           return (
             <Text
               key={item.value}
-              onPress={() => setFilter(item.value)}
+              onPress={() => {
+                posthog?.capture("board_filter_selected", { board_filter: item.value });
+                setFilter(item.value);
+              }}
               style={[styles.filterChip, active && styles.filterChipActive]}
             >
               {item.label}
@@ -118,7 +124,13 @@ export default function BoardScreen() {
           sections={sections}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <IpoRow ipo={item} onPress={() => router.push({ pathname: "/ipo/[slug]", params: { slug: item.slug } })} />
+            <IpoRow
+              ipo={item}
+              onPress={() => {
+                posthog?.capture("ipo_detail_opened", { ipo_slug: item.slug, ipo_board: item.board });
+                router.push({ pathname: "/ipo/[slug]", params: { slug: item.slug } });
+              }}
+            />
           )}
           renderSectionHeader={({ section }) => {
             const color = colors[statusColor(section.status)];

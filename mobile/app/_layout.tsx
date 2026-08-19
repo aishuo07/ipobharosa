@@ -1,7 +1,11 @@
 import { useEffect } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { PostHogProvider, usePostHog } from "posthog-react-native";
+import {
+  PostHogErrorBoundary,
+  PostHogProvider,
+  usePostHog,
+} from "posthog-react-native";
 import { registerForPushNotifications } from "@/src/lib/notifications";
 import { analyticsConfig, analyticsEnabled } from "@/src/lib/analytics";
 
@@ -31,8 +35,21 @@ export default function RootLayout() {
 
   if (!analyticsEnabled) return inner;
   return (
-    <PostHogProvider apiKey={apiKey} options={{ host, captureAppLifecycleEvents }}>
-      {inner}
+    <PostHogProvider
+      apiKey={apiKey}
+      options={{
+        host,
+        captureAppLifecycleEvents,
+        errorTracking: {
+          autocapture: {
+            uncaughtExceptions: true,
+            unhandledRejections: true,
+            console: [],
+          },
+        },
+      }}
+    >
+      <PostHogErrorBoundary>{inner}</PostHogErrorBoundary>
     </PostHogProvider>
   );
 }
