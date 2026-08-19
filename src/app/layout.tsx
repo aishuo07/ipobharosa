@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
+import * as Sentry from "@sentry/nextjs";
 import { resolveSiteUrl } from "@/lib/site-url";
 import { PwaRegistration } from "@/components/InstallApp";
+import { PostHogProvider } from "@/components/PostHogProvider";
 import "./globals.css";
 
 const siteUrl = resolveSiteUrl();
@@ -57,8 +59,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en">
       <body>
-        <PwaRegistration />
-        {children}
+        <Sentry.ErrorBoundary fallback={<p>Something went wrong. Please refresh.</p>}>
+          <PostHogProvider />
+          <PwaRegistration />
+          {children}
+        </Sentry.ErrorBoundary>
       </body>
     </html>
   );

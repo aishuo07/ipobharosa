@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { checkAllotmentLaunches } from "@/lib/allotment-launch";
 import { announceAllotmentLaunches } from "@/lib/push/allotment-announce";
+import { monitorPipeline } from "@/lib/monitor";
 
 export const maxDuration = 60;
 
@@ -14,9 +15,12 @@ export async function GET(request: Request) {
   }
 
   try {
-    const check = await checkAllotmentLaunches();
-    const announcement = await announceAllotmentLaunches(check);
-    return NextResponse.json({ ok: true, ...check, announcement });
+    const result = await monitorPipeline("allotment-launch", async () => {
+      const check = await checkAllotmentLaunches();
+      const announcement = await announceAllotmentLaunches(check);
+      return { ...check, announcement };
+    });
+    return NextResponse.json({ ok: true, ...result });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }

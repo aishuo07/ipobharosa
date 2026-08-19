@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import * as Sentry from "@sentry/react-native";
 import {
   PostHogErrorBoundary,
   PostHogProvider,
@@ -8,6 +9,9 @@ import {
 } from "posthog-react-native";
 import { registerForPushNotifications } from "@/src/lib/notifications";
 import { analyticsConfig, analyticsEnabled } from "@/src/lib/analytics";
+import { initSentry } from "@/src/lib/sentry";
+
+initSentry();
 
 function AppEvents() {
   const posthog = usePostHog();
@@ -33,23 +37,28 @@ export default function RootLayout() {
     </>
   );
 
-  if (!analyticsEnabled) return inner;
   return (
-    <PostHogProvider
-      apiKey={apiKey}
-      options={{
-        host,
-        captureAppLifecycleEvents,
-        errorTracking: {
-          autocapture: {
-            uncaughtExceptions: true,
-            unhandledRejections: true,
-            console: [],
-          },
-        },
-      }}
-    >
-      <PostHogErrorBoundary>{inner}</PostHogErrorBoundary>
-    </PostHogProvider>
+    <Sentry.ErrorBoundary fallback={<></>}>
+      {analyticsEnabled ? (
+        <PostHogProvider
+          apiKey={apiKey}
+          options={{
+            host,
+            captureAppLifecycleEvents,
+            errorTracking: {
+              autocapture: {
+                uncaughtExceptions: true,
+                unhandledRejections: true,
+                console: [],
+              },
+            },
+          }}
+        >
+          <PostHogErrorBoundary>{inner}</PostHogErrorBoundary>
+        </PostHogProvider>
+      ) : (
+        inner
+      )}
+    </Sentry.ErrorBoundary>
   );
 }

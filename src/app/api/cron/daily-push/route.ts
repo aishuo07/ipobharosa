@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sendDailyPush } from "@/lib/push/daily";
+import { monitorPipeline } from "@/lib/monitor";
 
 export const maxDuration = 60;
 
@@ -13,7 +14,10 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await sendDailyPush();
+    const result = await monitorPipeline("daily-push", async () => {
+      const outcome = await sendDailyPush();
+      return outcome;
+    });
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 500 });

@@ -34,7 +34,7 @@ export default function PrivacyPage() {
         <li>We don&apos;t sell your data.</li>
         <li>We don&apos;t use it for advertising or share it with advertisers.</li>
         <li>We don&apos;t show your watchlist, email, or activity to other users.</li>
-        <li>We don&apos;t use tracking or analytics cookies — only the session cookie needed to keep you signed in.</li>
+        <li>We don&apos;t use tracking or analytics cookies — page views are counted in-memory (PostHog) without storing anything on your device, and errors are reported to Sentry without personal data.</li>
       </ul>
 
       <h2>Third parties involved</h2>

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { runIngestionStep } from "@/lib/ingestion/run-cycle";
+import { monitorPipeline } from "@/lib/monitor";
 
 export const maxDuration = 60;
 
@@ -13,7 +14,10 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await runIngestionStep();
+    const result = await monitorPipeline("ingestion", async () => {
+      const outcome = await runIngestionStep();
+      return outcome;
+    });
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
