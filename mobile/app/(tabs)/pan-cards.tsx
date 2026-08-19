@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import { addPanCard, isValidPan, loadPanCards, removePanCard, type PanCard } from "@/src/lib/pan-store";
 import { colors, radius, spacing, typography } from "@/src/lib/theme";
@@ -60,11 +61,16 @@ export default function PanCardsScreen() {
     >
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.note}>
-          <Text style={styles.noteTitle}>Private, on-device only</Text>
-          <Text style={styles.noteText}>
-            PAN cards are stored encrypted on this device only. They are never sent to any server and are used only
-            to check your own allotment status on official registrar sites.
-          </Text>
+          <View style={styles.noteIcon}>
+            <Ionicons name="shield-checkmark" size={20} color={colors.green} />
+          </View>
+          <View style={styles.noteBody}>
+            <Text style={styles.noteTitle}>Private, on-device only</Text>
+            <Text style={styles.noteText}>
+              PAN cards are stored encrypted on this device only. They are never sent to any server and are used only
+              to check your own allotment status on official registrar sites.
+            </Text>
+          </View>
         </View>
 
         <View style={styles.form}>
@@ -120,10 +126,24 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   note: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.md,
     backgroundColor: colors.greenSoft,
     borderRadius: radius.md,
     padding: spacing.lg,
     marginBottom: spacing.lg,
+  },
+  noteIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
+  },
+  noteBody: {
+    flex: 1,
   },
   noteTitle: {
     fontSize: typography.body.fontSize,

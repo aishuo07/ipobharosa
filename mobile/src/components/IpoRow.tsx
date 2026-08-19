@@ -50,7 +50,7 @@ export function IpoRow({ ipo, onPress }: { ipo: BoardIpo; onPress: () => void })
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      style={({ pressed }) => [styles.row, { borderLeftColor: meta.color }, pressed && styles.rowPressed]}
       accessibilityRole="button"
     >
       <View style={styles.header}>
@@ -106,9 +106,10 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginHorizontal: spacing.md,
     marginVertical: 6,
+    borderLeftWidth: 3,
     shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },

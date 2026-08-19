@@ -224,9 +224,15 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
   ipoCardActive: {
     borderColor: colors.green,
+    borderWidth: 1.5,
   },
   ipoHeader: {
     marginBottom: spacing.sm,
@@ -274,9 +280,14 @@ const styles = StyleSheet.create({
   },
   checkButton: {
     backgroundColor: colors.green,
-    borderRadius: radius.sm,
+    borderRadius: radius.pill,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
+    shadowColor: colors.green,
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   checkButtonText: {
     color: colors.white,

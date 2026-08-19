@@ -1,6 +1,21 @@
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "@/src/lib/theme";
+import { StyleSheet, Text, View } from "react-native";
+import { colors, spacing } from "@/src/lib/theme";
+
+function BrandHeader() {
+  return (
+    <View style={styles.brandRow}>
+      <View style={styles.brandMark}>
+        <Ionicons name="trending-up" size={18} color={colors.white} />
+      </View>
+      <View>
+        <Text style={styles.brandWordmark}>IPOBharosa</Text>
+        <Text style={styles.brandEyebrow}>LOT SIZE · GMP · DATES · ALLOTMENT</Text>
+      </View>
+    </View>
+  );
+}
 
 export default function TabsLayout() {
   return (
@@ -9,9 +24,18 @@ export default function TabsLayout() {
         tabBarActiveTintColor: colors.green,
         tabBarInactiveTintColor: colors.inkMuted,
         headerShown: true,
-        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
-        headerStyle: { backgroundColor: colors.paper },
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          height: 62,
+          paddingTop: 6,
+        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: "700" },
+        headerStyle: { backgroundColor: colors.paper, shadowOpacity: 0, elevation: 0 },
+        headerShadowVisible: false,
         headerTitleStyle: { color: colors.ink },
+        headerTitle: () => <BrandHeader />,
       }}
     >
       <Tabs.Screen
@@ -38,3 +62,31 @@ export default function TabsLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  brandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm + 2,
+  },
+  brandMark: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.green,
+  },
+  brandWordmark: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: colors.ink,
+    letterSpacing: -0.3,
+  },
+  brandEyebrow: {
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 1,
+    color: colors.inkFaint,
+  },
+});

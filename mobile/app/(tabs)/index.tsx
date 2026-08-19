@@ -83,6 +83,11 @@ export default function BoardScreen() {
   }, [ipos]);
 
   const totalCount = sections.reduce((sum, s) => sum + s.data.length, 0);
+  const countBySection = useMemo(() => {
+    const map: Record<StatusSection, number> = { OPEN: 0, UPCOMING: 0, CLOSED: 0, LISTED: 0 };
+    for (const section of sections) map[section.status] = section.data.length;
+    return map;
+  }, [sections]);
 
   return (
     <View style={styles.container}>
@@ -121,7 +126,9 @@ export default function BoardScreen() {
               <View style={styles.sectionHeader}>
                 <View style={[styles.sectionDot, { backgroundColor: color }]} />
                 <Text style={styles.sectionTitle}>{SECTION_LABELS[section.status]}</Text>
-                <Text style={[styles.sectionCount, { color }]}>{section.data.length}</Text>
+                <View style={[styles.sectionPill, { backgroundColor: color }]}>
+                  <Text style={styles.sectionCount}>{section.data.length}</Text>
+                </View>
               </View>
             );
           }}
@@ -158,6 +165,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
   filterChipActive: {
     backgroundColor: colors.green,
@@ -173,10 +185,10 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
+    gap: 8,
     paddingHorizontal: spacing.lg,
     paddingTop: 18,
-    paddingBottom: 6,
+    paddingBottom: 8,
   },
   sectionDot: {
     width: 8,
@@ -189,10 +201,20 @@ const styles = StyleSheet.create({
     color: colors.ink,
     letterSpacing: 0.3,
     textTransform: "uppercase",
+    flex: 1,
+  },
+  sectionPill: {
+    minWidth: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
   },
   sectionCount: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
+    color: colors.white,
   },
   list: {
     paddingBottom: spacing.xl,
