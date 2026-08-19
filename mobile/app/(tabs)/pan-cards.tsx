@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { addPanCard, isValidPan, loadPanCards, removePanCard, type PanCard } from "@/src/lib/pan-store";
+import { colors, radius, spacing, typography } from "@/src/lib/theme";
 
 export default function PanCardsScreen() {
   const [cards, setCards] = useState<PanCard[]>([]);
@@ -112,88 +113,89 @@ export default function PanCardsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FAF7F2",
+    backgroundColor: colors.paper,
   },
   content: {
-    padding: 16,
+    padding: spacing.lg,
     paddingBottom: 40,
   },
   note: {
-    backgroundColor: "#E8F5EE",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
+    backgroundColor: colors.greenSoft,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
   },
   noteTitle: {
-    fontSize: 14,
+    fontSize: typography.body.fontSize,
     fontWeight: "700",
-    color: "#0E6B3A",
+    color: colors.green,
     marginBottom: 4,
   },
   noteText: {
     fontSize: 13,
-    color: "#374151",
+    color: colors.ink,
     lineHeight: 19,
   },
   form: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
   },
   label: {
     fontSize: 13,
-    color: "#4B5563",
+    color: colors.inkMuted,
     marginBottom: 6,
     fontWeight: "600",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
     fontSize: 15,
-    marginBottom: 12,
-    backgroundColor: "#FFFFFF",
+    marginBottom: spacing.md,
+    backgroundColor: colors.surface,
+    color: colors.ink,
   },
   saveButton: {
-    backgroundColor: "#0E6B3A",
-    borderRadius: 8,
+    backgroundColor: colors.green,
+    borderRadius: radius.sm,
     paddingVertical: 13,
     alignItems: "center",
   },
   saveButtonText: {
-    color: "#FFFFFF",
+    color: colors.white,
     fontSize: 15,
     fontWeight: "700",
   },
   empty: {
     textAlign: "center",
-    color: "#6B7280",
-    marginTop: 24,
+    color: colors.inkMuted,
+    marginTop: spacing.xl,
   },
   card: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.sm + 2,
   },
   cardName: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#111827",
+    color: colors.ink,
   },
   cardPan: {
     fontSize: 13,
-    color: "#4B5563",
+    color: colors.inkMuted,
     marginTop: 2,
   },
   remove: {
-    color: "#B91C1C",
-    fontSize: 14,
+    color: colors.red,
+    fontSize: typography.body.fontSize,
   },
 });

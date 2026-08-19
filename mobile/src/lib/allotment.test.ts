@@ -9,6 +9,24 @@ import {
   registrarKind,
 } from "@/src/lib/allotment";
 import type { BoardIpo } from "@/src/lib/types";
+import type { RegistrarCompany } from "@/src/lib/registrar-catalog";
+
+vi.mock("@/src/lib/catalogue-store", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/src/lib/catalogue-store")>();
+  const snapshots = await import("@/src/lib/registrar-catalog");
+  return {
+    ...actual,
+    fetchRegistrarCatalogue: vi.fn(async (key: string): Promise<RegistrarCompany[]> => {
+      const catalogues: Record<string, RegistrarCompany[]> = {
+        kfin: snapshots.KFIN_COMPANIES,
+        bigshare: snapshots.BIGSHARE_COMPANIES,
+        maashitla: snapshots.MAASHITLA_COMPANIES,
+        mufg: [],
+      };
+      return catalogues[key] ?? [];
+    }),
+  };
+});
 
 function makeIpo(overrides: Partial<BoardIpo> = {}): BoardIpo {
   return {

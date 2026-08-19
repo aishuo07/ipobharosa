@@ -203,6 +203,30 @@ describe("effectiveStatus", () => {
     expect(status).toBe("listed-pending");
   });
 
+  it("keeps a DB-CLOSED IPO open while its close day is still today", () => {
+    const status = effectiveStatus(
+      makeIpo({ status: "CLOSED", closeDate: "2026-08-01T00:00:00.000Z" }),
+      new Date("2026-08-01T12:00:00.000Z").getTime(),
+    );
+    expect(status).toBe("open");
+  });
+
+  it("keeps a DB-CLOSED IPO closing-soon when the close day is today and imminent", () => {
+    const status = effectiveStatus(
+      makeIpo({ status: "CLOSED", closeDate: "2026-08-01T12:00:00.000Z" }),
+      new Date("2026-08-01T10:00:00.000Z").getTime(),
+    );
+    expect(status).toBe("closing-soon");
+  });
+
+  it("treats a DB-CLOSED IPO as closed once the close day has passed", () => {
+    const status = effectiveStatus(
+      makeIpo({ status: "CLOSED", closeDate: "2026-07-31T00:00:00.000Z" }),
+      now,
+    );
+    expect(status).toBe("closed");
+  });
+
   it("does not classify a stored LISTED row without price as a loss", () => {
     expect(effectiveStatus(makeIpo({ status: "LISTED", listingPrice: null }), now)).toBe("listed-pending");
   });

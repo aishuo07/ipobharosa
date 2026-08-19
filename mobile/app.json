@@ -9,7 +9,10 @@
     "scheme": "ipobharosa",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ipobharosa.mobile"
+      "bundleIdentifier": "com.ipobharosa.mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.ipobharosa.mobile",

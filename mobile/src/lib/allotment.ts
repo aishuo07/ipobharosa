@@ -1,4 +1,5 @@
-import { BIGSHARE_COMPANIES, KFIN_COMPANIES, MAASHITLA_COMPANIES, type RegistrarCompany } from "@/src/lib/registrar-catalog";
+import type { RegistrarCompany } from "@/src/lib/registrar-catalog";
+import { fetchRegistrarCatalogue } from "@/src/lib/catalogue-store";
 import type { BoardIpo } from "@/src/lib/types";
 
 export type AllotmentStatus = "ALLOTTED" | "NOT_ALLOTTED" | "NOT_APPLIED" | "ERROR";
@@ -333,9 +334,10 @@ function kfintechResult(ipo: BoardIpo, pan: string, row: Record<string, unknown>
 
 /**
  * Checks every saved PAN against a KFinTech IPO. The clientId catalogue is
- * static (snapshot of their portal bundle) and matched once for all PANs.
+ * matched once for all PANs; a fresh one is fetched from the server when the
+ * caller does not provide one.
  */
-export async function checkKfintechAllotmentForPans(ipo: BoardIpo, pans: string[]): Promise<AllotmentResult[]> {
+export async function checkKfintechAllotmentForPans(ipo: BoardIpo, pans: string[], companies?: RegistrarCompany[]): Promise<AllotmentResult[]> {
   if (pans.length === 0) return [];
   const base = (pan: string): AllotmentResult => ({
     pan,
@@ -344,7 +346,8 @@ export async function checkKfintechAllotmentForPans(ipo: BoardIpo, pans: string[
     status: "ERROR",
     checkedAt: new Date().toISOString(),
   });
-  const clientId = findCompanyId(KFIN_COMPANIES, ipo.companyName);
+  const catalogue = companies ?? (await fetchRegistrarCatalogue("kfin"));
+  const clientId = findCompanyId(catalogue, ipo.companyName);
   if (!clientId) {
     const error = "Company not found in KFinTech list (allotment may not be out yet)";
     return pans.map((pan) => ({ ...base(pan), error }));
@@ -412,9 +415,9 @@ function bigshareResult(ipo: BoardIpo, pan: string, row: Record<string, unknown>
 
 /**
  * Checks every saved PAN against a Bigshare IPO. The company code catalogue is
- * static (snapshot of their portal dropdown) and matched once for all PANs.
+ * matched once for all PANs; a fresh one is fetched when not provided.
  */
-export async function checkBigshareAllotmentForPans(ipo: BoardIpo, pans: string[]): Promise<AllotmentResult[]> {
+export async function checkBigshareAllotmentForPans(ipo: BoardIpo, pans: string[], companies?: RegistrarCompany[]): Promise<AllotmentResult[]> {
   if (pans.length === 0) return [];
   const base = (pan: string): AllotmentResult => ({
     pan,
@@ -423,7 +426,8 @@ export async function checkBigshareAllotmentForPans(ipo: BoardIpo, pans: string[
     status: "ERROR",
     checkedAt: new Date().toISOString(),
   });
-  const companyCode = findCompanyId(BIGSHARE_COMPANIES, ipo.companyName);
+  const catalogue = companies ?? (await fetchRegistrarCatalogue("bigshare"));
+  const companyCode = findCompanyId(catalogue, ipo.companyName);
   if (!companyCode) {
     const error = "Company not found in Bigshare list (allotment may not be out yet)";
     return pans.map((pan) => ({ ...base(pan), error }));
@@ -481,7 +485,7 @@ function maashitlaResult(ipo: BoardIpo, pan: string, row: Record<string, unknown
   };
 }
 
-export async function checkMaashitlaAllotmentForPans(ipo: BoardIpo, pans: string[]): Promise<AllotmentResult[]> {
+export async function checkMaashitlaAllotmentForPans(ipo: BoardIpo, pans: string[], companies?: RegistrarCompany[]): Promise<AllotmentResult[]> {
   if (pans.length === 0) return [];
   const base = (pan: string): AllotmentResult => ({
     pan,
@@ -490,7 +494,8 @@ export async function checkMaashitlaAllotmentForPans(ipo: BoardIpo, pans: string
     status: "ERROR",
     checkedAt: new Date().toISOString(),
   });
-  const companyId = findCompanyId(MAASHITLA_COMPANIES, ipo.companyName);
+  const catalogue = companies ?? (await fetchRegistrarCatalogue("maashitla"));
+  const companyId = findCompanyId(catalogue, ipo.companyName);
   if (!companyId) {
     const error = "Company not found in Maashitla list (allotment may not be out yet)";
     return pans.map((pan) => ({ ...base(pan), error }));
@@ -511,18 +516,27 @@ export async function checkMaashitlaAllotmentForPans(ipo: BoardIpo, pans: string
 /**
  * Dispatches a batch allotment check to the right registrar adapter based on
  * the IPO's registrar. IPOs on non-automatable registrars get an ERROR result
- * (the UI deep-links to their portal instead).
+ * (the UI deep-links to their portal instead). Lookups stay client-side so
+ * each user checks from their own IP; the dynamic catalogue is fetched once
+ * per registrar from the server to keep company matching reliable.
  */
 export async function checkAllotmentForPans(ipo: BoardIpo, pans: string[]): Promise<AllotmentResult[]> {
-  switch (registrarKind(ipo)) {
+  const kind = registrarKind(ipo);
+  switch (kind) {
     case "mufg":
       return checkMufgAllotmentForPans(ipo, pans);
-    case "kfintech":
-      return checkKfintechAllotmentForPans(ipo, pans);
-    case "bigshare":
-      return checkBigshareAllotmentForPans(ipo, pans);
-    case "maashitla":
-      return checkMaashitlaAllotmentForPans(ipo, pans);
+    case "kfintech": {
+      const catalogue = await fetchRegistrarCatalogue("kfin");
+      return checkKfintechAllotmentForPans(ipo, pans, catalogue);
+    }
+    case "bigshare": {
+      const catalogue = await fetchRegistrarCatalogue("bigshare");
+      return checkBigshareAllotmentForPans(ipo, pans, catalogue);
+    }
+    case "maashitla": {
+      const catalogue = await fetchRegistrarCatalogue("maashitla");
+      return checkMaashitlaAllotmentForPans(ipo, pans, catalogue);
+    }
     default: {
       const base = (pan: string): AllotmentResult => ({
         pan,

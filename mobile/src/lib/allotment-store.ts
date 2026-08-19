@@ -4,7 +4,10 @@ export type AllotmentCache = Record<string, AllotmentResult>;
 
 export type IpoAllotmentCache = Record<string, AllotmentCache>;
 
-const STORAGE_KEY = "ipobharosa.allotment-cache.v1";
+// One storage key per IPO keeps each SecureStore value well under iOS's
+// 2048-byte limit, which silently dropped the whole cache before.
+const KEY_PREFIX = "ipobharosa.allotment.";
+const INDEX_KEY = "ipobharosa.allotment-index.v1";
 
 const isWeb = typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 
@@ -33,24 +36,53 @@ async function writeStore(key: string, value: string): Promise<void> {
   await setItemAsync(key, value);
 }
 
-export async function loadAllotmentCache(): Promise<IpoAllotmentCache> {
-  const raw = await readStore(STORAGE_KEY);
-  if (!raw) return {};
+async function readIndex(): Promise<string[]> {
+  const raw = await readStore(INDEX_KEY);
+  if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
   } catch {
-    return {};
+    return [];
   }
 }
 
-export async function saveAllotmentCache(cache: IpoAllotmentCache): Promise<void> {
-  await writeStore(STORAGE_KEY, JSON.stringify(cache));
+async function writeIndex(ipoIds: string[]): Promise<void> {
+  await writeStore(INDEX_KEY, JSON.stringify(ipoIds));
+}
+
+export async function loadAllotmentCache(): Promise<IpoAllotmentCache> {
+  const ipoIds = await readIndex();
+  const cache: IpoAllotmentCache = {};
+  for (const ipoId of ipoIds) {
+    const raw = await readStore(KEY_PREFIX + ipoId);
+    if (!raw) continue;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") cache[ipoId] = parsed;
+    } catch {
+      /* skip corrupt entry */
+    }
+  }
+  return cache;
 }
 
 export async function cacheAllotmentResult(ipoId: string, result: AllotmentResult): Promise<IpoAllotmentCache> {
-  const cache = await loadAllotmentCache();
-  cache[ipoId] = { ...(cache[ipoId] ?? {}), [result.pan]: result };
-  await saveAllotmentCache(cache);
-  return cache;
+  const ipoIds = await readIndex();
+  if (!ipoIds.includes(ipoId)) {
+    await writeIndex([...ipoIds, ipoId]);
+  }
+  const existing = await readStore(KEY_PREFIX + ipoId);
+  let perIpo: AllotmentCache = {};
+  if (existing) {
+    try {
+      const parsed = JSON.parse(existing);
+      if (parsed && typeof parsed === "object") perIpo = parsed;
+    } catch {
+      /* ignore */
+    }
+  }
+  perIpo = { ...perIpo, [result.pan]: result };
+  await writeStore(KEY_PREFIX + ipoId, JSON.stringify(perIpo));
+  return { [ipoId]: perIpo };
 }

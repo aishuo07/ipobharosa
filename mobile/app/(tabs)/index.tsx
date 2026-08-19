@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, RefreshControl, SectionList, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { fetchBoard } from "@/src/lib/api";
-import type { BoardFilter, BoardIpo, IpoStatus } from "@/src/lib/types";
-import { IpoRow, STATUS_META } from "@/src/components/IpoRow";
+import type { BoardFilter, BoardIpo } from "@/src/lib/types";
+import { effectiveSection, type StatusSection } from "@/src/lib/status";
+import { IpoRow } from "@/src/components/IpoRow";
+import { colors, radius, spacing, statusColor, typography } from "@/src/lib/theme";
 
 const FILTERS: { label: string; value: BoardFilter }[] = [
   { label: "All", value: "ALL" },
@@ -11,9 +13,9 @@ const FILTERS: { label: string; value: BoardFilter }[] = [
   { label: "SME", value: "SME" },
 ];
 
-const SECTION_ORDER: IpoStatus[] = ["OPEN", "UPCOMING", "CLOSED", "LISTED"];
+const SECTION_ORDER: StatusSection[] = ["OPEN", "UPCOMING", "CLOSED", "LISTED"];
 
-const SECTION_LABELS: Record<IpoStatus, string> = {
+const SECTION_LABELS: Record<StatusSection, string> = {
   OPEN: "Open now",
   UPCOMING: "Upcoming",
   CLOSED: "Closed",
@@ -55,9 +57,11 @@ export default function BoardScreen() {
   }, [filter]);
 
   const sections = useMemo(() => {
-    const byStatus: Record<IpoStatus, BoardIpo[]> = { OPEN: [], UPCOMING: [], CLOSED: [], LISTED: [] };
+    const now = Date.now();
+    const byStatus: Record<StatusSection, BoardIpo[]> = { OPEN: [], UPCOMING: [], CLOSED: [], LISTED: [] };
     for (const ipo of ipos) {
-      const list = byStatus[ipo.status];
+      const section = effectiveSection(ipo, now);
+      const list = byStatus[section];
       if (list) list.push(ipo);
     }
     for (const status of SECTION_ORDER) {
@@ -102,7 +106,7 @@ export default function BoardScreen() {
         </View>
       ) : loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#0E6B3A" />
+          <ActivityIndicator size="large" color={colors.green} />
         </View>
       ) : (
         <SectionList
@@ -112,12 +116,12 @@ export default function BoardScreen() {
             <IpoRow ipo={item} onPress={() => router.push({ pathname: "/ipo/[slug]", params: { slug: item.slug } })} />
           )}
           renderSectionHeader={({ section }) => {
-            const meta = STATUS_META[section.status];
+            const color = colors[statusColor(section.status)];
             return (
               <View style={styles.sectionHeader}>
-                <View style={[styles.sectionDot, { backgroundColor: meta.color }]} />
+                <View style={[styles.sectionDot, { backgroundColor: color }]} />
                 <Text style={styles.sectionTitle}>{SECTION_LABELS[section.status]}</Text>
-                <Text style={[styles.sectionCount, { color: meta.color }]}>{section.data.length}</Text>
+                <Text style={[styles.sectionCount, { color }]}>{section.data.length}</Text>
               </View>
             );
           }}
@@ -137,40 +141,40 @@ export default function BoardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FAF7F2",
+    backgroundColor: colors.paper,
   },
   filterRow: {
     flexDirection: "row",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
   },
   filterChip: {
-    paddingHorizontal: 14,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: "#FFFFFF",
-    color: "#4B5563",
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    color: colors.inkMuted,
     fontSize: 13,
     fontWeight: "600",
     overflow: "hidden",
   },
   filterChipActive: {
-    backgroundColor: "#0E6B3A",
-    color: "#FFFFFF",
+    backgroundColor: colors.green,
+    color: colors.white,
   },
   boardSummary: {
-    fontSize: 12,
-    color: "#9CA3AF",
+    fontSize: typography.caption.fontSize,
+    color: colors.inkFaint,
     marginTop: 4,
     marginBottom: 2,
-    marginHorizontal: 16,
+    marginHorizontal: spacing.lg,
   },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
     paddingTop: 18,
     paddingBottom: 6,
   },
@@ -182,7 +186,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#1F2937",
+    color: colors.ink,
     letterSpacing: 0.3,
     textTransform: "uppercase",
   },
@@ -191,21 +195,21 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   list: {
-    paddingBottom: 24,
+    paddingBottom: spacing.xl,
   },
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 24,
+    padding: spacing.xl,
   },
   error: {
-    color: "#B91C1C",
+    color: colors.red,
     textAlign: "center",
   },
   empty: {
     textAlign: "center",
-    color: "#6B7280",
+    color: colors.inkMuted,
     marginTop: 40,
   },
 });

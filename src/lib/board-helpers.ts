@@ -60,9 +60,18 @@ export type EffectiveStatus =
   | "listed-loss";
 
 export function isClosingSoon(ipo: BoardIpo, now: number): boolean {
-  if (ipo.status !== "OPEN") return false;
+  if (!ipo.closeDate) return false;
   const diff = new Date(ipo.closeDate).getTime() - now;
   return diff > 0 && diff < 36 * 3600 * 1000;
+}
+
+// End of the close day in the market timezone. An IPO that closes "today"
+// should keep showing as open/closing until the close day has actually
+// passed — the DB may set status to CLOSED prematurely (e.g. the moment
+// the close date arrives) which makes a still-biddable IPO render as closed.
+function closeDayEnded(ipo: BoardIpo, now: number): boolean {
+  if (!ipo.closeDate) return true;
+  return marketDayKey(ipo.closeDate) < marketDayKey(now);
 }
 
 export function effectiveStatus(ipo: BoardIpo, now: number): EffectiveStatus {
@@ -74,6 +83,11 @@ export function effectiveStatus(ipo: BoardIpo, now: number): EffectiveStatus {
   }
   if (ipo.status === "OPEN") return isClosingSoon(ipo, now) ? "closing-soon" : "open";
   if (ipo.status === "UPCOMING") return "upcoming";
+  // CLOSED in the DB is only authoritative once the close day has passed.
+  // If the IPO still closes today or in the future, treat it as live.
+  if (ipo.status === "CLOSED" && !closeDayEnded(ipo, now)) {
+    return isClosingSoon(ipo, now) ? "closing-soon" : "open";
+  }
   return "closed";
 }
 

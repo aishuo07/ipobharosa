@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { recordSourceSuccess, recordSourceFailure } from "@/lib/ingestion/source-operation";
+
+const OPERATION_KEY = "registrar:mufg:search";
 
 const MUFG_ORIGIN = "https://in.mpms.mufg.com";
 const MUFG_REFERER = "https://in.mpms.mufg.com/Initial_Offer/public-issues.html";
@@ -60,12 +63,16 @@ export async function POST(request: Request) {
       body: JSON.stringify({ clientid, PAN, IFSC, CHKVAL, token }),
     });
     if (!upstream.ok) {
-      return NextResponse.json({ error: `Upstream HTTP ${upstream.status}` }, { status: 502 });
+      const message = `Upstream HTTP ${upstream.status}`;
+      await recordSourceFailure(OPERATION_KEY, "MUFG / Link Intime", "allotment-pan-search", new Error(message));
+      return NextResponse.json({ error: message }, { status: 502 });
     }
     const data = unwrapD(await upstream.json());
+    await recordSourceSuccess(OPERATION_KEY, "MUFG / Link Intime", "allotment-pan-search");
     const rows = Array.isArray(data) ? data : (data as { Table?: unknown[] })?.Table ?? [];
     return NextResponse.json(rows, { headers: { "Access-Control-Allow-Origin": "*" } });
   } catch (e) {
+    await recordSourceFailure(OPERATION_KEY, "MUFG / Link Intime", "allotment-pan-search", e);
     return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown error" }, { status: 500 });
   }
 }

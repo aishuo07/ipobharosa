@@ -1,23 +1,17 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { fetchBoard } from "@/src/lib/api";
 import type { BoardIpo } from "@/src/lib/types";
 import { loadPanCards, type PanCard } from "@/src/lib/pan-store";
 import { checkAllotmentForPans, registrarCheck, type AllotmentResult } from "@/src/lib/allotment";
 import { cacheAllotmentResult, loadAllotmentCache, type IpoAllotmentCache } from "@/src/lib/allotment-store";
+import { colors, radius, spacing, typography, statusColor } from "@/src/lib/theme";
 
 const STATUS_LABELS: Record<AllotmentResult["status"], string> = {
   ALLOTTED: "Allotted",
   NOT_ALLOTTED: "Not allotted",
   NOT_APPLIED: "No application found",
   ERROR: "Could not check",
-};
-
-const STATUS_COLORS: Record<AllotmentResult["status"], string> = {
-  ALLOTTED: "#0E6B3A",
-  NOT_ALLOTTED: "#B91C1C",
-  NOT_APPLIED: "#6B7280",
-  ERROR: "#B91C1C",
 };
 
 function statusCounts(results: AllotmentResult[]) {
@@ -65,7 +59,7 @@ export default function AllotmentScreen() {
       for (const result of results) {
         nextCache = await cacheAllotmentResult(ipo.id, result);
       }
-      setCache(nextCache);
+      setCache({ ...cache, ...nextCache });
     } finally {
       setChecking(false);
       setCheckingFor(null);
@@ -74,7 +68,35 @@ export default function AllotmentScreen() {
 
   function openRegistrar(ipo: BoardIpo) {
     const check = registrarCheck(ipo);
-    if (check.portalUrl) void Linking.openURL(check.portalUrl);
+    if (!check.portalUrl) return;
+    void Linking.canOpenURL(check.portalUrl)
+      .then((supported) => {
+        if (!supported) {
+          Alert.alert(
+            "Cannot open portal",
+            `Your browser could not open the registrar portal automatically.\n\n${check.portalUrl}\n\nUse the share sheet to copy the link and open it in your browser.`,
+            [
+              { text: "Cancel", style: "cancel" },
+              { text: "Share link", onPress: () => void shareLink(check.portalUrl!) },
+            ],
+          );
+          return;
+        }
+        return Linking.openURL(check.portalUrl!);
+      })
+      .catch(() => {
+        Alert.alert(
+          "Cannot open portal",
+          `Something went wrong opening the registrar portal.\n\n${check.portalUrl}`,
+          [{ text: "OK" }],
+        );
+      });
+  }
+
+  function shareLink(url: string) {
+    void Share.share({ message: url }).catch(() => {
+      /* share sheet may be unavailable */
+    });
   }
 
   const cachedResults = (ipo: BoardIpo): AllotmentResult[] => Object.values(cache[ipo.id] ?? {});
@@ -82,7 +104,7 @@ export default function AllotmentScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#0E6B3A" />
+        <ActivityIndicator size="large" color={colors.green} />
       </View>
     );
   }
@@ -121,7 +143,7 @@ export default function AllotmentScreen() {
                   {results.map((result) => (
                     <View key={result.pan} style={styles.panRow}>
                       <Text style={styles.panText}>{result.pan}</Text>
-                      <Text style={[styles.panStatus, { color: STATUS_COLORS[result.status] }]}>
+                      <Text style={[styles.panStatus, { color: colors[statusColor(result.status)] }]}>
                         {STATUS_LABELS[result.status]}
                       </Text>
                     </View>
@@ -136,7 +158,7 @@ export default function AllotmentScreen() {
                     : `${counts.ALLOTTED} allotted · ${counts.NOT_ALLOTTED} not · ${counts.NOT_APPLIED} no application`}
                 </Text>
                 {isChecking ? (
-                  <ActivityIndicator size="small" color="#0E6B3A" />
+                  <ActivityIndicator size="small" color={colors.green} />
                 ) : isAutomatable ? (
                   <TouchableOpacity style={styles.checkButton} onPress={() => void handleCheck(ipo)}>
                     <Text style={styles.checkButtonText}>Check all PANs</Text>
@@ -166,10 +188,10 @@ export default function AllotmentScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FAF7F2",
+    backgroundColor: colors.paper,
   },
   content: {
-    padding: 16,
+    padding: spacing.lg,
     paddingBottom: 40,
   },
   center: {
@@ -178,61 +200,62 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   heading: {
-    fontSize: 22,
+    fontSize: typography.title.fontSize,
+    lineHeight: typography.title.lineHeight,
     fontWeight: "800",
-    color: "#111827",
+    color: colors.ink,
     marginBottom: 4,
   },
   subheading: {
-    fontSize: 13,
-    color: "#6B7280",
-    lineHeight: 19,
-    marginBottom: 16,
+    fontSize: typography.caption.fontSize,
+    color: colors.inkMuted,
+    lineHeight: typography.caption.lineHeight,
+    marginBottom: spacing.lg,
   },
   muted: {
-    color: "#6B7280",
-    fontSize: 13,
-    paddingVertical: 12,
+    color: colors.inkMuted,
+    fontSize: typography.caption.fontSize,
+    paddingVertical: spacing.md,
   },
   ipoCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
   },
   ipoCardActive: {
-    borderColor: "#0E6B3A",
+    borderColor: colors.green,
   },
   ipoHeader: {
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   ipoName: {
-    fontSize: 16,
+    fontSize: typography.body.fontSize + 2,
     fontWeight: "700",
-    color: "#111827",
+    color: colors.ink,
   },
   ipoMeta: {
-    fontSize: 12,
-    color: "#6B7280",
+    fontSize: typography.caption.fontSize,
+    color: colors.inkMuted,
     marginTop: 2,
   },
   ipoFooter: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   ipoSummary: {
-    fontSize: 13,
-    color: "#6B7280",
+    fontSize: typography.caption.fontSize,
+    color: colors.inkMuted,
   },
   panList: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#E5E7EB",
-    paddingTop: 8,
-    marginBottom: 8,
+    borderTopColor: colors.border,
+    paddingTop: spacing.sm,
+    marginBottom: spacing.sm,
   },
   panRow: {
     flexDirection: "row",
@@ -241,34 +264,34 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   panText: {
-    fontSize: 14,
-    color: "#111827",
+    fontSize: typography.body.fontSize,
+    color: colors.ink,
     fontWeight: "600",
   },
   panStatus: {
-    fontSize: 14,
+    fontSize: typography.body.fontSize,
     fontWeight: "700",
   },
   checkButton: {
-    backgroundColor: "#0E6B3A",
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    backgroundColor: colors.green,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
   },
   checkButtonText: {
-    color: "#FFFFFF",
-    fontSize: 13,
+    color: colors.white,
+    fontSize: typography.caption.fontSize,
     fontWeight: "700",
   },
   sourceNote: {
-    backgroundColor: "#FFF7ED",
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 8,
+    backgroundColor: colors.amberSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginTop: spacing.sm,
   },
   sourceNoteText: {
-    fontSize: 13,
-    color: "#374151",
-    lineHeight: 19,
+    fontSize: typography.caption.fontSize,
+    color: colors.ink,
+    lineHeight: typography.caption.lineHeight,
   },
 });

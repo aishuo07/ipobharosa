@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { recordSourceSuccess, recordSourceFailure } from "@/lib/ingestion/source-operation";
 
 const BIGSHARE_ENDPOINT = "https://ipo.bigshareonline.com/Data.aspx/FetchIpodetails";
+
+const OPERATION_KEY = "registrar:bigshare:search";
 
 function headers() {
   return {
@@ -27,11 +30,15 @@ export async function POST(request: Request) {
       body: upstreamBody,
     });
     if (!upstream.ok) {
-      return NextResponse.json({ error: `Upstream HTTP ${upstream.status}` }, { status: 502 });
+      const message = `Upstream HTTP ${upstream.status}`;
+      await recordSourceFailure(OPERATION_KEY, "Bigshare", "allotment-pan-search", new Error(message));
+      return NextResponse.json({ error: message }, { status: 502 });
     }
     const data = await upstream.json();
+    await recordSourceSuccess(OPERATION_KEY, "Bigshare", "allotment-pan-search");
     return NextResponse.json(data, { headers: { "Access-Control-Allow-Origin": "*" } });
   } catch (e) {
+    await recordSourceFailure(OPERATION_KEY, "Bigshare", "allotment-pan-search", e);
     return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown error" }, { status: 500 });
   }
 }

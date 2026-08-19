@@ -1,4 +1,5 @@
 import { toIpoSlug } from "@/lib/ipo-slug";
+import { normalizedNamesMatch } from "@/lib/gmp/name-match";
 import { ipobharosaUserAgent } from "@/lib/site-url";
 import type { GmpAdapter } from "../types";
 import type { ProviderResult } from "@/lib/ingestion/provider-result";
@@ -50,7 +51,7 @@ function normalizedSourceName(companyName: string): string {
 export function findInvestorGainGmp(companyName: string, rows: InvestorGainRow[]): ProviderResult<number> {
   const expected = normalizedSourceName(companyName);
   const row = rows.find((candidate) =>
-    typeof candidate["~ipo_name"] === "string" && toIpoSlug(candidate["~ipo_name"]) === expected,
+    typeof candidate["~ipo_name"] === "string" && normalizedNamesMatch(expected, normalizedSourceName(candidate["~ipo_name"])),
   );
   if (!row) {
     return { kind: "NOT_COVERED", reason: `InvestorGain has no matching IPO row for ${companyName}` };

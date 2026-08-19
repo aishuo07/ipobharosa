@@ -1,32 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cacheAllotmentResult, loadAllotmentCache, saveAllotmentCache, type IpoAllotmentCache } from "@/src/lib/allotment-store";
+import { cacheAllotmentResult, loadAllotmentCache } from "@/src/lib/allotment-store";
 import type { AllotmentResult } from "@/src/lib/allotment";
 
-vi.mock("expo-secure-store", () => ({
-  getItemAsync: vi.fn(async () => null),
-  setItemAsync: vi.fn(async () => {}),
-}));
+const secureStore = new Map<string, string>();
 
-const store = new Map<string, string>();
-vi.mock("@/src/lib/allotment-store", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/src/lib/allotment-store")>();
-  return {
-    ...actual,
-    loadAllotmentCache: vi.fn(async () => {
-      const raw = store.get("ipobharosa.allotment-cache.v1");
-      return raw ? (JSON.parse(raw) as IpoAllotmentCache) : {};
-    }),
-    saveAllotmentCache: vi.fn(async (cache: IpoAllotmentCache) => {
-      store.set("ipobharosa.allotment-cache.v1", JSON.stringify(cache));
-    }),
-    cacheAllotmentResult: vi.fn(async (ipoId: string, result: AllotmentResult) => {
-      const cache = await loadAllotmentCache();
-      cache[ipoId] = { ...(cache[ipoId] ?? {}), [result.pan]: result };
-      await saveAllotmentCache(cache);
-      return cache;
-    }),
-  };
-});
+vi.mock("expo-secure-store", () => ({
+  getItemAsync: vi.fn(async (key: string) => secureStore.get(key) ?? null),
+  setItemAsync: vi.fn(async (key: string, value: string) => {
+    secureStore.set(key, value);
+  }),
+}));
 
 function makeResult(pan: string, status: AllotmentResult["status"]): AllotmentResult {
   return {
@@ -38,9 +21,9 @@ function makeResult(pan: string, status: AllotmentResult["status"]): AllotmentRe
   };
 }
 
-describe("allotment cache", () => {
+describe("allotment cache (per-IPO SecureStore keys)", () => {
   beforeEach(() => {
-    store.clear();
+    secureStore.clear();
   });
 
   it("stores results keyed by IPO id and PAN, and returns them on load", async () => {
@@ -61,6 +44,14 @@ describe("allotment cache", () => {
     expect(cache["ipo-2"]["HFQPK9233H"].status).toBe("NOT_ALLOTTED");
   });
 
+  it("keeps each IPO's entry small (well under iOS 2048-byte SecureStore limit)", async () => {
+    for (let i = 0; i < 5; i++) {
+      await cacheAllotmentResult("ipo-1", makeResult(`PAN${String(i).padStart(4, "0")}H`, i % 2 ? "ALLOTTED" : "NOT_ALLOTTED"));
+    }
+    const entry = secureStore.get("ipobharosa.allotment.ipo-1") ?? "";
+    expect(entry.length).toBeLessThan(2048);
+  });
+
   it("overwrites a PAN's previous result for the same IPO", async () => {
     await cacheAllotmentResult("ipo-1", makeResult("HFQPK9233H", "NOT_ALLOTTED"));
     await cacheAllotmentResult("ipo-1", makeResult("HFQPK9233H", "ALLOTTED"));
@@ -74,9 +65,8 @@ describe("allotment cache", () => {
     expect(await loadAllotmentCache()).toEqual({});
   });
 
-  it("persists an explicit cache via saveAllotmentCache", async () => {
-    await saveAllotmentCache({ "ipo-9": { ABCDE1234F: makeResult("ABCDE1234F", "NOT_APPLIED") } });
-    const cache = await loadAllotmentCache();
-    expect(cache["ipo-9"]["ABCDE1234F"].status).toBe("NOT_APPLIED");
+  it("survives an in-memory reload by re-reading SecureStore", async () => {
+    await cacheAllotmentResult("ipo-1", makeResult("HFQPK9233H", "ALLOTTED"));
+    expect((await loadAllotmentCache())["ipo-1"]["HFQPK9233H"].status).toBe("ALLOTTED");
   });
 });

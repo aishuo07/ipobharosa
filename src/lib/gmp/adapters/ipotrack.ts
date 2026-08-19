@@ -1,4 +1,5 @@
 import { toIpoSlug } from "@/lib/ipo-slug";
+import { normalizedNamesMatch } from "@/lib/gmp/name-match";
 import { ipobharosaUserAgent } from "@/lib/site-url";
 import type { GmpAdapter } from "../types";
 import type { ProviderResult } from "@/lib/ingestion/provider-result";
@@ -19,7 +20,7 @@ export function findIpoTrackGmp(companyName: string, html: string): ProviderResu
   let match: RegExpExecArray | null;
   while ((match = rowRe.exec(unescaped)) !== null) {
     const [, title, slug, rawGmp] = match;
-    if (toIpoSlug(title) === expected || slug === expected) {
+    if (normalizedNamesMatch(companyName, title) || toIpoSlug(slug) === expected) {
       const value = parseFloat(rawGmp.replace(/[₹,\s]/g, ""));
       if (Number.isNaN(value)) {
         throw new Error(`ipotrack: gmp "${rawGmp}" is not a number for "${companyName}"`);

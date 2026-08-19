@@ -1,12 +1,17 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { BoardIpo } from "@/src/lib/types";
 import { formatDecimal } from "@/src/lib/format";
+import { effectiveStatus, STATUS_LABELS, type EffectiveStatus } from "@/src/lib/status";
+import { colors, radius, spacing, typography, statusColor, statusSoftColor } from "@/src/lib/theme";
 
-export const STATUS_META: Record<BoardIpo["status"], { label: string; color: string }> = {
-  OPEN: { label: "Open", color: "#0E6B3A" },
-  UPCOMING: { label: "Upcoming", color: "#B45309" },
-  CLOSED: { label: "Closed", color: "#6B7280" },
-  LISTED: { label: "Listed", color: "#1D4ED8" },
+const EFFECTIVE_META: Record<EffectiveStatus, { color: string; soft: string }> = {
+  open: { color: colors[statusColor("OPEN")], soft: colors[statusSoftColor("OPEN")] },
+  "closing-soon": { color: colors[statusColor("closing-soon")], soft: colors[statusSoftColor("closing-soon")] },
+  upcoming: { color: colors[statusColor("UPCOMING")], soft: colors[statusSoftColor("UPCOMING")] },
+  closed: { color: colors[statusColor("CLOSED")], soft: colors[statusSoftColor("CLOSED")] },
+  "listed-pending": { color: colors[statusColor("UPCOMING")], soft: colors[statusSoftColor("UPCOMING")] },
+  "listed-gain": { color: colors[statusColor("LISTED")], soft: colors[statusSoftColor("LISTED")] },
+  "listed-loss": { color: colors[statusColor("CLOSED")], soft: colors[statusSoftColor("CLOSED")] },
 };
 
 function formatDate(iso: string): string {
@@ -33,7 +38,9 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 export function IpoRow({ ipo, onPress }: { ipo: BoardIpo; onPress: () => void }) {
-  const meta = STATUS_META[ipo.status];
+  const es = effectiveStatus(ipo, Date.now());
+  const meta = EFFECTIVE_META[es];
+  const statusLabel = STATUS_LABELS[es];
   const priceBand =
     ipo.priceBandLow > 0 && ipo.priceBandHigh > 0 ? `₹${ipo.priceBandLow}–${ipo.priceBandHigh}` : "TBD";
   const issueSize = ipo.issueSizeCr > 0 ? `₹${ipo.issueSizeCr} Cr` : "TBD";
@@ -50,8 +57,8 @@ export function IpoRow({ ipo, onPress }: { ipo: BoardIpo; onPress: () => void })
         <Text style={styles.company} numberOfLines={2}>
           {ipo.companyName}
         </Text>
-        <View style={[styles.badge, { backgroundColor: meta.color + "14" }]}>
-          <Text style={[styles.badgeText, { color: meta.color }]}>{meta.label}</Text>
+        <View style={[styles.badge, { backgroundColor: meta.soft }]}>
+          <Text style={[styles.badgeText, { color: meta.color }]}>{statusLabel}</Text>
         </View>
       </View>
       <Text style={styles.subtitle}>
@@ -94,10 +101,10 @@ export function IpoRow({ ipo, onPress }: { ipo: BoardIpo; onPress: () => void })
 
 const styles = StyleSheet.create({
   row: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    padding: 14,
-    marginHorizontal: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginHorizontal: spacing.md,
     marginVertical: 6,
     shadowColor: "#000",
     shadowOpacity: 0.06,
@@ -114,58 +121,58 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   company: {
-    fontSize: 16,
+    fontSize: typography.body.fontSize + 2,
     fontWeight: "700",
-    color: "#111827",
+    color: colors.ink,
     flex: 1,
-    marginRight: 8,
+    marginRight: spacing.sm,
     lineHeight: 21,
   },
   badge: {
     paddingHorizontal: 9,
     paddingVertical: 3,
-    borderRadius: 999,
+    borderRadius: radius.pill,
   },
   badgeText: {
-    fontSize: 12,
+    fontSize: typography.caption.fontSize,
     fontWeight: "700",
   },
   subtitle: {
     fontSize: 12.5,
-    color: "#6B7280",
+    color: colors.inkMuted,
     marginTop: 3,
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginTop: 12,
-    backgroundColor: "#F9FAFB",
-    borderRadius: 10,
-    paddingVertical: 10,
+    marginTop: spacing.md,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm + 2,
     paddingHorizontal: 4,
   },
   stat: {
     width: "50%",
-    paddingHorizontal: 10,
+    paddingHorizontal: spacing.sm + 2,
     paddingVertical: 3,
   },
   statLabel: {
     fontSize: 11,
-    color: "#9CA3AF",
+    color: colors.inkFaint,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
   statValue: {
     fontSize: 13.5,
     fontWeight: "600",
-    color: "#1F2937",
+    color: colors.ink,
     marginTop: 1,
   },
   footer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 10,
+    marginTop: spacing.sm + 2,
   },
   gmpChip: {
     flexDirection: "row",
@@ -174,32 +181,32 @@ const styles = StyleSheet.create({
   },
   gmpLabel: {
     fontSize: 11,
-    color: "#9CA3AF",
+    color: colors.inkFaint,
     textTransform: "uppercase",
     letterSpacing: 0.5,
     fontWeight: "700",
   },
   gmpValue: {
-    fontSize: 14,
+    fontSize: typography.body.fontSize,
     fontWeight: "700",
-    color: "#6B7280",
+    color: colors.inkMuted,
   },
   gmpPositive: {
-    color: "#0E6B3A",
+    color: colors.green,
   },
   subChip: {
-    backgroundColor: "#1D4ED8",
-    borderRadius: 999,
-    paddingHorizontal: 10,
+    backgroundColor: colors.blue,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm + 2,
     paddingVertical: 3,
   },
   subText: {
-    color: "#FFFFFF",
-    fontSize: 12,
+    color: colors.white,
+    fontSize: typography.caption.fontSize,
     fontWeight: "700",
   },
   hint: {
-    fontSize: 12,
-    color: "#9CA3AF",
+    fontSize: typography.caption.fontSize,
+    color: colors.inkFaint,
   },
 });
