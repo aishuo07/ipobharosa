@@ -1,6 +1,7 @@
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { usePostHog } from "posthog-react-native";
 import { fetchBoard } from "@/src/lib/api";
 import type { BoardIpo } from "@/src/lib/types";
 import { registrarCheck } from "@/src/lib/allotment";
@@ -135,6 +136,7 @@ function SubscriptionBars({ ipo }: { ipo: BoardIpo }) {
 
 export default function IpoDetailScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
+  const posthog = usePostHog();
   const [ipo, setIpo] = useState<BoardIpo | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -148,11 +150,12 @@ export default function IpoDetailScreen() {
           return;
         }
         setIpo(found);
+        posthog?.capture("ipo_view", { screen: "ipo_detail", ipo_slug: slug, ipo_name: found.companyName });
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : "Could not load IPO details");
       }
     })();
-  }, [slug]);
+  }, [slug, posthog]);
 
   if (error) {
     return (

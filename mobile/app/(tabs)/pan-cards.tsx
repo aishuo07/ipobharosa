@@ -12,10 +12,12 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
+import { usePostHog } from "posthog-react-native";
 import { addPanCard, isValidPan, loadPanCards, removePanCard, type PanCard } from "@/src/lib/pan-store";
 import { colors, radius, spacing, typography } from "@/src/lib/theme";
 
 export default function PanCardsScreen() {
+  const posthog = usePostHog();
   const [cards, setCards] = useState<PanCard[]>([]);
   const [pan, setPan] = useState("");
   const [holderName, setHolderName] = useState("");
@@ -39,6 +41,7 @@ export default function PanCardsScreen() {
     setSaving(true);
     try {
       const card = await addPanCard(pan, holderName);
+      posthog?.capture("pan_add", { screen: "pan_cards" });
       setCards((current) => [...current, card]);
       setPan("");
       setHolderName("");

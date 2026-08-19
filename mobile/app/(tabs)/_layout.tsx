@@ -1,6 +1,8 @@
-import { Tabs } from "expo-router";
+import { useEffect } from "react";
+import { Tabs, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
+import { usePostHog } from "posthog-react-native";
 import { colors, spacing } from "@/src/lib/theme";
 
 function BrandHeader() {
@@ -18,6 +20,12 @@ function BrandHeader() {
 }
 
 export default function TabsLayout() {
+  const pathname = usePathname();
+  const posthog = usePostHog();
+  useEffect(() => {
+    posthog?.capture("screen_view", { screen: pathname });
+  }, [pathname, posthog]);
+
   return (
     <Tabs
       screenOptions={{

@@ -5,6 +5,7 @@ import type { BoardIpo } from "@/src/lib/types";
 import { loadPanCards, type PanCard } from "@/src/lib/pan-store";
 import { checkAllotmentForPans, registrarCheck, type AllotmentResult } from "@/src/lib/allotment";
 import { cacheAllotmentResult, loadAllotmentCache, type IpoAllotmentCache } from "@/src/lib/allotment-store";
+import { usePostHog } from "posthog-react-native";
 import { colors, radius, spacing, typography, statusColor } from "@/src/lib/theme";
 
 const STATUS_LABELS: Record<AllotmentResult["status"], string> = {
@@ -21,6 +22,7 @@ function statusCounts(results: AllotmentResult[]) {
 }
 
 export default function AllotmentScreen() {
+  const posthog = usePostHog();
   const [ipos, setIpos] = useState<BoardIpo[]>([]);
   const [cards, setCards] = useState<PanCard[]>([]);
   const [cache, setCache] = useState<IpoAllotmentCache>({});
@@ -51,6 +53,7 @@ export default function AllotmentScreen() {
     setChecking(true);
     setCheckingFor(ipo.id);
     try {
+      posthog?.capture("allotment_check", { screen: "allotment", ipo_slug: ipo.slug, ipo_name: ipo.companyName });
       const results = await checkAllotmentForPans(
         ipo,
         cards.map((card) => card.pan),
@@ -69,6 +72,7 @@ export default function AllotmentScreen() {
   function openRegistrar(ipo: BoardIpo) {
     const check = registrarCheck(ipo);
     if (!check.portalUrl) return;
+    posthog?.capture("registrar_click", { screen: "allotment", ipo_slug: ipo.slug, ipo_name: ipo.companyName });
     void Linking.canOpenURL(check.portalUrl)
       .then((supported) => {
         if (!supported) {
