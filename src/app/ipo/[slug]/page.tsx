@@ -18,8 +18,12 @@ import { googleCalendarSubscriptionUrl } from "@/lib/calendar";
 
 // GMP figures matter most for this page and refresh every hour —
 // 30 minutes keeps a crawled/cached copy reasonably current without
-// hitting the database on every single request.
+// hitting the database on every single request. The discussion section
+// reads the session cookie, so the page is dynamic per request; keep the
+// 30-minute revalidate for the data-driven sections and let Next.js treat
+// it as dynamic because auth() reads cookies.
 export const revalidate = 1800;
+export const dynamic = "force-dynamic";
 
 export async function generateStaticParams() {
   // IPOs are database-driven and can be published every hour. Avoid a
