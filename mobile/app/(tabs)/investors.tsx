@@ -2,7 +2,6 @@ import { useCallback, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -14,7 +13,6 @@ import {
 import { useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { usePostHog } from "posthog-react-native";
-import QRCode from "react-native-qrcode-svg";
 import {
   addInvestorProfile,
   isValidDematClientId,
@@ -23,7 +21,6 @@ import {
   loadInvestorProfiles,
   removeInvestorProfile,
   type InvestorProfile,
-  type UpiMandate,
 } from "@/src/lib/investor-profile";
 import { colors, radius, spacing, typography } from "@/src/lib/theme";
 
@@ -36,7 +33,6 @@ export default function InvestorsScreen() {
   const [dematProvider, setDematProvider] = useState<"CDSL" | "NSDL" | null>(null);
   const [dematClientId, setDematClientId] = useState("");
   const [saving, setSaving] = useState(false);
-  const [mandate, setMandate] = useState<UpiMandate | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -90,15 +86,6 @@ export default function InvestorsScreen() {
     setProfiles((current) => current.filter((p) => p.id !== id));
   }
 
-  function launchUpi(m: UpiMandate) {
-    Linking.openURL(m.deepLink).catch(() => {
-      Alert.alert(
-        "No UPI app found",
-        "Open this UPI ID in any UPI app on this phone to approve the mandate.",
-      );
-    });
-  }
-
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -112,8 +99,8 @@ export default function InvestorsScreen() {
           <View style={styles.noteBody}>
             <Text style={styles.noteTitle}>Apply for every family member</Text>
             <Text style={styles.noteText}>
-              Save each person&apos;s PAN, demat and UPI ID once. When an IPO opens, generate a UPI mandate
-              for that person and approve it in their own UPI app — no broker login needed.
+              Save each person&apos;s PAN, demat and UPI ID once. In-app IPO application is coming soon via a
+              partner intermediary — your saved profiles will pre-fill the request. No broker login needed.
             </Text>
           </View>
         </View>
@@ -194,24 +181,6 @@ export default function InvestorsScreen() {
               </View>
             </View>
           ))
-        )}
-
-        {mandate && (
-          <View style={styles.mandateCard}>
-            <Text style={styles.mandateTitle}>UPI mandate ready</Text>
-            <Text style={styles.mandateAmount}>₹{mandate.amount.toLocaleString("en-IN")}</Text>
-            <Text style={styles.mandateMeta}>{mandate.payeeName}</Text>
-            <Text style={styles.mandateMeta}>{mandate.transactionNote}</Text>
-            <View style={styles.qr}>
-              <QRCode value={mandate.deepLink} size={180} color={colors.ink} backgroundColor="#FFFFFF" />
-            </View>
-            <Text style={styles.mandateHint}>
-              Scan with {mandate.upiId.split("@")[1]}&apos;s UPI app, or tap below to open it on this phone.
-            </Text>
-            <TouchableOpacity style={styles.launchButton} onPress={() => launchUpi(mandate)}>
-              <Text style={styles.launchButtonText}>Open in UPI app</Text>
-            </TouchableOpacity>
-          </View>
         )}
       </ScrollView>
     </KeyboardAvoidingView>
@@ -365,56 +334,5 @@ const styles = StyleSheet.create({
     color: colors.red,
     fontSize: 13,
     fontWeight: "600",
-  },
-  mandateCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.xl,
-    alignItems: "center",
-    marginTop: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  mandateTitle: {
-    fontSize: typography.title.fontSize,
-    fontWeight: "800",
-    color: colors.ink,
-  },
-  mandateAmount: {
-    fontSize: 34,
-    fontWeight: "800",
-    color: colors.green,
-    marginTop: spacing.sm,
-    fontVariant: ["tabular-nums"],
-  },
-  mandateMeta: {
-    fontSize: 13,
-    color: colors.inkMuted,
-    marginTop: 2,
-  },
-  qr: {
-    marginTop: spacing.lg,
-    padding: spacing.md,
-    backgroundColor: colors.white,
-    borderRadius: radius.sm,
-  },
-  mandateHint: {
-    fontSize: 12,
-    color: colors.inkMuted,
-    textAlign: "center",
-    marginTop: spacing.md,
-  },
-  launchButton: {
-    backgroundColor: colors.green,
-    borderRadius: radius.sm,
-    paddingVertical: 13,
-    paddingHorizontal: spacing.xl,
-    alignItems: "center",
-    marginTop: spacing.md,
-  },
-  launchButtonText: {
-    color: colors.white,
-    fontSize: 15,
-    fontWeight: "700",
   },
 });

@@ -1,9 +1,9 @@
 import * as SecureStore from "expo-secure-store";
 
-// An investor profile is everything the UPI-ASBA application needs for one
-// person: PAN, holder name, demat details and the UPI ID that must approve
-// the mandate. The UPI mandate (deep link / QR) is generated per IPO so the
-// applicant approves the block in their own UPI app on their own phone.
+// An investor profile holds the details a UPI-ASBA application needs for one
+// person: PAN, holder name, demat details and the UPI ID that approves the
+// mandate. The profile is the payload a partner intermediary (e.g. Meon IPO)
+// consumes when the in-app application flow goes live.
 
 export type InvestorProfile = {
   id: string;
@@ -13,15 +13,6 @@ export type InvestorProfile = {
   dematClientId: string;
   upiId: string;
   createdAt: string;
-};
-
-export type UpiMandate = {
-  upiId: string;
-  payeeVpa: string;
-  payeeName: string;
-  amount: number;
-  transactionNote: string;
-  deepLink: string;
 };
 
 const STORAGE_KEY = "ipobharosa.investor-profiles.v1";
@@ -142,60 +133,6 @@ export async function updateInvestorProfile(id: string, patch: Partial<Pick<Inve
 export async function removeInvestorProfile(id: string): Promise<void> {
   const profiles = await loadInvestorProfiles();
   await saveInvestorProfiles(profiles.filter((p) => p.id !== id));
-}
-
-// Registrar -> sponsor bank VPA that collects the UPI-ASBA mandate for that
-// issue. Published in each issue's RHP / registrar instructions. Maintained
-// as a small lookup; falls back to a clear note when unknown so the app never
-// invents a VPA.
-export const REGISTRAR_VPA_OVERRIDES: Record<string, string> = {
-  kfintech: "",
-  "kfin technologies": "",
-  mufg: "",
-  intime: "",
-  "link intime": "",
-  bigshare: "",
-  "bigshare services": "",
-  maashitla: "",
-  "maashitla securities": "",
-};
-
-export function vpaForRegistrar(registrar: string | null): string | null {
-  if (!registrar) return null;
-  const key = registrar.toLowerCase();
-  for (const [name, vpa] of Object.entries(REGISTRAR_VPA_OVERRIDES)) {
-    if (key.includes(name)) return vpa || null;
-  }
-  return null;
-}
-
-// Build a UPI deep link that opens the applicant's own UPI app with the
-// mandate pre-filled. mode=02 signals a one-time mandate (ASBA block).
-export function buildUpiMandate(input: {
-  upiId: string;
-  payeeVpa: string;
-  payeeName: string;
-  amount: number;
-  transactionNote: string;
-}): UpiMandate {
-  const amount = Math.round(input.amount * 100) / 100;
-  const params = new URLSearchParams();
-  params.set("pa", input.payeeVpa);
-  params.set("pn", input.payeeName);
-  params.set("am", String(amount));
-  params.set("cu", "INR");
-  params.set("tn", input.transactionNote);
-  params.set("mode", "02");
-  params.set("purpose", "20");
-  const deepLink = `upi://pay?${params.toString()}`;
-  return {
-    upiId: input.upiId,
-    payeeVpa: input.payeeVpa,
-    payeeName: input.payeeName,
-    amount,
-    transactionNote: input.transactionNote,
-    deepLink,
-  };
 }
 
 // For an OPEN IPO, the application amount is lots x the upper price band.

@@ -1,8 +1,7 @@
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { usePostHog } from "posthog-react-native";
-import QRCode from "react-native-qrcode-svg";
 import { fetchBoard } from "@/src/lib/api";
 import type { BoardIpo } from "@/src/lib/types";
 import { registrarCheck } from "@/src/lib/allotment";
@@ -11,11 +10,8 @@ import { formatDecimal, formatMoney, formatPercent } from "@/src/lib/format";
 import { colors, radius, spacing, typography, statusColor, statusSoftColor } from "@/src/lib/theme";
 import {
   applicationAmount,
-  buildUpiMandate,
   loadInvestorProfiles,
-  vpaForRegistrar,
   type InvestorProfile,
-  type UpiMandate,
 } from "@/src/lib/investor-profile";
 
 const EFFECTIVE_META: Record<EffectiveStatus, { color: string; soft: string }> = {
@@ -284,10 +280,8 @@ export default function IpoDetailScreen() {
 }
 
 function ApplyCard({ ipo }: { ipo: BoardIpo }) {
-  const posthog = usePostHog();
   const [profiles, setProfiles] = useState<InvestorProfile[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [mandate, setMandate] = useState<UpiMandate | null>(null);
   const [lots, setLots] = useState("1");
 
   useEffect(() => {
@@ -297,39 +291,15 @@ function ApplyCard({ ipo }: { ipo: BoardIpo }) {
     });
   }, []);
 
-  const selected = profiles.find((p) => p.id === selectedId) ?? null;
   const lotsNum = Math.max(1, parseInt(lots, 10) || 1);
   const amount = applicationAmount(ipo, lotsNum);
-  const vpa = vpaForRegistrar(ipo.registrar);
-
-  function generateMandate() {
-    if (!selected) return;
-    const m = buildUpiMandate({
-      upiId: selected.upiId,
-      payeeVpa: vpa ?? "collect@hdfcbank", // fallback placeholder replaced at deploy time
-      payeeName: ipo.companyName,
-      amount,
-      transactionNote: `IPO ${selected.pan}`,
-    });
-    posthog?.capture("apply_mandate_generated", { screen: "ipo_detail", ipo: ipo.slug });
-    setMandate(m);
-  }
-
-  function launchUpi() {
-    if (!mandate) return;
-    Linking.openURL(mandate.deepLink).catch(() => {
-      Alert.alert(
-        "No UPI app found",
-        "Open this UPI ID in any UPI app on this phone to approve the mandate.",
-      );
-    });
-  }
 
   return (
     <View style={styles.card}>
-      <Text style={styles.sectionTitle}>Apply via UPI</Text>
+      <Text style={styles.sectionTitle}>Apply</Text>
       <Text style={styles.muted}>
-        Pick who is applying and generate a UPI mandate. The applicant approves it in their own UPI app — no broker login needed.
+        In-app IPO application is coming soon via a partner intermediary — no broker login needed, just PAN,
+        demat and UPI. Pick who is applying to pre-fill the request.
       </Text>
 
       {profiles.length === 0 ? (
@@ -370,31 +340,9 @@ function ApplyCard({ ipo }: { ipo: BoardIpo }) {
             <Text style={styles.muted}>≈ {lotsNum} lot{lotsNum !== 1 ? "s" : ""}</Text>
           </View>
 
-          {vpa === null && (
-            <Text style={styles.applyVpaWarn}>
-              Sponsor-bank UPI handle for {ipo.registrar ?? "this registrar"} isn&apos;t configured yet. The
-              mandate will point to the default placeholder — verify the VPA in the RHP before approving.
-            </Text>
-          )}
-
-          <TouchableOpacity style={styles.applyButton} onPress={generateMandate} disabled={!selected}>
-            <Text style={styles.applyButtonText}>Generate UPI mandate</Text>
+          <TouchableOpacity style={[styles.applyButton, styles.applyButtonDisabled]} disabled>
+            <Text style={styles.applyButtonText}>Apply — coming soon</Text>
           </TouchableOpacity>
-
-          {mandate && (
-            <View style={styles.applyMandate}>
-              <Text style={styles.applyMandateTitle}>Mandate ready</Text>
-              <View style={styles.qr}>
-                <QRCode value={mandate.deepLink} size={160} color={colors.ink} backgroundColor="#FFFFFF" />
-              </View>
-              <Text style={styles.muted}>
-                Scan with {mandate.upiId.split("@")[1]}&apos;s UPI app, or open it on this phone:
-              </Text>
-              <TouchableOpacity style={styles.applyButton} onPress={launchUpi}>
-                <Text style={styles.applyButtonText}>Open in UPI app</Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </>
       )}
     </View>
@@ -711,12 +659,6 @@ const styles = StyleSheet.create({
     color: colors.green,
     fontVariant: ["tabular-nums"],
   },
-  applyVpaWarn: {
-    fontSize: 12,
-    color: colors.amber,
-    marginTop: spacing.sm,
-    lineHeight: 17,
-  },
   applyButton: {
     backgroundColor: colors.green,
     borderRadius: radius.sm,
@@ -724,27 +666,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: spacing.md,
   },
+  applyButtonDisabled: {
+    backgroundColor: colors.surfaceAlt,
+  },
   applyButtonText: {
     color: colors.white,
     fontSize: 15,
     fontWeight: "700",
-  },
-  applyMandate: {
-    alignItems: "center",
-    marginTop: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: spacing.lg,
-    gap: spacing.sm,
-  },
-  applyMandateTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: colors.ink,
-  },
-  qr: {
-    padding: spacing.md,
-    backgroundColor: colors.white,
-    borderRadius: radius.sm,
   },
 });

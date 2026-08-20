@@ -11,9 +11,7 @@ import {
   isValidDematClientId,
   normalizePan,
   normalizeUpiId,
-  buildUpiMandate,
   applicationAmount,
-  vpaForRegistrar,
 } from "./investor-profile";
 
 describe("investor-profile validation", () => {
@@ -63,50 +61,9 @@ describe("investor-profile validation", () => {
   });
 });
 
-describe("UPI mandate", () => {
-  it("builds a mandate deep link with ASBA params", () => {
-    const mandate = buildUpiMandate({
-      upiId: "9876543210@ybl",
-      payeeVpa: "sponsor@bank",
-      payeeName: "Example Co Ltd",
-      amount: 14400,
-      transactionNote: "IPO ABCDE1234F",
-    });
-    expect(mandate.deepLink).toContain("upi://pay?");
-    expect(mandate.deepLink).toContain("pa=sponsor%40bank");
-    expect(mandate.deepLink).toContain("am=14400");
-    expect(mandate.deepLink).toContain("mode=02");
-    expect(mandate.deepLink).toContain("purpose=20");
-    expect(mandate.deepLink).toContain("tn=IPO+ABCDE1234F");
-  });
-
-  it("rounds amounts to paise", () => {
-    const mandate = buildUpiMandate({
-      upiId: "a@ybl",
-      payeeVpa: "sponsor@bank",
-      payeeName: "Co",
-      amount: 14400.555,
-      transactionNote: "IPO",
-    });
-    expect(mandate.amount).toBe(14400.56);
-  });
-});
-
 describe("application amount", () => {
   it("computes lots x lot size x upper price band", () => {
     expect(applicationAmount({ lotSize: 50, priceBandHigh: 288 }, 1)).toBe(14400);
     expect(applicationAmount({ lotSize: 50, priceBandHigh: 288 }, 2)).toBe(28800);
-  });
-});
-
-describe("registrar VPA lookup", () => {
-  it("returns null for unknown registrars", () => {
-    expect(vpaForRegistrar("Some Broker")).toBeNull();
-    expect(vpaForRegistrar(null)).toBeNull();
-  });
-
-  it("matches known registrar families but returns null until configured", () => {
-    expect(vpaForRegistrar("KFin Technologies Ltd")).toBeNull();
-    expect(vpaForRegistrar("Link Intime India Pvt Ltd")).toBeNull();
   });
 });
