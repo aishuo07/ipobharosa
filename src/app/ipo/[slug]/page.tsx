@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { auth } from "@/auth";
 import { getBoardIpoBySlug, type BoardIpo } from "@/lib/board-data";
+import { DiscussionPanel } from "@/components/DiscussionPanel";
 import {
   DocumentsPanel,
   FinancialsPanel,
@@ -60,6 +62,7 @@ export default async function IpoDetailPage({
   const { slug } = await params;
   const ipo = await getBoardIpoBySlug(slug);
   if (!ipo) notFound();
+  const session = await auth();
 
   // Server Component: this renders once per request/ISR revalidation
   // (revalidate = 1800s above), not on a client re-render, so a fresh
@@ -115,6 +118,7 @@ export default async function IpoDetailPage({
           <a href="#gmp">GMP</a>
           <a href="#financials">Financials</a>
           <a href="#documents">Documents</a>
+          <a href="#discussion">Discussion</a>
         </nav>
 
         <div className="ipo-detail-evidence" aria-label="Evidence guide">
@@ -183,6 +187,12 @@ export default async function IpoDetailPage({
           </DetailSection>
           <DetailSection id="documents" eyebrow="Primary sources" title="Documents" tone="official">
             <DocumentsPanel ipo={ipo} />
+          </DetailSection>
+          <DetailSection id="discussion" eyebrow="Community" title="Discussion">
+            <DiscussionPanel
+              ipoId={ipo.id}
+              user={session?.user?.id ? { id: session.user.id, email: session.user.email ?? null, name: session.user.name ?? null } : null}
+            />
           </DetailSection>
         </div>
 

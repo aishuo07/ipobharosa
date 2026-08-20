@@ -56,3 +56,4 @@ IPOBharosa-new.apk
 /logo/
 eas-build*.log
 expogo-qr.png
+.env*.local

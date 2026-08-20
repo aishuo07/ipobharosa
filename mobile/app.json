@@ -38,13 +38,6 @@
           "icon": "./assets/android-icon-foreground.png",
           "color": "#173C32"
         }
-      ],
-      [
-        "@sentry/react-native",
-        {
-          "organization": "ipobharosa",
-          "project": "ipobharosa-mobile"
-        }
       ]
     ],
     "experiments": {

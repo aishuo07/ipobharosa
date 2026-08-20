@@ -179,6 +179,7 @@ model Ipo {
   officialAttempts   OfficialSourceAttempt[]
   officialIncidents  OfficialEvidenceIncident[]
   filingCatalogue    IpoFilingCatalogue[]
+  ipocomments        IpoComment[]
 
   @@index([status])
   @@index([publicationState])
@@ -596,6 +597,7 @@ model User {
   watchlistItems     WatchlistItem[]
   alertSubscriptions AlertSubscription[]
   reminderDeliveries ReminderDelivery[]
+  ipocomments        IpoComment[]
 }
 
 model Account {
@@ -750,19 +752,34 @@ model AllotmentAnnouncement {
   announcedAt DateTime @default(now())
 }
 
+// Community discussion: one short comment per IPO per visitor. Public to
+// read, gated behind login to write. A single body keeps the thread clean.
+model IpoComment {
+  id        String   @id @default(uuid())
+  ipo       Ipo      @relation(fields: [ipoId], references: [id], onDelete: Cascade)
+  ipoId     String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  body      String   @db.VarChar(500)
+  createdAt DateTime @default(now())
+
+  @@index([ipoId, createdAt])
+  @@index([userId])
+}
+
 // One row per broadcast send (daily IPO push, manual admin blast). Tracks
 // delivery the same way DigestDelivery does so a broadcast never fires twice
 // for the same (kind, date).
 model PushBroadcast {
-  id         String   @id @default(uuid())
-  kind       String // "daily" | "manual"
+  id            String   @id @default(uuid())
+  kind          String // "daily" | "manual"
   broadcastDate DateTime
-  title      String
-  body       String
-  data       Json?
-  sentCount  Int      @default(0)
-  failedCount Int     @default(0)
-  createdAt  DateTime @default(now())
+  title         String
+  body          String
+  data          Json?
+  sentCount     Int      @default(0)
+  failedCount   Int      @default(0)
+  createdAt     DateTime @default(now())
 
   @@unique([kind, broadcastDate])
   @@index([createdAt])
