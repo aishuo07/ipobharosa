@@ -24,7 +24,7 @@ jobs:
         id: probe
         continue-on-error: true
         env:
-          SITE_URL: ${{ vars.SITE_URL || 'https://ipodekho-ten.vercel.app' }}
+          SITE_URL: ${{ vars.SITE_URL || 'https://ipobharosa.vercel.app' }}
         run: node scripts/check-production-health.mjs
 
       - name: Open one deduplicated incident

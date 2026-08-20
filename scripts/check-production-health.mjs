@@ -1,4 +1,4 @@
-const baseUrl = (process.env.SITE_URL || "https://ipodekho-ten.vercel.app").replace(/\/$/, "");
+const baseUrl = (process.env.SITE_URL || "https://ipobharosa.vercel.app").replace(/\/$/, "");
 const timeoutMs = 20_000;
 
 async function check(path, description, validate) {
