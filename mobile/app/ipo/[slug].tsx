@@ -1,13 +1,22 @@
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { usePostHog } from "posthog-react-native";
+import QRCode from "react-native-qrcode-svg";
 import { fetchBoard } from "@/src/lib/api";
 import type { BoardIpo } from "@/src/lib/types";
 import { registrarCheck } from "@/src/lib/allotment";
 import { effectiveStatus, STATUS_LABELS, type EffectiveStatus } from "@/src/lib/status";
 import { formatDecimal, formatMoney, formatPercent } from "@/src/lib/format";
 import { colors, radius, spacing, typography, statusColor, statusSoftColor } from "@/src/lib/theme";
+import {
+  applicationAmount,
+  buildUpiMandate,
+  loadInvestorProfiles,
+  vpaForRegistrar,
+  type InvestorProfile,
+  type UpiMandate,
+} from "@/src/lib/investor-profile";
 
 const EFFECTIVE_META: Record<EffectiveStatus, { color: string; soft: string }> = {
   open: { color: colors[statusColor("OPEN")], soft: colors[statusSoftColor("OPEN")] },
@@ -267,8 +276,128 @@ export default function IpoDetailScreen() {
             </Text>
           </View>
         )}
+
+        {ipo.status === "OPEN" && <ApplyCard ipo={ipo} />}
       </ScrollView>
     </>
+  );
+}
+
+function ApplyCard({ ipo }: { ipo: BoardIpo }) {
+  const posthog = usePostHog();
+  const [profiles, setProfiles] = useState<InvestorProfile[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [mandate, setMandate] = useState<UpiMandate | null>(null);
+  const [lots, setLots] = useState("1");
+
+  useEffect(() => {
+    void loadInvestorProfiles().then((list) => {
+      setProfiles(list);
+      if (list.length === 1) setSelectedId(list[0].id);
+    });
+  }, []);
+
+  const selected = profiles.find((p) => p.id === selectedId) ?? null;
+  const lotsNum = Math.max(1, parseInt(lots, 10) || 1);
+  const amount = applicationAmount(ipo, lotsNum);
+  const vpa = vpaForRegistrar(ipo.registrar);
+
+  function generateMandate() {
+    if (!selected) return;
+    const m = buildUpiMandate({
+      upiId: selected.upiId,
+      payeeVpa: vpa ?? "collect@hdfcbank", // fallback placeholder replaced at deploy time
+      payeeName: ipo.companyName,
+      amount,
+      transactionNote: `IPO ${selected.pan}`,
+    });
+    posthog?.capture("apply_mandate_generated", { screen: "ipo_detail", ipo: ipo.slug });
+    setMandate(m);
+  }
+
+  function launchUpi() {
+    if (!mandate) return;
+    Linking.openURL(mandate.deepLink).catch(() => {
+      Alert.alert(
+        "No UPI app found",
+        "Open this UPI ID in any UPI app on this phone to approve the mandate.",
+      );
+    });
+  }
+
+  return (
+    <View style={styles.card}>
+      <Text style={styles.sectionTitle}>Apply via UPI</Text>
+      <Text style={styles.muted}>
+        Pick who is applying and generate a UPI mandate. The applicant approves it in their own UPI app — no broker login needed.
+      </Text>
+
+      {profiles.length === 0 ? (
+        <Text style={styles.muted}>
+          No investor profiles saved yet. Add them in the Investors tab first.
+        </Text>
+      ) : (
+        <>
+          <Text style={styles.applyLabel}>Applicant</Text>
+          <View style={styles.applyPicker}>
+            {profiles.map((profile) => (
+              <TouchableOpacity
+                key={profile.id}
+                style={[styles.applyOption, selectedId === profile.id && styles.applyOptionActive]}
+                onPress={() => setSelectedId(profile.id)}
+              >
+                <Text style={[styles.applyOptionText, selectedId === profile.id && styles.applyOptionTextActive]}>
+                  {profile.holderName || profile.pan}
+                </Text>
+                <Text style={styles.applyOptionSub}>
+                  {profile.pan} · {profile.dematProvider ?? ""} {profile.dematClientId}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.applyLabel}>Lots</Text>
+          <TextInput
+            style={styles.applyInput}
+            value={lots}
+            onChangeText={setLots}
+            keyboardType="number-pad"
+            maxLength={3}
+          />
+
+          <View style={styles.applyAmountRow}>
+            <Text style={styles.applyAmount}>₹{amount.toLocaleString("en-IN")}</Text>
+            <Text style={styles.muted}>≈ {lotsNum} lot{lotsNum !== 1 ? "s" : ""}</Text>
+          </View>
+
+          {vpa === null && (
+            <Text style={styles.applyVpaWarn}>
+              Sponsor-bank UPI handle for {ipo.registrar ?? "this registrar"} isn&apos;t configured yet. The
+              mandate will point to the default placeholder — verify the VPA in the RHP before approving.
+            </Text>
+          )}
+
+          <TouchableOpacity style={styles.applyButton} onPress={generateMandate} disabled={!selected}>
+            <Text style={styles.applyButtonText}>Generate UPI mandate</Text>
+          </TouchableOpacity>
+
+          {mandate && (
+            <View style={styles.applyMandate}>
+              <Text style={styles.applyMandateTitle}>Mandate ready</Text>
+              <View style={styles.qr}>
+                <QRCode value={mandate.deepLink} size={160} color={colors.ink} backgroundColor="#FFFFFF" />
+              </View>
+              <Text style={styles.muted}>
+                Scan with {mandate.upiId.split("@")[1]}&apos;s UPI app, or open it on this phone:
+              </Text>
+              <TouchableOpacity style={styles.applyButton} onPress={launchUpi}>
+                <Text style={styles.applyButtonText}>Open in UPI app</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </>
+      )}
+    </View>
   );
 }
 
@@ -521,5 +650,101 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.inkMuted,
     lineHeight: 19,
+  },
+  applyLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.inkMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  applyPicker: {
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  applyOption: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    backgroundColor: colors.surface,
+  },
+  applyOptionActive: {
+    borderColor: colors.green,
+    backgroundColor: colors.greenSoft,
+  },
+  applyOptionText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.ink,
+  },
+  applyOptionTextActive: {
+    color: colors.green,
+  },
+  applyOptionSub: {
+    fontSize: 12,
+    color: colors.inkMuted,
+    marginTop: 1,
+  },
+  applyInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    fontSize: 15,
+    backgroundColor: colors.surface,
+    color: colors.ink,
+  },
+  applyAmountRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    marginTop: spacing.md,
+  },
+  applyAmount: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: colors.green,
+    fontVariant: ["tabular-nums"],
+  },
+  applyVpaWarn: {
+    fontSize: 12,
+    color: colors.amber,
+    marginTop: spacing.sm,
+    lineHeight: 17,
+  },
+  applyButton: {
+    backgroundColor: colors.green,
+    borderRadius: radius.sm,
+    paddingVertical: 13,
+    alignItems: "center",
+    marginTop: spacing.md,
+  },
+  applyButtonText: {
+    color: colors.white,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  applyMandate: {
+    alignItems: "center",
+    marginTop: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.lg,
+    gap: spacing.sm,
+  },
+  applyMandateTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: colors.ink,
+  },
+  qr: {
+    padding: spacing.md,
+    backgroundColor: colors.white,
+    borderRadius: radius.sm,
   },
 });
