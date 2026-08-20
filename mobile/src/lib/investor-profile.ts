@@ -28,7 +28,12 @@ const STORAGE_KEY = "ipobharosa.investor-profiles.v1";
 
 export const PAN_PATTERN = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 export const UPI_PATTERN = /^[\w.\-]{2,}@[a-zA-Z]{2,}$/;
-export const DEMAT_CLIENT_ID_PATTERN = /^[0-9]{8,16}$/;
+// Full demat client ID is DP ID + BO ID combined: 16 digits for CDSL,
+// 14 digits for NSDL. The DP and BO parts alone are not enough for UPI-ASBA.
+export const DEMAT_CLIENT_ID_PATTERN: Record<"CDSL" | "NSDL", RegExp> = {
+  CDSL: /^[0-9]{16}$/,
+  NSDL: /^[0-9]{14}$/,
+};
 
 export function normalizePan(value: string): string {
   return value.trim().toUpperCase();
@@ -46,8 +51,9 @@ export function isValidUpiId(value: string): boolean {
   return UPI_PATTERN.test(normalizeUpiId(value));
 }
 
-export function isValidDematClientId(value: string): boolean {
-  return DEMAT_CLIENT_ID_PATTERN.test(value.trim());
+export function isValidDematClientId(value: string, provider: "CDSL" | "NSDL" | null): boolean {
+  if (!provider) return false;
+  return DEMAT_CLIENT_ID_PATTERN[provider].test(value.trim());
 }
 
 export function generateProfileId(): string {

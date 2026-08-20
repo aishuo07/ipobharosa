@@ -49,11 +49,17 @@ describe("investor-profile validation", () => {
     expect(normalizeUpiId("  NAME @ YBL ")).toBe("name@ybl");
   });
 
-  it("validates demat client IDs", () => {
-    expect(isValidDematClientId("1234567890")).toBe(true);
-    expect(isValidDematClientId("1234567")).toBe(false);
-    expect(isValidDematClientId("12345678901234567890")).toBe(false);
-    expect(isValidDematClientId("abc")).toBe(false);
+  it("validates full demat client IDs by provider", () => {
+    expect(isValidDematClientId("1208160012345678", "CDSL")).toBe(true);
+    expect(isValidDematClientId("12081600123456", "NSDL")).toBe(true);
+    expect(isValidDematClientId("1208160012345678", "NSDL")).toBe(false);
+    expect(isValidDematClientId("12081600123456", "CDSL")).toBe(false);
+    expect(isValidDematClientId("12345678", "CDSL")).toBe(false);
+    expect(isValidDematClientId("12345678", "NSDL")).toBe(false);
+    expect(isValidDematClientId("1234567", "CDSL")).toBe(false);
+    expect(isValidDematClientId("12345678901234567890", "CDSL")).toBe(false);
+    expect(isValidDematClientId("abc", "CDSL")).toBe(false);
+    expect(isValidDematClientId("1208160012345678", null)).toBe(false);
   });
 });
 

@@ -57,8 +57,8 @@ export default function InvestorsScreen() {
       Alert.alert("Invalid UPI ID", "Enter a valid UPI ID like 9876543210@ybl.");
       return;
     }
-    if (!dematProvider || !isValidDematClientId(dematClientId)) {
-      Alert.alert("Invalid demat details", "Enter a valid demat client ID (8–16 digits) and provider (CDSL/NSDL).");
+    if (!dematProvider || !isValidDematClientId(dematClientId, dematProvider)) {
+      Alert.alert("Invalid demat details", "Enter the full demat client ID: 16 digits for CDSL or 14 digits for NSDL (DP ID + BO ID combined).");
       return;
     }
     setSaving(true);
@@ -160,14 +160,14 @@ export default function InvestorsScreen() {
               </TouchableOpacity>
             ))}
           </View>
-          <Text style={styles.label}>Demat client ID</Text>
+          <Text style={styles.label}>Demat client ID (full — DP ID + BO ID)</Text>
           <TextInput
             style={styles.input}
             value={dematClientId}
             onChangeText={setDematClientId}
-            placeholder="12345678"
+            placeholder={dematProvider === "NSDL" ? "14 digits e.g. 12081600123456" : "16 digits e.g. 1208160012345678"}
             keyboardType="number-pad"
-            maxLength={16}
+            maxLength={dematProvider === "NSDL" ? 14 : 16}
           />
           <TouchableOpacity style={styles.saveButton} onPress={handleAdd} disabled={saving}>
             <Text style={styles.saveButtonText}>{saving ? "Saving…" : "Save investor profile"}</Text>
