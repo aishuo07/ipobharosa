@@ -25,6 +25,7 @@ import { sendDailyDigestIfDue } from "@/lib/ingestion/digest";
 import { resolveSiteUrl } from "@/lib/site-url";
 import { marketFinalizationCutoff } from "@/lib/ingestion/market-window";
 import { enabledGmpAdapters } from "@/lib/source-policy";
+import { pipelineLog, stageTimer } from "@/lib/ingestion/logger";
 
 const ALERT_RECIPIENT = "aish.iiitb@gmail.com";
 const SITE_URL = resolveSiteUrl();
@@ -151,36 +152,60 @@ async function getOrCreateRun() {
 export async function runIngestionStep(startedBy = "cron"): Promise<IngestionStepResult> {
   const acquired = await acquireIngestionLock(startedBy);
   if (!acquired) {
+    pipelineLog.warn("Ingestion lock busy, skipping", { startedBy });
     return { runId: null, complete: false, checkpoint: { ...initialCheckpoint(), summary: { ...EMPTY_SUMMARY, skippedDueToLock: true } } };
   }
 
   let runId: string | null = null;
   let checkpoint = initialCheckpoint();
+  const pipelineStart = Date.now();
   try {
     const run = await getOrCreateRun();
     runId = run.id;
     checkpoint = readCheckpoint(run.summary);
     checkpoint = { ...checkpoint, attempts: checkpoint.attempts + 1, lastError: null };
 
-    if (checkpoint.stage === "prepare") checkpoint = await runPrepare(checkpoint);
-    else if (checkpoint.stage === "catalogue") checkpoint = await runCatalogue(checkpoint);
-    else if (checkpoint.stage === "discovery") checkpoint = await runDiscoveryStep(checkpoint);
-    else if (checkpoint.stage === "revalidation") checkpoint = await runRevalidationBatch(checkpoint);
-    else if (checkpoint.stage === "publishedRevalidation") checkpoint = await runPublishedRevalidationBatch(checkpoint);
-    else if (checkpoint.stage === "filings") checkpoint = nextStage(checkpoint, "gmp");
-    else if (checkpoint.stage === "gmp") checkpoint = await runGmpBatch(run.id, run.startedAt, checkpoint);
-    else if (checkpoint.stage === "subscription") checkpoint = await runSubscriptionBatch(run.id, run.startedAt, checkpoint);
-    else if (checkpoint.stage === "finalize") checkpoint = nextStage(checkpoint, "complete");
+    pipelineLog.info("Pipeline starting", { stage: checkpoint.stage, attempt: checkpoint.attempts, runId });
+
+    // Run up to 4 stages per invocation for speed (was: 1 stage)
+    const MAX_STAGES_PER_RUN = 4;
+    for (let i = 0; i < MAX_STAGES_PER_RUN; i++) {
+      const stageStart = Date.now();
+      const stage = checkpoint.stage;
+
+      if (checkpoint.stage === "prepare") checkpoint = await runPrepare(checkpoint);
+      else if (checkpoint.stage === "catalogue") checkpoint = await runCatalogue(checkpoint);
+      else if (checkpoint.stage === "discovery") checkpoint = await runDiscoveryStep(checkpoint);
+      else if (checkpoint.stage === "revalidation") checkpoint = await runRevalidationBatch(checkpoint);
+      else if (checkpoint.stage === "publishedRevalidation") checkpoint = await runPublishedRevalidationBatch(checkpoint);
+      else if (checkpoint.stage === "filings") checkpoint = nextStage(checkpoint, "gmp");
+      else if (checkpoint.stage === "gmp") checkpoint = await runGmpBatch(run.id, run.startedAt, checkpoint);
+      else if (checkpoint.stage === "subscription") checkpoint = await runSubscriptionBatch(run.id, run.startedAt, checkpoint);
+      else if (checkpoint.stage === "finalize") checkpoint = nextStage(checkpoint, "complete");
+
+      const stageDuration = Date.now() - stageStart;
+      pipelineLog.info(`Stage "${stage}" done → "${checkpoint.stage}"`, { stage, nextStage: checkpoint.stage, durationMs: stageDuration, runId });
+
+      if (checkpoint.stage === "complete") break;
+    }
 
     const complete = checkpoint.stage === "complete";
     await persistCheckpoint(run.id, checkpoint, complete);
+
+    const totalDuration = Date.now() - pipelineStart;
     if (complete) {
+      pipelineLog.info("Pipeline complete", { runId, totalDurationMs: totalDuration, ipoCount: checkpoint.summary.ipoCount });
       await sendRunAlerts(checkpoint.summary);
       await sendDailyDigestIfDue(checkpoint.summary);
+    } else {
+      pipelineLog.info("Pipeline partial (multi-stage batch)", { runId, stage: checkpoint.stage, totalDurationMs: totalDuration });
     }
+
     return { runId: run.id, complete, checkpoint };
   } catch (error) {
-    checkpoint = { ...checkpoint, lastError: error instanceof Error ? error.message : String(error) };
+    const msg = error instanceof Error ? error.message : String(error);
+    pipelineLog.error("Pipeline crashed", { runId, error: msg, durationMs: Date.now() - pipelineStart });
+    checkpoint = { ...checkpoint, lastError: msg };
     if (runId) await persistCheckpoint(runId, checkpoint);
     throw error;
   } finally {
@@ -189,9 +214,11 @@ export async function runIngestionStep(startedBy = "cron"): Promise<IngestionSte
 }
 
 async function runPrepare(checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
+  const timer = stageTimer("prepare");
   const transitions = await syncIpoStatuses();
   const listings = await syncIpoListings();
   const reminders = await notifyWatchersOfTransitions([...transitions, ...listings]);
+  timer.finish({ transitions: transitions.length, listings: listings.length, reminders: reminders.sent });
   return nextStage({
     ...checkpoint,
     summary: {
@@ -204,9 +231,11 @@ async function runPrepare(checkpoint: IngestionCheckpoint): Promise<IngestionChe
 }
 
 async function runCatalogue(checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
+  const timer = stageTimer("catalogue");
   const catalogue = await syncOfficialFilingCatalogue();
   if (catalogue.error) await recordSourceFailure("sebi:filing-catalogue", "SEBI", "filing-catalogue", catalogue.error);
   else await recordSourceSuccess("sebi:filing-catalogue", "SEBI", "filing-catalogue");
+  timer.finish({ seen: catalogue.seen, stored: catalogue.stored, linked: catalogue.linked, error: catalogue.error ?? null });
   return nextStage({
     ...checkpoint,
     summary: { ...checkpoint.summary, catalogue },
@@ -317,6 +346,7 @@ function subscriptionEligibilityWhere(now = new Date()) {
 }
 
 async function runGmpBatch(runId: string, capturedAt: Date, checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
+  const timer = stageTimer("gmp");
   const ipos = await prisma.ipo.findMany({
     where: gmpEligibilityWhere(),
     include: { company: true },
@@ -324,9 +354,10 @@ async function runGmpBatch(runId: string, capturedAt: Date, checkpoint: Ingestio
     skip: checkpoint.cursor,
     take: BATCH_SIZE,
   });
-  if (ipos.length === 0) return nextStage(checkpoint, "subscription");
+  if (ipos.length === 0) { timer.finish({ iposProcessed: 0 }); return nextStage(checkpoint, "subscription"); }
   const gmpAdapters = activeGmpAdapters();
   const sourceIds = await ensureSources(gmpAdapters);
+  pipelineLog.info("GMP batch starting", { ipos: ipos.map(i => i.company.name), adapters: gmpAdapters.map(a => a.key), cursor: checkpoint.cursor });
   let next = checkpoint;
   for (const ipo of ipos) {
     const observations = await collectObservations(ipo.company.name, gmpAdapters);
@@ -382,6 +413,7 @@ async function runGmpBatch(runId: string, capturedAt: Date, checkpoint: Ingestio
 }
 
 async function runSubscriptionBatch(runId: string, capturedAt: Date, checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
+  const timer = stageTimer("subscription");
   const ipos = await prisma.ipo.findMany({
     where: subscriptionEligibilityWhere(),
     include: { company: true },
@@ -389,7 +421,8 @@ async function runSubscriptionBatch(runId: string, capturedAt: Date, checkpoint:
     skip: checkpoint.cursor,
     take: BATCH_SIZE,
   });
-  if (ipos.length === 0) return nextStage(checkpoint, "finalize");
+  if (ipos.length === 0) { timer.finish({ iposProcessed: 0 }); return nextStage(checkpoint, "finalize"); }
+  pipelineLog.info("Subscription batch starting", { ipos: ipos.map(i => i.company.name), cursor: checkpoint.cursor });
   let next = checkpoint;
   for (const ipo of ipos) {
     let result: Awaited<ReturnType<typeof nseSubscriptionAdapter.fetchSubscription>>;

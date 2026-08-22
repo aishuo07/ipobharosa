@@ -13,8 +13,24 @@
   ],
   "crons": [
     {
+      "path": "/api/cron/ingest",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/refresh-catalogues",
-      "schedule": "0 0 * * *"
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/allotment-launch",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/daily-push",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/filing-evidence",
+      "schedule": "0 2 * * *"
     }
   ]
 }
