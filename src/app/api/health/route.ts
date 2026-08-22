@@ -25,8 +25,9 @@ export async function GET() {
       }),
     ]);
 
-    const sourceReasons = latest ? computeStoredCheckpointAlertReasons(latest.summary) : null;
-    const registrarIssueCount = unhealthyRegistrars.length;
+        const sourceReasons = latest ? computeStoredCheckpointAlertReasons(latest.summary) : null;
+        const sourceIssueCount = sourceReasons?.filter((r) => !r.includes("drift")).length ?? 0;
+        const registrarIssueCount = unhealthyRegistrars.length;
     const latestSummary = latestAttempt?.summary && typeof latestAttempt.summary === "object"
       ? latestAttempt.summary as Record<string, unknown>
       : null;
@@ -44,7 +45,7 @@ export async function GET() {
       registrarOperations: { status: "healthy" | "degraded" | "unknown"; failing: string[] };
       alertReasons: string[];
     } = {
-      ...publicHealthFromLastSuccess(latest?.finishedAt ?? null, new Date(), (sourceReasons?.length ?? 0) + registrarIssueCount),
+      ...publicHealthFromLastSuccess(latest?.finishedAt ?? null, new Date(), sourceIssueCount + registrarIssueCount),
       lastRun: {
         startedAt: latestAttempt?.startedAt?.toISOString() ?? null,
         finishedAt: latestAttempt?.finishedAt?.toISOString() ?? null,
