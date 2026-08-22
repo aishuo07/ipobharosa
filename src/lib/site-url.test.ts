@@ -3,7 +3,7 @@ import { resolveSiteUrl, siteUrlConfigured } from "./site-url";
 
 describe("site URL contract", () => {
   it("uses the safe public fallback when no domain is configured", () => {
-    expect(resolveSiteUrl({})).toBe("https://ipodekho-ten.vercel.app");
+    expect(resolveSiteUrl({})).toBe("https://ipobharosa.vercel.app");
     expect(siteUrlConfigured({})).toBe(false);
   });
 

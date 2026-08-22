@@ -86,11 +86,7 @@ export default function BoardScreen() {
   }, [ipos]);
 
   const totalCount = sections.reduce((sum, s) => sum + s.data.length, 0);
-  const countBySection = useMemo(() => {
-    const map: Record<StatusSection, number> = { OPEN: 0, UPCOMING: 0, CLOSED: 0, LISTED: 0 };
-    for (const section of sections) map[section.status] = section.data.length;
-    return map;
-  }, [sections]);
+
 
   return (
     <View style={styles.container}>
