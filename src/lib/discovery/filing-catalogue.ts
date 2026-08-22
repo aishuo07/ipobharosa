@@ -85,7 +85,7 @@ export async function syncOfficialFilingCatalogue(): Promise<FilingCatalogueSync
           lastSeenAt: new Date(),
         },
       });
-    }));
+    }), { timeout: 30000 });
     return { seen: entries.length, stored: entries.length, linked };
   } catch (error) {
     return { seen: 0, stored: 0, linked: 0, error: error instanceof Error ? error.message : String(error) };

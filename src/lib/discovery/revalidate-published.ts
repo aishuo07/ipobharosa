@@ -76,7 +76,7 @@ export async function revalidateOldestPublished(): Promise<PublishedRevalidation
     return outcome === "DRIFT"
       ? persistOfficialIncident(tx, candidate.id, "PUBLISHED_DRIFT", decision)
       : null;
-  });
+  }, { timeout: 30000 });
 
   return { company: candidate.company.name, outcome, reasons: decision.reasons, newIncident: incident?.occurrenceCount === 1 };
 }

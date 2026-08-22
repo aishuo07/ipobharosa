@@ -112,7 +112,7 @@ async function processCandidate(candidate: IpoListingCandidate): Promise<Candida
             discoveredAt: now,
           },
         });
-      });
+      }, { timeout: 30000 });
       return { kind: "quarantined" };
     } catch (e) {
       return { kind: "dbError", companyName: candidate.companyName, error: (e as Error).message };
@@ -195,7 +195,7 @@ async function processCandidate(candidate: IpoListingCandidate): Promise<Candida
           },
         });
       }
-    });
+    }, { timeout: 30000 });
   } catch (e) {
     return { kind: "dbError", companyName: candidate.companyName, error: (e as Error).message };
   }

@@ -65,12 +65,10 @@ export async function syncDocument(
         sha256,
         pageCount,
         isLatestForType: true,
-        // Fetch time is known. Publication date must come from filing metadata;
-        // using "now" here would manufacture evidence, so leave it empty.
         publicationDate: null,
       },
     }),
-  ]);
+  ], { timeout: 30000 });
 
   await prisma.correctionLog.create({
     data: {
@@ -317,7 +315,7 @@ export async function publishSafeDocumentBatch(documentId: string, approverEmail
     }
 
     return { documentId, published: publishedCount, supersededDuplicates };
-  });
+  }, { timeout: 30000 });
 }
 
 export type FinancialClassificationRow = {
@@ -418,7 +416,7 @@ export async function applyPendingFinancialClassification(actorEmail: string) {
         note: `${row.previousState} -> ${row.state}${row.reasons.length ? ` (${row.reasons.join(", ")})` : ""}`,
       },
     }),
-  ]));
+  ]), { timeout: 30000 });
   return { total: rows.length, changed: changed.length, safe: rows.filter((row) => row.state === "AUTO_VERIFIED").length };
 }
 

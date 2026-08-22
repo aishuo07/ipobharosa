@@ -171,7 +171,7 @@ async function revalidateCandidate(candidate: RevalidationCandidate): Promise<Re
         note: `all material IPO fields matched captured official evidence from ${(decision.coverage?.providersFound ?? [decision.evidence.source]).join(" + ")}`,
       },
     });
-  });
+  }, { timeout: 30000 });
 
   return { company: candidate.company.name, outcome, reasons: decision.reasons };
 }

@@ -406,7 +406,7 @@ async function runGmpBatch(runId: string, capturedAt: Date, checkpoint: Ingestio
         if (snapshot) await tx.gmpSnapshot.create({ data: { ipoId: ipo.id, ...snapshot, capturedAt } });
       }
       await tx.ingestionRun.update({ where: { id: runId }, data: { summary: advanced } });
-    });
+    }, { timeout: 30000 });
     next = advanced;
   }
   return next;
@@ -447,7 +447,7 @@ async function runSubscriptionBatch(runId: string, capturedAt: Date, checkpoint:
       const alreadyDone = await tx.subscriptionSnapshot.count({ where: { ipoId: ipo.id, capturedAt } });
       if (result.kind === "VALUE" && alreadyDone === 0) await tx.subscriptionSnapshot.create({ data: { ipoId: ipo.id, ...result.value, capturedAt } });
       await tx.ingestionRun.update({ where: { id: runId }, data: { summary: advanced } });
-    });
+    }, { timeout: 30000 });
     next = advanced;
   }
   return next;
