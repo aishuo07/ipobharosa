@@ -760,7 +760,7 @@ model IpoComment {
   ipoId     String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
-  body      String   @db.Text
+  body      String   @db.VarChar(500)
   createdAt DateTime @default(now())
 
   @@index([ipoId, createdAt])
