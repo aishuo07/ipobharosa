@@ -1,4 +1,4 @@
-export const FALLBACK_SITE_URL = "https://ipodekho-ten.vercel.app";
+export const FALLBACK_SITE_URL = "https://ipobharosa.vercel.app";
 
 export type SiteUrlEnvironment = {
   SITE_URL?: string;

@@ -6,6 +6,26 @@ import { isGmpSourceEnabled } from "@/lib/source-policy";
 import { publicVerificationFromPublicationState, type PublicVerification } from "@/lib/public-verification";
 import { MATERIAL_OFFICIAL_FIELDS } from "@/lib/discovery/official/types";
 
+const CACHE_TTL_MS = 60_000; // 60 seconds — keeps DB reads low while data stays fresh
+const boardCache = new Map<string, { data: BoardIpo[]; expiresAt: number }>();
+
+function cacheKey(states: string[]): string {
+  return states.sort().join(",");
+}
+
+function getCachedBoard(key: string): BoardIpo[] | null {
+  const entry = boardCache.get(key);
+  if (!entry || Date.now() >= entry.expiresAt) {
+    boardCache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function setCachedBoard(key: string, data: BoardIpo[]): void {
+  boardCache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+}
+
 export type BoardIpo = {
   id: string;
   slug: string;
@@ -550,14 +570,27 @@ async function loadOfficialProvenance(ipoIds: string[]): Promise<Map<string, Off
 }
 
 async function getIposByPublicationState(states: ("PUBLISHED" | "DRAFT" | "QUARANTINED")[]): Promise<BoardIpo[]> {
-  const ipos = await prisma.ipo.findMany({
-    where: { publicationState: { in: states }, ...COMPLETE_PUBLIC_FACTS },
-    select: IPO_SELECT,
-    orderBy: { createdAt: "asc" },
-  });
-  const ids = ipos.map((ipo) => ipo.id);
-  const [provenanceByIpo, operationsByIpo] = await Promise.all([loadOfficialProvenance(ids), loadOfficialOperations(ids)]);
-  return ipos.map((ipo) => shapeIpo(ipo, provenanceByIpo.get(ipo.id), operationsByIpo.get(ipo.id)));
+  const key = cacheKey(states);
+  const cached = getCachedBoard(key);
+  if (cached) return cached;
+
+  try {
+    const ipos = await prisma.ipo.findMany({
+      where: { publicationState: { in: states }, ...COMPLETE_PUBLIC_FACTS },
+      select: IPO_SELECT,
+      orderBy: { createdAt: "asc" },
+    });
+    const ids = ipos.map((ipo) => ipo.id);
+    const [provenanceByIpo, operationsByIpo] = await Promise.all([loadOfficialProvenance(ids), loadOfficialOperations(ids)]);
+    const result = ipos.map((ipo) => shapeIpo(ipo, provenanceByIpo.get(ipo.id), operationsByIpo.get(ipo.id)));
+    setCachedBoard(key, result);
+    return result;
+  } catch (error) {
+    // If DB is down, try to serve stale cached data
+    const stale = boardCache.get(key);
+    if (stale) return stale.data;
+    throw error;
+  }
 }
 
 export async function getPublicIpos(): Promise<BoardIpo[]> {
@@ -573,12 +606,15 @@ export async function getBoardIpos(): Promise<BoardIpo[]> {
   return getPublicIpos();
 }
 
-// No dedicated slug column exists yet — company count is small enough
-// that computing the slug for every IPO and matching is simpler than a
-// migration.
 export async function getBoardIpoBySlug(slug: string): Promise<BoardIpo | null> {
-  const ipos = await getPublicIpos();
-  return ipos.find((ipo) => ipo.slug === slug) ?? null;
+  try {
+    const ipos = await getPublicIpos();
+    return ipos.find((ipo) => ipo.slug === slug) ?? null;
+  } catch (error) {
+    // If DB is completely down and no cache, return null (shows 404) instead of crashing
+    console.error("[board-data] getBoardIpoBySlug failed:", error);
+    return null;
+  }
 }
 
 export async function getWatchlistIpos(userId: string): Promise<BoardIpo[]> {

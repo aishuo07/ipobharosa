@@ -4,7 +4,7 @@ import { auth, signOut } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getFilingRadarEntries } from "@/lib/discovery/filing-catalogue";
 
-export const revalidate = 0;
+export const revalidate = 60;
 
 async function handleSignOut() {
   "use server";
@@ -12,19 +12,35 @@ async function handleSignOut() {
 }
 
 export default async function Home() {
-  // Send one timestamp through the RSC payload so the initial Client Component
-  // render exactly matches the server HTML. The board advances it after mount.
   // eslint-disable-next-line react-hooks/purity
   const initialNow = Date.now();
-  const [ipos, filings, session] = await Promise.all([getPublicIpos(), getFilingRadarEntries(), auth()]);
+
+  let ipos: Awaited<ReturnType<typeof getPublicIpos>> = [];
+  let filings: Awaited<ReturnType<typeof getFilingRadarEntries>> = [];
+  let session: { user?: { id?: string; email?: string | null; name?: string | null } | null } | null = null;
+
+  try {
+    [ipos, filings, session] = await Promise.all([getPublicIpos(), getFilingRadarEntries(), auth()]);
+  } catch (error) {
+    // Partial failure — try each independently so partial data still renders
+    console.error("[home] parallel fetch failed, retrying individually:", error);
+    const results = await Promise.allSettled([getPublicIpos(), getFilingRadarEntries(), auth()]);
+    ipos = results[0].status === "fulfilled" ? results[0].value : [];
+    filings = results[1].status === "fulfilled" ? results[1].value : [];
+    session = results[2].status === "fulfilled" ? results[2].value : null;
+  }
 
   let watchlistedIds: string[] = [];
   if (session?.user?.id) {
-    const items = await prisma.watchlistItem.findMany({
-      where: { userId: session.user.id },
-      select: { ipoId: true },
-    });
-    watchlistedIds = items.map((i) => i.ipoId);
+    try {
+      const items = await prisma.watchlistItem.findMany({
+        where: { userId: session.user.id },
+        select: { ipoId: true },
+      });
+      watchlistedIds = items.map((i) => i.ipoId);
+    } catch {
+      // Watchlist is non-critical — ignore DB failure
+    }
   }
 
   return (
