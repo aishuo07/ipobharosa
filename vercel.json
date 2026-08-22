@@ -14,7 +14,7 @@
   "crons": [
     {
       "path": "/api/cron/ingest",
-      "schedule": "0 */6 * * *"
+      "schedule": "0 6 * * *"
     },
     {
       "path": "/api/cron/refresh-catalogues",
@@ -22,7 +22,7 @@
     },
     {
       "path": "/api/cron/allotment-launch",
-      "schedule": "0 */8 * * *"
+      "schedule": "0 12 * * *"
     },
     {
       "path": "/api/cron/daily-push",
