@@ -90,3 +90,112 @@ NEXT_PUBLIC_SITE_URL=https://your-production-domain
 
 Google sign-in remains available when user email features are held. The admin
 dashboard reports only configuration presence and never displays secret values.
+
+## Pipeline Monitoring
+
+The ingestion pipeline runs on a schedule via [cron-job.org](https://cron-job.org) (free, no billing required). It discovers new IPOs, fetches GMP/subscription data, and syncs official BSE/NSE filings.
+
+### Cron Jobs (cron-job.org)
+
+| Job ID | Name | Schedule | Endpoint |
+|--------|------|----------|----------|
+| 8314076 | Ingest | Every hour | `trigger?jobs=ingest` |
+| 8314080 | Allotment | Every 2 hours | `trigger?jobs=allotment` |
+| 8314075 | Push+Filings+Catalogues | Daily 9am IST | `trigger?jobs=push,filings,catalogues` |
+
+**Dashboard:** https://dashboard.cron-job.org → Login → Jobs
+
+### Monitoring Commands
+
+**Check latest pipeline run:**
+```bash
+# Via health endpoint (no auth needed)
+curl -s https://ipobharosa.vercel.app/api/health | python3 -m json.tool
+
+# Via trigger endpoint (shows last run status)
+curl -s "https://ipobharosa.vercel.app/api/cron/trigger?jobs=ingest" | python3 -m json.tool
+```
+
+**Check pipeline status from database:**
+```bash
+export DATABASE_URL='postgresql://aish:H9XWGh7G_8rBrowv6F0Byw@small-chirper-32604.j77.aws-ap-south-1.cockroachlabs.cloud:26257/defaultdb?sslmode=verify-full&sslrootcert=$HOME/.postgresql/root.crt'
+
+# Latest run summary
+node -e "
+const pg = require('pg');
+const os = require('os');
+const connStr = process.env.DATABASE_URL.replace('\$HOME', os.homedir());
+const client = new pg.Client({ connectionString: connStr });
+client.connect().then(async () => {
+  const { rows } = await client.query('SELECT id::text, ok, summary::text, error, \"startedAt\"::text, \"finishedAt\"::text FROM \"IngestionRun\" ORDER BY \"startedAt\" DESC LIMIT 1');
+  const s = JSON.parse(rows[0].summary);
+  console.log('Run:', rows[0].id.substring(0,8));
+  console.log('Status:', rows[0].ok ? '✅ OK' : '❌ FAILED');
+  console.log('Stage:', s.stage);
+  console.log('Started:', rows[0].startedAt);
+  console.log('Finished:', rows[0].finishedAt || 'still running...');
+  console.log('Discovery:', JSON.stringify(s.summary.discovery));
+  console.log('GMP:', JSON.stringify(s.summary.gmp));
+  console.log('Subscription:', JSON.stringify(s.summary.subscription));
+  console.log('IPO Count:', s.summary.ipoCount);
+  if (rows[0].error) console.log('Error:', rows[0].error);
+  client.end();
+});
+"
+```
+
+**Count IPOs by status:**
+```bash
+node -e "
+const pg = require('pg');
+const os = require('os');
+const connStr = process.env.DATABASE_URL.replace('\$HOME', os.homedir());
+const client = new pg.Client({ connectionString: connStr });
+client.connect().then(async () => {
+  const { rows } = await client.query('SELECT status, \"publicationState\", COUNT(*) as c FROM \"Ipo\" GROUP BY status, \"publicationState\" ORDER BY c DESC');
+  rows.forEach(r => console.log(r.status, r.publicationState, ':', r.c));
+  client.end();
+});
+"
+```
+
+### Pipeline Stages
+
+```
+prepare → catalogue → discovery → revalidation → publishedRevalidation → gmp → subscription → finalize → complete
+```
+
+| Stage | What it does | Typical duration |
+|-------|-------------|-----------------|
+| prepare | Sync IPO statuses and listings | ~1s |
+| catalogue | Fetch SEBI filing catalogue | ~24s |
+| discovery | Discover new IPOs from ipowatch.in | ~47s |
+| revalidation | Recheck DRAFT IPOs against official sources | ~9s |
+| publishedRevalidation | Verify PUBLISHED IPOs for data drift | ~26s |
+| gmp | Fetch GMP data from 5 adapters | ~10s |
+| subscription | Fetch NSE subscription data | ~5s |
+| finalize | Mark pipeline complete | <1s |
+
+**Note:** Pipeline completes in 2 cron triggers due to Vercel's 120s timeout. Checkpoint persists after each stage, so it resumes automatically.
+
+### Common Issues
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| `skippedDueToLock: true` | Another pipeline run is active | Wait for current run to finish |
+| `fetchFailed` in discovery | ipowatch.in detail page timeout | Auto-retries with exponential backoff |
+| `QUARANTINED` IPOs | Official data conflicts with discovery | Review in admin dashboard |
+| `draftsCreated: 0` | All candidates already tracked or auto-published | Normal — auto-published IPOs don't count as drafts |
+| Pipeline timeout | Vercel 120s limit | Checkpoint saved, resumes on next trigger |
+
+### Admin Dashboard
+
+- **URL:** https://ipobharosa.vercel.app/admin
+- **Auth:** Requires admin email (aish.iiitb@gmail.com)
+- **Features:** Review quarantined IPOs, approve/reject, view drift incidents, manage publication state
+
+### Vercel Dashboard
+
+- **Project:** https://vercel.com/aishuo07s-projects/ipobharosa
+- **Logs:** https://vercel.com/aishuo07s-projects/ipobharosa/deployments (click latest → Logs)
+- **Cron Jobs:** Disabled on Vercel (using cron-job.org instead)
