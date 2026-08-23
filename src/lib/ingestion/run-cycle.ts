@@ -466,7 +466,7 @@ async function sendRunAlerts(summary: IngestionSummary) {
   try {
     const discovery = "error" in summary.discovery
       ? `❌ Crash: ${summary.discovery.error}`
-      : `Seen: ${summary.candidatesSeen} | Drafts: ${summary.draftsCreated} | Quarantined: ${summary.quarantined} | Auto-published: ${summary.autoPublished}`;
+      : `Seen: ${summary.discovery.candidatesSeen} | Drafts: ${summary.discovery.draftsCreated} | Quarantined: ${summary.discovery.quarantined} | Auto-published: ${summary.discovery.autoPublished}`;
     const gmp = `Snapshots: ${summary.gmp.snapshotsWritten} | No data: ${summary.gmp.ipoWithNoData}`;
     const sub = `Snapshots: ${summary.subscription.snapshotsWritten} | Failed: ${summary.subscription.failed} | Not covered: ${summary.subscription.notCovered}`;
     const pubRev = `Checked: ${summary.publishedRevalidation.checked} | Matched: ${summary.publishedRevalidation.matched} | Drifts: ${summary.publishedRevalidation.drifts}`;
@@ -507,7 +507,7 @@ async function sendPipelineSuccess(summary: IngestionSummary, durationMs: number
   const mins = Math.round(durationMs / 60000);
   const discovery = "error" in summary.discovery
     ? "❌ Discovery crashed"
-    : `📋 ${summary.candidatesSeen} candidates → ${summary.draftsCreated} drafts, ${summary.quarantined} quarantined, ${summary.autoPublished} auto-published`;
+    : `📋 ${summary.discovery.candidatesSeen} candidates → ${summary.discovery.draftsCreated} drafts, ${summary.discovery.quarantined} quarantined, ${summary.discovery.autoPublished} auto-published`;
   const sourceDetails = Object.entries(summary.perSource)
     .map(([k, v]) => `${k}: ✅${v.success} ❌${v.failure}`)
     .join(" • ");
