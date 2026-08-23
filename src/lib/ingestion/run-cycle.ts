@@ -197,6 +197,7 @@ export async function runIngestionStep(startedBy = "cron"): Promise<IngestionSte
     if (complete) {
       pipelineLog.info("Pipeline complete", { runId, totalDurationMs: totalDuration, ipoCount: checkpoint.summary.ipoCount });
       await sendRunAlerts(checkpoint.summary);
+      await sendPipelineSuccess(checkpoint.summary, totalDuration);
       await sendDailyDigestIfDue(checkpoint.summary);
     } else {
       pipelineLog.info("Pipeline partial (multi-stage batch)", { runId, stage: checkpoint.stage, totalDurationMs: totalDuration });
@@ -463,12 +464,76 @@ async function sendRunAlerts(summary: IngestionSummary) {
   const reasons = computeAlertReasons(summary);
   if (reasons.length === 0) return;
   try {
+    const discovery = "error" in summary.discovery
+      ? `❌ Crash: ${summary.discovery.error}`
+      : `Seen: ${summary.candidatesSeen} | Drafts: ${summary.draftsCreated} | Quarantined: ${summary.quarantined} | Auto-published: ${summary.autoPublished}`;
+    const gmp = `Snapshots: ${summary.gmp.snapshotsWritten} | No data: ${summary.gmp.ipoWithNoData}`;
+    const sub = `Snapshots: ${summary.subscription.snapshotsWritten} | Failed: ${summary.subscription.failed} | Not covered: ${summary.subscription.notCovered}`;
+    const pubRev = `Checked: ${summary.publishedRevalidation.checked} | Matched: ${summary.publishedRevalidation.matched} | Drifts: ${summary.publishedRevalidation.drifts}`;
+    const sourceDetails = Object.entries(summary.perSource)
+      .map(([k, v]) => `${k}: ✅${v.success} ❌${v.failure}`)
+      .join(" | ");
+
     await sendEmail({
       to: ALERT_RECIPIENT,
-      subject: `IPOBharosa ingestion alert: ${reasons.length} issue(s)`,
-      html: `<p>This ingestion run flagged:</p><ul>${reasons.map((reason) => `<li>${reason}</li>`).join("")}</ul><pre>${JSON.stringify(summary, null, 2)}</pre>`,
+      subject: `🚨 IPOBharosa Alert: ${reasons.length} issue(s) detected`,
+      html: `
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+          <h2 style="color:#dc2626">🚨 Pipeline Alert</h2>
+          <p><strong>${reasons.length} issue(s)</strong> detected in the latest ingestion run:</p>
+          <ul style="background:#fef2f2;padding:16px;border-radius:8px;border-left:4px solid #dc2626">
+            ${reasons.map((reason) => `<li style="margin:4px 0">${reason}</li>`).join("")}
+          </ul>
+          <h3 style="margin-top:20px;color:#374151">Run Summary</h3>
+          <table style="width:100%;border-collapse:collapse;font-size:14px">
+            <tr style="border-bottom:1px solid #e5e7eb"><td style="padding:8px;color:#6b7280">Discovery</td><td style="padding:8px">${discovery}</td></tr>
+            <tr style="border-bottom:1px solid #e5e7eb"><td style="padding:8px;color:#6b7280">GMP</td><td style="padding:8px">${gmp}</td></tr>
+            <tr style="border-bottom:1px solid #e5e7eb"><td style="padding:8px;color:#6b7280">Subscription</td><td style="padding:8px">${sub}</td></tr>
+            <tr style="border-bottom:1px solid #e5e7eb"><td style="padding:8px;color:#6b7280">Published Revalidation</td><td style="padding:8px">${pubRev}</td></tr>
+            <tr><td style="padding:8px;color:#6b7280">Sources</td><td style="padding:8px">${sourceDetails || "none"}</td></tr>
+          </table>
+          <p style="margin-top:20px;font-size:12px;color:#9ca3af">
+            <a href="https://ipobharosa.vercel.app/api/admin/monitor" style="color:#3b82f6">View Pipeline Dashboard</a> •
+            <a href="https://sentry.io/organizations/ipobharosa/projects/javascript-nextjs/" style="color:#3b82f6">View Sentry</a>
+          </p>
+        </div>`,
     });
   } catch (error) {
     console.error("Failed to send ingestion alert email:", error instanceof Error ? error.message : String(error));
+  }
+}
+
+async function sendPipelineSuccess(summary: IngestionSummary, durationMs: number) {
+  const mins = Math.round(durationMs / 60000);
+  const discovery = "error" in summary.discovery
+    ? "❌ Discovery crashed"
+    : `📋 ${summary.candidatesSeen} candidates → ${summary.draftsCreated} drafts, ${summary.quarantined} quarantined, ${summary.autoPublished} auto-published`;
+  const sourceDetails = Object.entries(summary.perSource)
+    .map(([k, v]) => `${k}: ✅${v.success} ❌${v.failure}`)
+    .join(" • ");
+
+  try {
+    await sendEmail({
+      to: ALERT_RECIPIENT,
+      subject: `✅ IPOBharosa pipeline completed — ${summary.ipoCount} IPOs tracked`,
+      html: `
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+          <h2 style="color:#16a34a">✅ Pipeline Completed Successfully</h2>
+          <p>Duration: <strong>${mins} min</strong> • IPOs tracked: <strong>${summary.ipoCount}</strong></p>
+          <table style="width:100%;border-collapse:collapse;font-size:14px;margin:16px 0">
+            <tr style="border-bottom:1px solid #e5e7eb"><td style="padding:8px;color:#6b7280">Discovery</td><td style="padding:8px">${discovery}</td></tr>
+            <tr style="border-bottom:1px solid #e5e7eb"><td style="padding:8px;color:#6b7280">GMP Snapshots</td><td style="padding:8px">${summary.gmp.snapshotsWritten} written, ${summary.gmp.ipoWithNoData} no data</td></tr>
+            <tr style="border-bottom:1px solid #e5e7eb"><td style="padding:8px;color:#6b7280">Subscription</td><td style="padding:8px">${summary.subscription.snapshotsWritten} written, ${summary.subscription.notCovered} not covered</td></tr>
+            <tr style="border-bottom:1px solid #e5e7eb"><td style="padding:8px;color:#6b7280">Published Check</td><td style="padding:8px">${summary.publishedRevalidation.matched} matched, ${summary.publishedRevalidation.drifts} drifts</td></tr>
+            <tr><td style="padding:8px;color:#6b7280">Sources</td><td style="padding:8px">${sourceDetails || "none"}</td></tr>
+          </table>
+          <p style="font-size:12px;color:#9ca3af">
+            <a href="https://ipobharosa.vercel.app/api/admin/monitor" style="color:#3b82f6">View Dashboard</a> •
+            <a href="https://ipobharosa.vercel.app/admin" style="color:#3b82f6">Admin Panel</a>
+          </p>
+        </div>`,
+    });
+  } catch (error) {
+    console.error("Failed to send success email:", error instanceof Error ? error.message : String(error));
   }
 }
