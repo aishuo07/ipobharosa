@@ -167,7 +167,7 @@ export async function runIngestionStep(startedBy = "cron"): Promise<IngestionSte
 
     pipelineLog.info("Pipeline starting", { stage: checkpoint.stage, attempt: checkpoint.attempts, runId });
 
-    // Run up to 4 stages per invocation for speed (was: 1 stage)
+    // Run up to 8 stages per invocation for speed (was: 1 stage)
     const MAX_STAGES_PER_RUN = 8;
     for (let i = 0; i < MAX_STAGES_PER_RUN; i++) {
       const stageStart = Date.now();
@@ -186,13 +186,14 @@ export async function runIngestionStep(startedBy = "cron"): Promise<IngestionSte
       const stageDuration = Date.now() - stageStart;
       pipelineLog.info(`Stage "${stage}" done → "${checkpoint.stage}"`, { stage, nextStage: checkpoint.stage, durationMs: stageDuration, runId });
 
+      // Persist after every stage so the pipeline can resume on timeout
+      await persistCheckpoint(run.id, checkpoint, checkpoint.stage === "complete");
+
       if (checkpoint.stage === "complete") break;
     }
 
-    const complete = checkpoint.stage === "complete";
-    await persistCheckpoint(run.id, checkpoint, complete);
-
     const totalDuration = Date.now() - pipelineStart;
+    const complete = checkpoint.stage === "complete";
     if (complete) {
       pipelineLog.info("Pipeline complete", { runId, totalDurationMs: totalDuration, ipoCount: checkpoint.summary.ipoCount });
       await sendRunAlerts(checkpoint.summary);

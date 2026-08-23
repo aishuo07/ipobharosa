@@ -267,13 +267,9 @@ export async function runDiscovery(): Promise<DiscoverySummary> {
       summary.alreadyTracked++;
       continue;
     }
-    // Guards against the same company appearing twice within one run
-    // (e.g. a data-entry duplicate on the source page itself).
     knownSlugs.push(slug);
     newCandidates.push(candidate);
   }
-
-  console.log(`[discovery] listing=${listing.length} knownSlugs=${knownSlugs.length} newCandidates=${newCandidates.length}`);
 
   const now = new Date();
   const previousAttempts = await prisma.discoveryAttempt.findMany({
@@ -297,10 +293,7 @@ export async function runDiscovery(): Promise<DiscoverySummary> {
   const toProcess = admitted.slice(0, MAX_CANDIDATES_PER_RUN);
   summary.deferredCandidates = newCandidates.length - toProcess.length;
 
-  console.log(`[discovery] unreviewedCount=${unreviewedCount} room=${room} eligibleCandidates=${eligibleCandidates.length} admitted=${admitted.length} toProcess=${toProcess.length} deferred=${summary.deferredCandidates}`);
-
   const outcomes = await mapWithConcurrency(toProcess, CONCURRENCY, processCandidate);
-  console.log(`[discovery] outcomes:`, outcomes.map(o => o.kind));
   for (let index = 0; index < outcomes.length; index++) {
     const outcome = outcomes[index];
     const candidate = toProcess[index];
