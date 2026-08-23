@@ -69,7 +69,9 @@ export async function revalidateOldestPublished(): Promise<PublishedRevalidation
         officialCheckAttempts: outcome === "RETRY" ? candidate.officialCheckAttempts + 1 : 0,
         officialNextAttemptAt: outcome === "RETRY"
           ? nextOfficialRetryAt(candidate.officialCheckAttempts + 1, now)
-          : null,
+          : outcome === "DRIFT"
+            ? nextOfficialRetryAt(0, now)
+            : null,
       },
     });
     await persistOfficialDecision(tx, candidate.id, decision);

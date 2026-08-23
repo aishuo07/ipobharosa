@@ -168,7 +168,7 @@ export async function runIngestionStep(startedBy = "cron"): Promise<IngestionSte
     pipelineLog.info("Pipeline starting", { stage: checkpoint.stage, attempt: checkpoint.attempts, runId });
 
     // Run up to 4 stages per invocation for speed (was: 1 stage)
-    const MAX_STAGES_PER_RUN = 4;
+    const MAX_STAGES_PER_RUN = 8;
     for (let i = 0; i < MAX_STAGES_PER_RUN; i++) {
       const stageStart = Date.now();
       const stage = checkpoint.stage;

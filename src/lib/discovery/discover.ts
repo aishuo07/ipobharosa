@@ -20,7 +20,7 @@ const CONCURRENCY = 2;
 // cycle takes the next untracked candidates without risking a serverless
 // timeout or hammering upstream sites. `deferredCandidates` makes the
 // remaining backlog visible instead of silently dropping it.
-const MAX_CANDIDATES_PER_RUN = 2;
+const MAX_CANDIDATES_PER_RUN = 15;
 // A human review queue that grows forever isn't "human review", it's a
 // backlog nobody will ever clear. Once DRAFT+QUARANTINED hits this, new
 // candidates are skipped (and it's surfaced as `queueCapped`) rather
