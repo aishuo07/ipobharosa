@@ -16,6 +16,10 @@ const REGISTRAR_MATCHES: { match: string; key: RegistrarKey; label: string }[] =
   { match: "maashitla", key: "maashitla", label: "Maashitla" },
   { match: "mufg", key: "mufg", label: "MUFG / Link Intime" },
   { match: "link intime", key: "mufg", label: "MUFG / Link Intime" },
+  { match: "cameo", key: "cameo", label: "Cameo Corporate" },
+  { match: "skyline", key: "skyline", label: "Skyline Financial" },
+  { match: "purva", key: "purva", label: "Purva Sharegistry" },
+  { match: "mas", key: "mas", label: "MAS Services" },
 ];
 
 export function registrarCatalogueKey(registrar: string | null): { key: RegistrarKey; label: string } | null {

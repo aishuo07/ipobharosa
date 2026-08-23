@@ -125,7 +125,136 @@ export async function fetchCatalogue(key: RegistrarKey): Promise<RegistrarCompan
       return fetchMaashitlaCatalogue();
     case "mufg":
       return fetchMufgCatalogue();
+    case "mas":
+      return fetchMasCatalogue();
+    case "purva":
+      return fetchPurvaCatalogue();
+    case "cameo":
+      return fetchCameoCatalogue();
+    case "skyline":
+      return fetchSkylineCatalogue();
     default:
       throw new Error(`Unknown registrar: ${key}`);
   }
+}
+
+// ─── MAS Services (no CAPTCHA) ────────────────────────────────────────────────
+
+export async function fetchMasCatalogue(): Promise<RegistrarCompany[]> {
+  // MAS has a PAN search form but no company catalogue endpoint.
+  // We scrape the IPO listing page to get available companies.
+  const res = await fetchWithRetry("https://www.masserv.com/opt.asp");
+  const html = await res.text();
+
+  const companies: RegistrarCompany[] = [];
+  const regex = /<option[^>]*value=["']([^"']+)["'][^>]*>([^<]+)<\/option>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(html)) !== null) {
+    const id = match[1].trim();
+    const name = match[2].trim();
+    if (id && name && !name.startsWith("--") && !name.startsWith("Select")) {
+      companies.push({ id, name });
+    }
+  }
+
+  if (companies.length === 0) throw new Error("MAS: No companies found on listing page");
+  return companies;
+}
+
+// ─── Purva Sharegistry (math CAPTCHA — solved server-side) ────────────────────
+
+export async function fetchPurvaCatalogue(): Promise<RegistrarCompany[]> {
+  // Purva uses AngularJS with AJAX calls. The company list is loaded via XHR.
+  // We scrape the main page to extract company options from the AngularJS app.
+  const res = await fetchWithRetry("https://www.purvashare.com/investor-service/ipo-query");
+  const html = await res.text();
+
+  const companies: RegistrarCompany[] = [];
+  // Look for company options in the HTML (ng-options or select elements)
+  const optionRegex = /<option[^>]*value=["']([^"']*)["'][^>]*>([^<]+)<\/option>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = optionRegex.exec(html)) !== null) {
+    const id = match[1].trim();
+    const name = match[2].trim();
+    if (id && name && !name.startsWith("--") && !name.startsWith("Select") && name !== "") {
+      companies.push({ id, name });
+    }
+  }
+
+  // Also try to find company data in AngularJS JSON
+  const jsonMatch = html.match(/var\s+companies\s*=\s*(\[[\s\S]*?\]);/);
+  if (jsonMatch) {
+    try {
+      const data = JSON.parse(jsonMatch[1]);
+      for (const c of data) {
+        if (c.id || c.company_id || c.name || c.company_name) {
+          companies.push({
+            id: String(c.id || c.company_id || ""),
+            name: String(c.name || c.company_name || ""),
+          });
+        }
+      }
+    } catch {}
+  }
+
+  if (companies.length === 0) throw new Error("Purva: No companies found on query page");
+  // Deduplicate
+  const seen = new Set<string>();
+  return companies.filter((c) => {
+    const key = c.name.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+// ─── Cameo Corporate Services (image CAPTCHA) ────────────────────────────────
+
+export async function fetchCameoCatalogue(): Promise<RegistrarCompany[]> {
+  const res = await fetchWithRetry("https://ipostatus1.cameoindia.com/");
+  const html = await res.text();
+
+  const companies: RegistrarCompany[] = [];
+  // Cameo uses ASP.NET — company dropdown is drpCompany
+  const selectMatch = html.match(/<select[^>]*id=["']drpCompany["'][^>]*>([\s\S]*?)<\/select>/i);
+  if (selectMatch) {
+    const optionRegex = /<option[^>]*value=["']([^"']+)["'][^>]*>([^<]+)<\/option>/gi;
+    let match: RegExpExecArray | null;
+    while ((match = optionRegex.exec(selectMatch[1])) !== null) {
+      const id = match[1].trim();
+      const name = match[2].trim();
+      if (id && name && !name.startsWith("--")) {
+        companies.push({ id, name });
+      }
+    }
+  }
+
+  if (companies.length === 0) throw new Error("Cameo: No companies found on status page");
+  return companies;
+}
+
+// ─── Skyline Financial Services (image CAPTCHA) ──────────────────────────────
+
+export async function fetchSkylineCatalogue(): Promise<RegistrarCompany[]> {
+  const res = await fetchWithRetry("https://www.skylinerta.com/ipo.php");
+  const html = await res.text();
+
+  const companies: RegistrarCompany[] = [];
+  const selectMatch = html.match(/<select[^>]*name=["']company["'][^>]*>([\s\S]*?)<\/select>/i)
+    || html.match(/<select[^>]*id=["']company["'][^>]*>([\s\S]*?)<\/select>/i);
+
+  if (selectMatch) {
+    const optionRegex = /<option[^>]*value=["']([^"']+)["'][^>]*>([^<]+)<\/option>/gi;
+    let match: RegExpExecArray | null;
+    while ((match = optionRegex.exec(selectMatch[1])) !== null) {
+      const id = match[1].trim();
+      const name = match[2].trim();
+      if (id && name && !name.startsWith("--") && !name.startsWith("Select")) {
+        companies.push({ id, name });
+      }
+    }
+  }
+
+  if (companies.length === 0) throw new Error("Skyline: No companies found on IPO page");
+  return companies;
 }
