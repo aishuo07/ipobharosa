@@ -10,35 +10,30 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const checks: Record<string, { ok: boolean; status?: number; durationMs?: number; error?: string }> = {};
-
-  const endpoints = [
-    { name: "health", url: "/api/health" },
-    { name: "ingest", url: "/api/cron/ingest" },
-    { name: "allotment", url: "/api/cron/allotment-launch" },
-    { name: "catalogues", url: "/api/cron/refresh-catalogues" },
-    { name: "filing-evidence", url: "/api/cron/filing-evidence" },
-    { name: "daily-push", url: "/api/cron/daily-push" },
-  ];
-
   const base = process.env.VERCEL_URL
     ? `https://${process.env.VERCEL_URL}`
     : "https://ipobharosa.vercel.app";
 
-  for (const ep of endpoints) {
+  const endpoints = [
+    { name: "health", url: "/api/health" },
+    { name: "monitor", url: "/api/admin/monitor" },
+  ];
+
+  const checkSingle = async (ep: { name: string; url: string }) => {
     const start = Date.now();
     try {
       const res = await fetch(`${base}${ep.url}`, {
-        headers: { Authorization: `Bearer ${CRON_SECRET}` },
-        signal: AbortSignal.timeout(30000),
+        signal: AbortSignal.timeout(15000),
       });
-      checks[ep.name] = { ok: res.ok, status: res.status, durationMs: Date.now() - start };
+      return { name: ep.name, ok: res.ok, status: res.status, durationMs: Date.now() - start };
     } catch (e) {
-      checks[ep.name] = { ok: false, status: 0, durationMs: Date.now() - start, error: (e as Error).message };
+      return { name: ep.name, ok: false, status: 0, durationMs: Date.now() - start, error: (e as Error).message };
     }
-  }
+  };
 
-  const allOk = Object.values(checks).every((c) => c.ok);
+  const results = await Promise.all(endpoints.map(checkSingle));
+  const checks = Object.fromEntries(results.map((r) => [r.name, { ok: r.ok, status: r.status, durationMs: r.durationMs, ...(r.error ? { error: r.error } : {}) }]));
+  const allOk = results.every((r) => r.ok);
 
   return NextResponse.json({ ok: allOk, checkedAt: new Date().toISOString(), checks });
 }

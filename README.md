@@ -105,58 +105,28 @@ The ingestion pipeline runs on a schedule via [cron-job.org](https://cron-job.or
 
 **Dashboard:** https://dashboard.cron-job.org → Login → Jobs
 
-### Monitoring Commands
+### Monitoring Endpoints
 
-**Check latest pipeline run:**
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /api/health` | None | Public health status |
+| `GET /api/admin/monitor` | None | Pipeline health, recent runs, source health, IPO stats |
+| `GET /api/admin/cron-health` | CRON_SECRET | Check all cron endpoints are responding |
+| `GET /api/cron/trigger?jobs=ingest` | CRON_SECRET | Trigger pipeline manually |
+
+**Quick health check:**
 ```bash
-# Via health endpoint (no auth needed)
 curl -s https://ipobharosa.vercel.app/api/health | python3 -m json.tool
-
-# Via trigger endpoint (shows last run status)
-curl -s "https://ipobharosa.vercel.app/api/cron/trigger?jobs=ingest" | python3 -m json.tool
 ```
 
-**Check pipeline status from database:**
+**Detailed pipeline monitor:**
 ```bash
-export DATABASE_URL='postgresql://aish:H9XWGh7G_8rBrowv6F0Byw@small-chirper-32604.j77.aws-ap-south-1.cockroachlabs.cloud:26257/defaultdb?sslmode=verify-full&sslrootcert=$HOME/.postgresql/root.crt'
-
-# Latest run summary
-node -e "
-const pg = require('pg');
-const os = require('os');
-const connStr = process.env.DATABASE_URL.replace('\$HOME', os.homedir());
-const client = new pg.Client({ connectionString: connStr });
-client.connect().then(async () => {
-  const { rows } = await client.query('SELECT id::text, ok, summary::text, error, \"startedAt\"::text, \"finishedAt\"::text FROM \"IngestionRun\" ORDER BY \"startedAt\" DESC LIMIT 1');
-  const s = JSON.parse(rows[0].summary);
-  console.log('Run:', rows[0].id.substring(0,8));
-  console.log('Status:', rows[0].ok ? '✅ OK' : '❌ FAILED');
-  console.log('Stage:', s.stage);
-  console.log('Started:', rows[0].startedAt);
-  console.log('Finished:', rows[0].finishedAt || 'still running...');
-  console.log('Discovery:', JSON.stringify(s.summary.discovery));
-  console.log('GMP:', JSON.stringify(s.summary.gmp));
-  console.log('Subscription:', JSON.stringify(s.summary.subscription));
-  console.log('IPO Count:', s.summary.ipoCount);
-  if (rows[0].error) console.log('Error:', rows[0].error);
-  client.end();
-});
-"
+curl -s https://ipobharosa.vercel.app/api/admin/monitor | python3 -m json.tool
 ```
 
-**Count IPOs by status:**
+**Cron health check:**
 ```bash
-node -e "
-const pg = require('pg');
-const os = require('os');
-const connStr = process.env.DATABASE_URL.replace('\$HOME', os.homedir());
-const client = new pg.Client({ connectionString: connStr });
-client.connect().then(async () => {
-  const { rows } = await client.query('SELECT status, \"publicationState\", COUNT(*) as c FROM \"Ipo\" GROUP BY status, \"publicationState\" ORDER BY c DESC');
-  rows.forEach(r => console.log(r.status, r.publicationState, ':', r.c));
-  client.end();
-});
-"
+curl -s -H "Authorization: Bearer <CRON_SECRET>" https://ipobharosa.vercel.app/api/admin/cron-health | python3 -m json.tool
 ```
 
 ### Pipeline Stages
