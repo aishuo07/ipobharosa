@@ -10,7 +10,7 @@ import { nseSubscriptionAdapter } from "@/lib/subscription/adapters/nse";
 import { syncIpoStatuses } from "@/lib/ipo-status";
 import { syncIpoListings } from "@/lib/ipo-listing";
 import { notifyWatchersOfTransitions } from "@/lib/email/reminders";
-import type { DiscoverySummary } from "@/lib/discovery/discover";
+import { runDiscovery, type DiscoverySummary } from "@/lib/discovery/discover";
 import { acquireIngestionLock, releaseIngestionLock } from "@/lib/ingestion/lock";
 import { computeAlertReasons } from "@/lib/ingestion/alert";
 import { sendEmail } from "@/lib/email/resend";
@@ -243,17 +243,18 @@ async function runCatalogue(checkpoint: IngestionCheckpoint): Promise<IngestionC
 }
 
 async function runDiscoveryStep(checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
-  // The SEBI filing catalogue is the launch-safe discovery radar. Legacy
-  // IPOWatch discovery is intentionally not called because its reviewed terms
-  // conflict with the intended commercial product use.
-  const discovery: IngestionSummary["discovery"] = checkpoint.summary.catalogue.error
-    ? { error: checkpoint.summary.catalogue.error }
-    : {
-        ...structuredClone(EMPTY_SUMMARY.discovery as DiscoverySummary),
-        candidatesSeen: checkpoint.summary.catalogue.seen,
-        alreadyTracked: checkpoint.summary.catalogue.linked,
-        deferredCandidates: Math.max(0, checkpoint.summary.catalogue.seen - checkpoint.summary.catalogue.linked),
-      };
+  const timer = stageTimer("discovery");
+  let discovery: IngestionSummary["discovery"];
+  if (checkpoint.summary.catalogue.error) {
+    discovery = { error: checkpoint.summary.catalogue.error };
+  } else {
+    try {
+      discovery = await runDiscovery();
+    } catch (error) {
+      discovery = { error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+  timer.finish({ candidatesSeen: "candidatesSeen" in discovery ? discovery.candidatesSeen : 0, draftsCreated: "draftsCreated" in discovery ? discovery.draftsCreated : 0 });
   const gmpAdapters = activeGmpAdapters();
   const ipoCount = await prisma.ipo.count({ where: gmpEligibilityWhere() });
   const revalidationTarget = Math.min(await countRevalidationCandidates(), REVALIDATION_PER_RUN);
@@ -272,48 +273,52 @@ async function runDiscoveryStep(checkpoint: IngestionCheckpoint): Promise<Ingest
 }
 
 async function runRevalidationBatch(checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
-  if (checkpoint.summary.revalidation.checked >= checkpoint.summary.revalidation.target) {
-    return nextStage(checkpoint, "publishedRevalidation");
-  }
-  const result = await revalidateOldestCandidate();
-  if (result.outcome === "EMPTY") return nextStage(checkpoint, "publishedRevalidation");
   const summary = structuredClone(checkpoint.summary);
-  summary.revalidation.checked++;
-  if (result.outcome === "PUBLISHED") summary.revalidation.published++;
-  else if (result.outcome === "ELIGIBLE_HELD") summary.revalidation.eligibleHeld++;
-  else if (result.outcome === "RETRY") summary.revalidation.retries++;
-  else if (result.outcome === "EXCEPTION") summary.revalidation.exceptions++;
-  else if (result.outcome === "WRONG_TYPE") summary.revalidation.wrongTypes++;
-  else if (result.outcome === "INVALID") summary.revalidation.invalid++;
-  return { ...checkpoint, cursor: checkpoint.cursor + 1, summary };
+  const timer = stageTimer("revalidation");
+  const target = summary.revalidation.target;
+  while (summary.revalidation.checked < target) {
+    const result = await revalidateOldestCandidate();
+    if (result.outcome === "EMPTY") break;
+    summary.revalidation.checked++;
+    if (result.outcome === "PUBLISHED") summary.revalidation.published++;
+    else if (result.outcome === "ELIGIBLE_HELD") summary.revalidation.eligibleHeld++;
+    else if (result.outcome === "RETRY") summary.revalidation.retries++;
+    else if (result.outcome === "EXCEPTION") summary.revalidation.exceptions++;
+    else if (result.outcome === "WRONG_TYPE") summary.revalidation.wrongTypes++;
+    else if (result.outcome === "INVALID") summary.revalidation.invalid++;
+  }
+  timer.finish({ checked: summary.revalidation.checked, published: summary.revalidation.published });
+  return nextStage({ ...checkpoint, summary }, "publishedRevalidation");
 }
 
 async function runPublishedRevalidationBatch(checkpoint: IngestionCheckpoint): Promise<IngestionCheckpoint> {
-  if (checkpoint.summary.publishedRevalidation.checked >= checkpoint.summary.publishedRevalidation.target) {
-    return nextStage(checkpoint, "gmp");
-  }
-  const result = await revalidateOldestPublished();
-  if (result.outcome === "EMPTY") return nextStage(checkpoint, "gmp");
   const summary = structuredClone(checkpoint.summary);
-  summary.publishedRevalidation.checked++;
-  if (result.outcome === "MATCHED") summary.publishedRevalidation.matched++;
-  else if (result.outcome === "DRIFT") {
-    summary.publishedRevalidation.drifts++;
-    if (result.newIncident) {
-      try {
-        await sendEmail({
-          to: ALERT_RECIPIENT,
-          subject: `IPOBharosa published data changed: ${result.company}`,
-          html: `<p>Official source values now differ for <strong>${result.company}</strong>.</p><ul>${result.reasons.map((reason) => `<li>${reason}</li>`).join("")}</ul><p>Public data was not changed. <a href="${SITE_URL}/admin">Review the incident</a>.</p>`,
-        });
-      } catch (error) {
-        console.error("Failed to send published drift alert:", error instanceof Error ? error.message : String(error));
+  const timer = stageTimer("publishedRevalidation");
+  const target = summary.publishedRevalidation.target;
+  while (summary.publishedRevalidation.checked < target) {
+    const result = await revalidateOldestPublished();
+    if (result.outcome === "EMPTY") break;
+    summary.publishedRevalidation.checked++;
+    if (result.outcome === "MATCHED") summary.publishedRevalidation.matched++;
+    else if (result.outcome === "DRIFT") {
+      summary.publishedRevalidation.drifts++;
+      if (result.newIncident) {
+        try {
+          await sendEmail({
+            to: ALERT_RECIPIENT,
+            subject: `IPOBharosa published data changed: ${result.company}`,
+            html: `<p>Official source values now differ for <strong>${result.company}</strong>.</p><ul>${result.reasons.map((reason) => `<li>${reason}</li>`).join("")}</ul><p>Public data was not changed. <a href="${SITE_URL}/admin">Review the incident</a>.</p>`,
+          });
+        } catch (error) {
+          console.error("Failed to send published drift alert:", error instanceof Error ? error.message : String(error));
+        }
       }
     }
+    else if (result.outcome === "RETRY") summary.publishedRevalidation.retries++;
+    else if (result.outcome === "INVALID") summary.publishedRevalidation.invalid++;
   }
-  else if (result.outcome === "RETRY") summary.publishedRevalidation.retries++;
-  else if (result.outcome === "INVALID") summary.publishedRevalidation.invalid++;
-  return { ...checkpoint, cursor: checkpoint.cursor + 1, summary };
+  timer.finish({ checked: summary.publishedRevalidation.checked, matched: summary.publishedRevalidation.matched, drifts: summary.publishedRevalidation.drifts });
+  return nextStage({ ...checkpoint, summary }, "gmp");
 }
 
 async function ensureSources(adapters: GmpAdapter[]) {
