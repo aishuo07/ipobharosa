@@ -14,20 +14,32 @@ export async function monitorPipeline(
   const dsn = process.env.SENTRY_DSN;
   const started = Date.now();
 
+  Sentry.addBreadcrumb({
+    category: "pipeline",
+    message: `Starting ${operation}`,
+    level: "info",
+    data: { operation },
+  });
+
   try {
     const result = await run();
+    const durationMs = Date.now() - started;
+
     if (dsn) {
       Sentry.captureMessage(`pipeline:${operation}:ok`, {
         level: "info",
-        extra: { operation, durationMs: Date.now() - started, result: result ?? {} },
+        tags: { pipeline: operation, status: "ok" },
+        extra: { operation, durationMs, result: result ?? {} },
       });
     }
     return result;
   } catch (error) {
+    const durationMs = Date.now() - started;
+
     if (dsn) {
       Sentry.captureException(error, {
-        tags: { pipeline: operation },
-        extra: { durationMs: Date.now() - started },
+        tags: { pipeline: operation, status: "error" },
+        extra: { durationMs, operation },
       });
     }
     throw error;
