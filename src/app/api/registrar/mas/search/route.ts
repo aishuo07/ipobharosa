@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     if (!upstream.ok) {
       const message = `Upstream HTTP ${upstream.status}`;
       await recordSourceFailure(OPERATION_KEY, "MAS", "allotment-pan-search", new Error(message));
-      return NextResponse.json({ error: message }, { status: 502 });
+      return NextResponse.json({ ok: false, error: message, upstream: true });
     }
 
     const html = await upstream.text();
