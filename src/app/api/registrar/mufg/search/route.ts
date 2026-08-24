@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { recordSourceSuccess, recordSourceFailure } from "@/lib/ingestion/source-operation";
 
 const OPERATION_KEY = "registrar:mufg:search";
-
 const MUFG_ORIGIN = "https://in.mpms.mufg.com";
 const MUFG_REFERER = "https://in.mpms.mufg.com/Initial_Offer/public-issues.html";
 
@@ -18,19 +17,35 @@ function headers() {
   };
 }
 
+async function findCompanyId(companyName: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${MUFG_ORIGIN}/Initial_Offer/IPO.aspx/GetDetails`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) return null;
+    const raw = await res.json();
+    const d = raw.d || raw;
+    const jsonStr = typeof d === "string" ? d : JSON.stringify(d);
+    const list = JSON.parse(jsonStr);
+    const items = Array.isArray(list) ? list : list?.Table || [];
+    const match = items.find((c: Record<string, string>) =>
+      (c.COMPANY_NAME || c.company_name || c.Name || "").toLowerCase().includes(companyName.toLowerCase())
+    );
+    return match?.CLIENT_ID || match?.client_id || match?.CompanyId || match?.Id || null;
+  } catch {
+    return null;
+  }
+}
+
 function unwrapD(json: unknown): unknown {
   let d = (json as { d?: unknown })?.d;
   if (d === undefined) d = json;
   if (typeof d === "string") {
     const trimmed = d.trim();
-    if (trimmed.startsWith("<")) {
-      return parseXmlRows(d);
-    }
-    try {
-      return JSON.parse(d);
-    } catch {
-      /* leave as string */
-    }
+    if (trimmed.startsWith("<")) return parseXmlRows(d);
+    try { return JSON.parse(d); } catch {}
   }
   return d;
 }
@@ -55,27 +70,31 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const PAN = body.PAN || body.pan;
-    const clientid = body.clientid || body.company_code || body.companyCode;
-    if (!PAN || !clientid) {
-      return NextResponse.json({ error: "PAN and company_code required" }, { status: 400 });
+    const companyName = body.company_name || body.companyName || body.company_code || "";
+    if (!PAN || !companyName) {
+      return NextResponse.json({ ok: false, error: "PAN and company_name required" }, { status: 400 });
+    }
+    const clientId = await findCompanyId(companyName);
+    if (!clientId) {
+      return NextResponse.json({ ok: false, error: `Company "${companyName}" not found in MUFG catalogue` });
     }
     const upstream = await fetch(`${MUFG_ORIGIN}/Initial_Offer/IPO.aspx/SearchOnPan`, {
       method: "POST",
       headers: headers(),
-      body: JSON.stringify({ clientid, PAN, IFSC: "", CHKVAL: "1", token: "" }),
+      body: JSON.stringify({ clientid: clientId, PAN, IFSC: "", CHKVAL: "1", token: "" }),
     });
     if (!upstream.ok) {
       const message = `Upstream HTTP ${upstream.status}`;
       await recordSourceFailure(OPERATION_KEY, "MUFG / Link Intime", "allotment-pan-search", new Error(message));
-      return NextResponse.json({ ok: false, error: message, upstream: true });
+      return NextResponse.json({ ok: false, error: message });
     }
     const data = unwrapD(await upstream.json());
     await recordSourceSuccess(OPERATION_KEY, "MUFG / Link Intime", "allotment-pan-search");
     const rows = Array.isArray(data) ? data : (data as { Table?: unknown[] })?.Table ?? [];
-    return NextResponse.json(rows, { headers: { "Access-Control-Allow-Origin": "*" } });
+    return NextResponse.json({ ok: true, registrar: "mufg", results: rows }, { headers: { "Access-Control-Allow-Origin": "*" } });
   } catch (e) {
-    await logApiError("registrar:search", e);
+    await logApiError("registrar:mufg", e);
     await recordSourceFailure(OPERATION_KEY, "MUFG / Link Intime", "allotment-pan-search", e);
-    return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown error" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "Unknown error" });
   }
 }
