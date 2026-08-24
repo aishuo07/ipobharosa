@@ -5,6 +5,35 @@ const MAASHITLA_API = "https://api.maashitla.com";
 
 const OPERATION_KEY = "registrar:maashitla:search";
 
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const pan = body.PAN || body.pan;
+    const company_name = body.company_code || body.companyCode || body.Company;
+    if (!pan) {
+      return NextResponse.json({ error: "PAN required" }, { status: 400 });
+    }
+    const url = company_name
+      ? `${MAASHITLA_API}/api/public-issue/search?company_name=${encodeURIComponent(company_name)}&pan=${encodeURIComponent(pan)}`
+      : `${MAASHITLA_API}/api/public-issue/search?pan=${encodeURIComponent(pan)}`;
+    const upstream = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json", "User-Agent": "IPOBharosa/1.0" },
+    });
+    if (!upstream.ok) {
+      const message = `Upstream HTTP ${upstream.status}`;
+      await recordSourceFailure(OPERATION_KEY, "Maashitla", "allotment-pan-search", new Error(message));
+      return NextResponse.json({ error: message }, { status: 502 });
+    }
+    const data = await upstream.json();
+    await recordSourceSuccess(OPERATION_KEY, "Maashitla", "allotment-pan-search");
+    return NextResponse.json(data, { headers: { "Access-Control-Allow-Origin": "*" } });
+  } catch (e) {
+    await recordSourceFailure(OPERATION_KEY, "Maashitla", "allotment-pan-search", e);
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown error" }, { status: 500 });
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);

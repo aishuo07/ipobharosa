@@ -9,9 +9,10 @@ const OPERATION_KEY = "registrar:kfin:search";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { client_id, PAN } = body;
-    if (!client_id || !PAN) {
-      return NextResponse.json({ error: "client_id and PAN required" }, { status: 400 });
+    const PAN = body.PAN || body.pan || body.PanNo;
+    const client_id = body.client_id || body.company_code || body.companyCode;
+    if (!PAN || !client_id) {
+      return NextResponse.json({ error: "PAN and company_code required" }, { status: 400 });
     }
     const upstream = await fetch(KFIN_API, {
       method: "GET",

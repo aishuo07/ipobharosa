@@ -19,11 +19,12 @@ function headers() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { Company, SelectionType = "PN", PanNo, Applicationno = "", txtcsdl = "", txtDPID = "", txtClId = "", ddlType = "", lang = "en" } = body;
+    const Company = body.Company || body.company_code || body.companyCode;
+    const PanNo = body.PanNo || body.PAN || body.pan;
     if (!Company || !PanNo) {
-      return NextResponse.json({ error: "Company and PanNo required" }, { status: 400 });
+      return NextResponse.json({ error: "PAN and company_code required" }, { status: 400 });
     }
-    const upstreamBody = `{ Applicationno: '${Applicationno}',Company: '${Company}',SelectionType: '${SelectionType}',PanNo: '${PanNo}', txtcsdl: '${txtcsdl}', txtDPID: '${txtDPID}', txtClId: '${txtClId}',ddlType:'${ddlType}',lang: '${lang}' }`;
+    const upstreamBody = `{ Applicationno: '',Company: '${Company}',SelectionType: 'PN',PanNo: '${PanNo}', txtcsdl: '', txtDPID: '', txtClId: '',ddlType:'',lang: 'en' }`;
     const upstream = await fetch(BIGSHARE_ENDPOINT, {
       method: "POST",
       headers: headers(),

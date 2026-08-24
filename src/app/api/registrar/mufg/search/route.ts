@@ -53,14 +53,15 @@ function parseXmlRows(xml: string): Record<string, string>[] {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { clientid, PAN, IFSC = "", CHKVAL = "1", token = "" } = body;
-    if (!clientid || !PAN) {
-      return NextResponse.json({ error: "clientid and PAN required" }, { status: 400 });
+    const PAN = body.PAN || body.pan;
+    const clientid = body.clientid || body.company_code || body.companyCode;
+    if (!PAN || !clientid) {
+      return NextResponse.json({ error: "PAN and company_code required" }, { status: 400 });
     }
     const upstream = await fetch(`${MUFG_ORIGIN}/Initial_Offer/IPO.aspx/SearchOnPan`, {
       method: "POST",
       headers: headers(),
-      body: JSON.stringify({ clientid, PAN, IFSC, CHKVAL, token }),
+      body: JSON.stringify({ clientid, PAN, IFSC: "", CHKVAL: "1", token: "" }),
     });
     if (!upstream.ok) {
       const message = `Upstream HTTP ${upstream.status}`;
