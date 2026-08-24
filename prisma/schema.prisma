@@ -784,3 +784,17 @@ model PushBroadcast {
   @@unique([kind, broadcastDate])
   @@index([createdAt])
 }
+
+model ErrorLog {
+  id        String   @id @default(uuid())
+  level     String   @default("error") // error | warn | info
+  message   String
+  route     String   @default("")
+  details   String?  @db.Text
+  userAgent String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([route])
+  @@index([level])
+}

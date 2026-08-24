@@ -1,3 +1,4 @@
+import { logApiError } from "@/lib/api-logger";
 import { NextResponse } from "next/server";
 import { recordSourceSuccess, recordSourceFailure } from "@/lib/ingestion/source-operation";
 
@@ -29,6 +30,7 @@ export async function POST(request: Request) {
     await recordSourceSuccess(OPERATION_KEY, "Maashitla", "allotment-pan-search");
     return NextResponse.json(data, { headers: { "Access-Control-Allow-Origin": "*" } });
   } catch (e) {
+    await logApiError("registrar:search", e);
     await recordSourceFailure(OPERATION_KEY, "Maashitla", "allotment-pan-search", e);
     return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown error" }, { status: 500 });
   }
@@ -58,6 +60,7 @@ export async function GET(request: Request) {
     await recordSourceSuccess(OPERATION_KEY, "Maashitla", "allotment-pan-search");
     return NextResponse.json(data, { headers: { "Access-Control-Allow-Origin": "*" } });
   } catch (e) {
+    await logApiError("registrar:search", e);
     await recordSourceFailure(OPERATION_KEY, "Maashitla", "allotment-pan-search", e);
     return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown error" }, { status: 500 });
   }

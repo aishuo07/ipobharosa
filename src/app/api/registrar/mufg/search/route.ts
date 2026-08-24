@@ -1,3 +1,4 @@
+import { logApiError } from "@/lib/api-logger";
 import { NextResponse } from "next/server";
 import { recordSourceSuccess, recordSourceFailure } from "@/lib/ingestion/source-operation";
 
@@ -73,6 +74,7 @@ export async function POST(request: Request) {
     const rows = Array.isArray(data) ? data : (data as { Table?: unknown[] })?.Table ?? [];
     return NextResponse.json(rows, { headers: { "Access-Control-Allow-Origin": "*" } });
   } catch (e) {
+    await logApiError("registrar:search", e);
     await recordSourceFailure(OPERATION_KEY, "MUFG / Link Intime", "allotment-pan-search", e);
     return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown error" }, { status: 500 });
   }
