@@ -48,9 +48,11 @@ const AUTOMATABLE: Record<string, { portalUrl: string }> = {
   "bigshare services": { portalUrl: "https://ipo.bigshareonline.com/ipo_status.html" },
   maashitla: { portalUrl: "https://maashitla.com/allotment-status/public-issues" },
   "maashitla securities": { portalUrl: "https://maashitla.com/allotment-status/public-issues" },
+  mas: { portalUrl: "https://www.masserv.com/ipo_asearch.asp" },
+  "mas services": { portalUrl: "https://www.masserv.com/ipo_asearch.asp" },
 };
 
-export type RegistrarKind = "mufg" | "kfintech" | "bigshare" | "maashitla" | "manual";
+export type RegistrarKind = "mufg" | "kfintech" | "bigshare" | "maashitla" | "mas" | "manual";
 
 export function registrarKind(ipo: BoardIpo): RegistrarKind {
   const registrar = ipo.registrar?.toLowerCase() ?? "";
@@ -58,6 +60,7 @@ export function registrarKind(ipo: BoardIpo): RegistrarKind {
   if (registrar.includes("kfin")) return "kfintech";
   if (registrar.includes("bigshare")) return "bigshare";
   if (registrar.includes("maashitla")) return "maashitla";
+  if (registrar.includes("mas")) return "mas";
   return "manual";
 }
 
@@ -520,6 +523,68 @@ export async function checkMaashitlaAllotmentForPans(ipo: BoardIpo, pans: string
  * each user checks from their own IP; the dynamic catalogue is fetched once
  * per registrar from the server to keep company matching reliable.
  */
+async function checkMasAllotmentForPans(ipo: BoardIpo, pans: string[]): Promise<AllotmentResult[]> {
+  const base = (pan: string): AllotmentResult => ({
+    pan,
+    companyName: ipo.companyName,
+    registrar: ipo.registrar,
+    status: "ERROR",
+    checkedAt: new Date().toISOString(),
+  });
+
+  const results: AllotmentResult[] = [];
+  for (const pan of pans) {
+    try {
+      const formData = new URLSearchParams();
+      formData.append("texthn", pan.toUpperCase());
+      const upstream = await fetch("https://www.masserv.com/ipo_search1.asp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": "IPOBharosa/1.0",
+          Referer: "https://www.masserv.com/ipo_asearch.asp",
+        },
+        body: formData.toString(),
+      });
+      if (!upstream.ok) {
+        results.push({ ...base(pan), error: `HTTP ${upstream.status}` });
+        continue;
+      }
+      const html = await upstream.text();
+      const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+      let rowMatch: RegExpExecArray | null;
+      let found = false;
+      while ((rowMatch = rowRegex.exec(html)) !== null) {
+        const cells = rowMatch[1].match(/<td[^>]*>([\s\S]*?)<\/td>/gi);
+        if (cells && cells.length >= 3) {
+          const clean = (s: string) => s.replace(/<[^>]+>/g, "").trim();
+          const company = clean(cells[0] ?? "");
+          const status = clean(cells[1] ?? "");
+          const shares = clean(cells[2] ?? "");
+          const amount = clean(cells[3] ?? "");
+          if (company.toLowerCase().includes(ipo.companyName.toLowerCase())) {
+            results.push({
+              pan,
+              companyName: ipo.companyName,
+              registrar: ipo.registrar,
+              status: status.toUpperCase().includes("ALLOTTED") ? "ALLOTTED" : status.toUpperCase().includes("NOT") ? "NOT_ALLOTTED" : "NOT_APPLIED",
+              allotted: shares,
+              amount,
+              checkedAt: new Date().toISOString(),
+            });
+            found = true;
+            break;
+          }
+        }
+      }
+      if (!found) results.push({ ...base(pan), status: "NOT_APPLIED" });
+    } catch {
+      results.push({ ...base(pan), error: "Network error" });
+    }
+  }
+  return results;
+}
+
 export async function checkAllotmentForPans(ipo: BoardIpo, pans: string[]): Promise<AllotmentResult[]> {
   const kind = registrarKind(ipo);
   switch (kind) {
@@ -536,6 +601,9 @@ export async function checkAllotmentForPans(ipo: BoardIpo, pans: string[]): Prom
     case "maashitla": {
       const catalogue = await fetchRegistrarCatalogue("maashitla");
       return checkMaashitlaAllotmentForPans(ipo, pans, catalogue);
+    }
+    case "mas": {
+      return checkMasAllotmentForPans(ipo, pans);
     }
     default: {
       const base = (pan: string): AllotmentResult => ({
