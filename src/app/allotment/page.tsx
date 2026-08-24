@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 
 type PanCard = { id: string; pan: string };
+type Ipo = { id: string; companyName: string; slug: string; registrar: string | null; status: string };
 type Result = { pan: string; status: string; company?: string; shares?: string; amount?: string; error?: string };
 
-const STORAGE_KEY = "ipobharosa.pan-cards.v1";
+const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+const PAN_KEY = "ipobharosa.pan-cards.v1";
 function loadPans(): PanCard[] {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); } catch { return []; }
+  try { return JSON.parse(localStorage.getItem(PAN_KEY) || "[]"); } catch { return []; }
 }
 
 const STATUS_STYLE: Record<string, { bg: string; fg: string; label: string }> = {
@@ -18,48 +20,68 @@ const STATUS_STYLE: Record<string, { bg: string; fg: string; label: string }> = 
   CHECKING: { bg: "#EAEEF7", fg: "#3B5BA5", label: "Checking..." },
 };
 
-const REGISTRARS = [
-  { key: "kfin", name: "KFin" },
-  { key: "bigshare", name: "Bigshare" },
-  { key: "mufg", name: "MUFG / Link Intime" },
-  { key: "mas", name: "MAS Services" },
-  { key: "maashitla", name: "Maashitla" },
-  { key: "purva", name: "Purva Sharegistry" },
-];
+function registrarKey(r: string | null): string | null {
+  if (!r) return null;
+  const low = r.toLowerCase();
+  if (low.includes("kfin")) return "kfin";
+  if (low.includes("bigshare")) return "bigshare";
+  if (low.includes("mufg") || low.includes("link intime") || low.includes("intime")) return "mufg";
+  if (low.includes("mas")) return "mas";
+  if (low.includes("maashitla")) return "maashitla";
+  if (low.includes("purva")) return "purva";
+  if (low.includes("cameo")) return "cameo";
+  if (low.includes("skyline")) return "skyline";
+  return null;
+}
 
 export default function AllotmentPage() {
   const [cards, setCards] = useState<PanCard[]>([]);
   const [manualPan, setManualPan] = useState("");
-  const [companyCode, setCompanyCode] = useState("");
-  const [registrar, setRegistrar] = useState("kfin");
+  const [ipos, setIpos] = useState<Ipo[]>([]);
+  const [selectedIpo, setSelectedIpo] = useState("");
   const [results, setResults] = useState<Result[]>([]);
   const [checking, setChecking] = useState(false);
+  const [loadingIpos, setLoadingIpos] = useState(true);
 
-  useEffect(() => { setCards(loadPans()); }, []);
+  useEffect(() => {
+    setCards(loadPans());
+    // Fetch only closed/listed IPOs — lightweight
+    fetch("/api/public/board?board=ALL")
+      .then((r) => r.json())
+      .then((data: Ipo[]) => {
+        const eligible = data
+          .filter((i) => i.status === "CLOSED" || i.status === "LISTED")
+          .sort((a, b) => b.closeDate.localeCompare(a.closeDate));
+        setIpos(eligible);
+        if (eligible[0]) setSelectedIpo(eligible[0].id);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingIpos(false));
+  }, []);
 
   const pans = cards.length > 0 ? cards.map((c) => c.pan) : (manualPan.trim() ? [manualPan.trim().toUpperCase()] : []);
+  const ipo = ipos.find((i) => i.id === selectedIpo);
+  const regKey = registrarKey(ipo?.registrar ?? null);
 
   async function doCheck() {
-    if (pans.length === 0 || !companyCode.trim() || checking) return;
+    if (pans.length === 0 || !ipo || !regKey || checking) return;
     setChecking(true);
     setResults(pans.map((p) => ({ pan: p, status: "CHECKING" })));
 
-    const code = companyCode.trim().toUpperCase();
     const out: Result[] = [];
-
     for (const pan of pans) {
       try {
-        const r = await fetch(`/api/registrar/${registrar}/search`, {
+        const r = await fetch(`/api/registrar/${regKey}/search`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ PAN: pan, company_code: code }),
+          body: JSON.stringify({ PAN: pan, company_code: ipo.slug.toUpperCase() }),
         });
         const d = await r.json();
         if (d.ok && d.results?.length > 0) {
           const hit = d.results[0];
-          out.push({ pan, status: hit.status || "UNKNOWN", company: hit.company_name, shares: hit.allotted_shares || hit.shares, amount: hit.amount });
+          out.push({ pan, status: hit.status || "UNKNOWN", company: hit.company_name || ipo.companyName, shares: hit.allotted_shares || hit.shares, amount: hit.amount });
         } else if (d.requires_captcha) {
-          out.push({ pan, status: "ERROR", error: "CAPTCHA required — try registrar site directly" });
+          out.push({ pan, status: "ERROR", error: "CAPTCHA required — open registrar site directly" });
         } else {
           out.push({ pan, status: "NOT_APPLIED" });
         }
@@ -71,10 +93,36 @@ export default function AllotmentPage() {
     setChecking(false);
   }
 
+  const canCheck = pans.length > 0 && !!ipo && !!regKey && !checking;
+
   return (
     <main style={{ maxWidth: 480, margin: "0 auto", padding: "24px 16px", fontFamily: "system-ui, sans-serif" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 800, margin: "0 0 4px" }}>Allotment Check</h1>
-      <p style={{ fontSize: 13, color: "#5A6B63", margin: "0 0 20px" }}>Check your IPO allotment from registrar records</p>
+      <h1 style={{ fontSize: 22, fontWeight: 800, margin: "0 0 4px" }}>Check Allotment</h1>
+      <p style={{ fontSize: 13, color: "#5A6B63", margin: "0 0 20px" }}>Select IPO, enter PAN — we handle the rest</p>
+
+      {/* IPO Selector */}
+      <div style={{ background: "#fff", borderRadius: 12, padding: 16, border: "1px solid #DEE1D9", marginBottom: 12 }}>
+        <label style={{ fontSize: 12, fontWeight: 700, color: "#5A6B63", textTransform: "uppercase", letterSpacing: 0.5 }}>Select IPO</label>
+        {loadingIpos ? (
+          <p style={{ fontSize: 14, color: "#8A968F", marginTop: 8 }}>Loading IPOs...</p>
+        ) : (
+          <select
+            value={selectedIpo}
+            onChange={(e) => { setSelectedIpo(e.target.value); setResults([]); }}
+            style={{ width: "100%", padding: "10px 12px", fontSize: 15, border: "1px solid #DEE1D9", borderRadius: 8, marginTop: 6, boxSizing: "border-box", background: "#fff" }}
+          >
+            {ipos.map((i) => (
+              <option key={i.id} value={i.id}>{i.companyName} ({i.status})</option>
+            ))}
+          </select>
+        )}
+        {ipo && (
+          <p style={{ fontSize: 12, color: "#8A968F", margin: "6px 0 0" }}>
+            Registrar: {ipo.registrar || "Unknown"}
+            {!regKey && <span style={{ color: "#A13F35" }}> (not supported for auto-check)</span>}
+          </p>
+        )}
+      </div>
 
       {/* PAN Input */}
       <div style={{ background: "#fff", borderRadius: 12, padding: 16, border: "1px solid #DEE1D9", marginBottom: 12 }}>
@@ -101,50 +149,18 @@ export default function AllotmentPage() {
         )}
       </div>
 
-      {/* Company + Registrar */}
-      <div style={{ background: "#fff", borderRadius: 12, padding: 16, border: "1px solid #DEE1D9", marginBottom: 12 }}>
-        <label style={{ fontSize: 12, fontWeight: 700, color: "#5A6B63", textTransform: "uppercase", letterSpacing: 0.5 }}>Company Code</label>
-        <input
-          value={companyCode}
-          onChange={(e) => setCompanyCode(e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""))}
-          placeholder="e.g. TNE, NESS, HDB"
-          autoCapitalize="characters"
-          style={{ width: "100%", padding: "10px 12px", fontSize: 15, border: "1px solid #DEE1D9", borderRadius: 8, marginTop: 6, boxSizing: "border-box" }}
-        />
-        <p style={{ fontSize: 12, color: "#8A968F", margin: "4px 0 0" }}>Short code from IPO form — check your application</p>
-
-        <label style={{ fontSize: 12, fontWeight: 700, color: "#5A6B63", textTransform: "uppercase", letterSpacing: 0.5, marginTop: 12, display: "block" }}>Registrar</label>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
-          {REGISTRARS.map((r) => (
-            <button
-              key={r.key}
-              onClick={() => setRegistrar(r.key)}
-              style={{
-                padding: "6px 12px", fontSize: 13, fontWeight: 600, borderRadius: 8, border: "1px solid",
-                borderColor: registrar === r.key ? "#237355" : "#DEE1D9",
-                background: registrar === r.key ? "#E8F2ED" : "#fff",
-                color: registrar === r.key ? "#237355" : "#5A6B63",
-                cursor: "pointer",
-              }}
-            >
-              {r.name}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Check Button */}
       <button
         onClick={doCheck}
-        disabled={checking || pans.length === 0 || !companyCode.trim()}
+        disabled={!canCheck}
         style={{
           width: "100%", padding: 12, fontSize: 15, fontWeight: 700, border: "none", borderRadius: 8,
-          background: checking || pans.length === 0 || !companyCode.trim() ? "#DEE1D9" : "#237355",
-          color: checking || pans.length === 0 || !companyCode.trim() ? "#8A968F" : "#fff",
-          cursor: checking ? "default" : "pointer",
+          background: canCheck ? "#237355" : "#DEE1D9",
+          color: canCheck ? "#fff" : "#8A968F",
+          cursor: canCheck ? "pointer" : "default",
         }}
       >
-        {checking ? "Checking..." : `Check ${pans.length > 1 ? pans.length + " PANs" : "Allotment"}`}
+        {checking ? "Checking..." : `Check Allotment`}
       </button>
 
       {/* Results */}
@@ -157,7 +173,7 @@ export default function AllotmentPage() {
                 <div style={{ minWidth: 0 }}>
                   <p style={{ margin: 0, fontWeight: 700, fontSize: 15, fontFamily: "monospace" }}>{r.pan}</p>
                   {r.company && <p style={{ margin: "2px 0 0", fontSize: 13, color: "#5A6B63" }}>{r.company}</p>}
-                  {r.shares && <p style={{ margin: "2px 0 0", fontSize: 13, color: "#5A6B63" }}>{r.shares} shares · ₹{r.amount}</p>}
+                  {r.shares && <p style={{ margin: "2px 0 0", fontSize: 13, color: "#237355", fontWeight: 600 }}>{r.shares} shares · ₹{r.amount}</p>}
                   {r.error && <p style={{ margin: "2px 0 0", fontSize: 12, color: "#A13F35" }}>{r.error}</p>}
                 </div>
                 <span style={{ flexShrink: 0, padding: "4px 12px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: s.bg, color: s.fg }}>
@@ -169,10 +185,14 @@ export default function AllotmentPage() {
         </div>
       )}
 
-      {/* Info */}
-      <div style={{ marginTop: 24, padding: 12, background: "#F1F2EC", borderRadius: 8, fontSize: 13, color: "#5A6B63", lineHeight: 1.5 }}>
-        <b>How it works:</b> IPOBharosa checks the registrar website for your PAN. Company code is the short code on your IPO application form (e.g. TNE for Takyon Networks). Select the registrar that handled your IPO.
-      </div>
+      {/* Save PAN prompt */}
+      {cards.length === 0 && (
+        <div style={{ marginTop: 24, padding: 12, background: "#F1F2EC", borderRadius: 8 }}>
+          <p style={{ fontSize: 13, color: "#5A6B63", margin: 0 }}>
+            Save your PAN once at <a href="/pan-cards" style={{ color: "#237355", fontWeight: 600 }}>PAN Cards</a> — no need to type every time.
+          </p>
+        </div>
+      )}
     </main>
   );
 }
