@@ -45,7 +45,7 @@ export default function InvestorsPage() {
 
       <div style={{ background: "#fff", borderRadius: 12, padding: 16, border: "1px solid #DEE1D9", marginBottom: 16 }}>
         <input value={pan} onChange={(e) => { setPan(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10)); setErr(""); }}
-          placeholder="PAN" autoCapitalize="characters" autoCorrect={false} spellCheck={false} maxLength={10}
+          placeholder="PAN" autoCapitalize="characters" autoCorrect="off" spellCheck={false} maxLength={10}
           style={{ width: "100%", padding: "10px 12px", fontSize: 16, fontWeight: 600, letterSpacing: 1.5, border: "1px solid #DEE1D9", borderRadius: 8, marginBottom: 8, boxSizing: "border-box", fontFamily: "monospace" }} />
         <input value={name} onChange={(e) => { setName(e.target.value); setErr(""); }} placeholder="Holder name"
           style={{ width: "100%", padding: "10px 12px", fontSize: 15, border: "1px solid #DEE1D9", borderRadius: 8, marginBottom: 8, boxSizing: "border-box" }} />

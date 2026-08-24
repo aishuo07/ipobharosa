@@ -93,7 +93,7 @@ export default function AllotmentPage() {
             onChange={(e) => setManualPan(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10))}
             placeholder="ABCDE1234F"
             autoCapitalize="characters"
-            autoCorrect={false}
+            autoCorrect="off"
             spellCheck={false}
             maxLength={10}
             style={{ width: "100%", padding: "10px 12px", fontSize: 16, fontWeight: 600, letterSpacing: 1.5, border: "1px solid #DEE1D9", borderRadius: 8, marginTop: 6, boxSizing: "border-box", fontFamily: "monospace" }}
