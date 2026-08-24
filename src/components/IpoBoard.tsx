@@ -233,6 +233,15 @@ export default function IpoBoard({
             <span className="eyebrow">Lot Size · GMP · Dates · Allotment</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 13 }}>
+            <a href="/pan-cards" className="btn btn-ghost" style={{ padding: "6px 12px" }}>
+              PAN Cards
+            </a>
+            <a href="/allotment" className="btn btn-ghost" style={{ padding: "6px 12px" }}>
+              Allotment
+            </a>
+            <a href="/investors" className="btn btn-ghost" style={{ padding: "6px 12px" }}>
+              Investors
+            </a>
             <InstallApp />
             {user ? (
               <>
