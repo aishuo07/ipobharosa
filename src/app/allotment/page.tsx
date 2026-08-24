@@ -25,6 +25,24 @@ function registrarKey(r: string | null): string | null {
   return null;
 }
 
+const REGISTRAR_NAMES: Record<string, string> = {
+  kfin: "KFin Technologies",
+  bigshare: "Bigshare Services",
+  mufg: "MUFG / Link Intime",
+  mas: "MAS Services",
+  maashitla: "Maashitla Securities",
+  purva: "Purva Sharegistry",
+  cameo: "Cameo Corporate",
+  skyline: "Skyline Financial",
+};
+
+// CAPTCHA-bound registrars — can't automate, show portal link
+const PORTAL_URLS: Record<string, string> = {
+  cameo: "https://ipostatus.cameoindia.com",
+  skyline: "https://www.skylinerta.com/ipo.php",
+  purva: "https://www.purvashare.com/investor-service/ipo-query",
+};
+
 const STATUS_STYLE: Record<string, { bg: string; fg: string; label: string }> = {
   ALLOTTED: { bg: "#E8F2ED", fg: "#237355", label: "Allotted" },
   NOT_ALLOTTED: { bg: "#F6EAE8", fg: "#A13F35", label: "Not Allotted" },
@@ -59,11 +77,23 @@ export default function AllotmentPage() {
   const pans = cards.length > 0 ? cards.map((c) => c.pan) : (manualPan.trim() ? [manualPan.trim().toUpperCase()] : []);
   const ipo = ipos.find((i) => i.id === selectedIpo);
   const regKey = registrarKey(ipo?.registrar ?? null);
+  const isCaptchaBound = regKey ? !!PORTAL_URLS[regKey] : false;
 
   async function doCheck() {
     if (pans.length === 0 || !ipo || !regKey || checking) return;
     setChecking(true);
     setResults([]);
+
+    // CAPTCHA-bound registrars — can't automate
+    if (isCaptchaBound) {
+      setResults(pans.map((pan) => ({
+        pan,
+        result: { status: "ERROR", error: `Open ${REGISTRAR_NAMES[regKey]} portal to check manually` },
+      })));
+      setChecking(false);
+      return;
+    }
+
     const out: { pan: string; result: Result }[] = [];
     for (const pan of pans) {
       try {
@@ -77,7 +107,7 @@ export default function AllotmentPage() {
           const hit = d.results[0];
           out.push({ pan, result: { status: hit.status || "UNKNOWN", company: hit.company_name || hit.COMPANY_NAME, shares: hit.allotted_shares || hit.shares || hit.ALLOTTED_SHARES, amount: hit.amount || hit.ALLOTMENT_AMT } });
         } else {
-          out.push({ pan, result: { status: "ERROR", error: d.error || "Not found" } });
+          out.push({ pan, result: { status: "ERROR", error: d.error || "Not found in registrar records" } });
         }
       } catch {
         out.push({ pan, result: { status: "ERROR", error: "Network error" } });
@@ -92,19 +122,46 @@ export default function AllotmentPage() {
   return (
     <main style={{ maxWidth: 480, margin: "0 auto", padding: "24px 16px", fontFamily: "system-ui, sans-serif" }}>
       <h1 style={{ fontSize: 22, fontWeight: 800, margin: "0 0 4px" }}>Check Allotment</h1>
-      <p style={{ fontSize: 13, color: "#5A6B63", margin: "0 0 20px" }}>Select IPO, enter PAN — done</p>
+      <p style={{ fontSize: 13, color: "#5A6B63", margin: "0 0 20px" }}>Select IPO, enter PAN — we auto-detect registrar</p>
 
+      {/* IPO Selector */}
       <div style={{ background: "#fff", borderRadius: 12, padding: 16, border: "1px solid #DEE1D9", marginBottom: 12 }}>
         <label style={{ fontSize: 12, fontWeight: 700, color: "#5A6B63", textTransform: "uppercase", letterSpacing: 0.5 }}>Select IPO</label>
-        {loadingIpos ? <p style={{ fontSize: 14, color: "#8A968F", marginTop: 8 }}>Loading...</p> : (
+        {loadingIpos ? <p style={{ fontSize: 14, color: "#8A968F", marginTop: 8 }}>Loading IPOs...</p> : (
           <select value={selectedIpo} onChange={(e) => { setSelectedIpo(e.target.value); setResults([]); }}
             style={{ width: "100%", padding: "10px 12px", fontSize: 15, border: "1px solid #DEE1D9", borderRadius: 8, marginTop: 6, boxSizing: "border-box", background: "#fff" }}>
             {ipos.map((i) => <option key={i.id} value={i.id}>{i.companyName}</option>)}
           </select>
         )}
-        {ipo && <p style={{ fontSize: 12, color: "#8A968F", margin: "6px 0 0" }}>Registrar: <b>{ipo.registrar || "Unknown"}</b>{!regKey && <span style={{ color: "#A13F35" }}> (not supported)</span>}</p>}
+        {ipo && (
+          <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 13, color: "#5A6B63" }}>Registrar:</span>
+            {regKey ? (
+              <span style={{ padding: "3px 10px", borderRadius: 6, fontSize: 12, fontWeight: 700, background: isCaptchaBound ? "#F6EBE3" : "#E8F2ED", color: isCaptchaBound ? "#9A4E22" : "#237355" }}>
+                {REGISTRAR_NAMES[regKey]}
+                {isCaptchaBound ? " (CAPTCHA)" : " (Auto)"}
+              </span>
+            ) : (
+              <span style={{ fontSize: 12, color: "#A13F35" }}>{ipo.registrar || "Unknown"} (not supported)</span>
+            )}
+          </div>
+        )}
       </div>
 
+      {/* CAPTCHA Warning */}
+      {isCaptchaBound && (
+        <div style={{ background: "#F6EBE3", borderRadius: 12, padding: 14, border: "1px solid #F6EBE3", marginBottom: 12 }}>
+          <p style={{ fontSize: 13, color: "#9A4E22", margin: 0, lineHeight: 1.5 }}>
+            <b>{REGISTRAR_NAMES[regKey!]}</b> requires CAPTCHA verification. Open their portal to check:
+          </p>
+          <a href={PORTAL_URLS[regKey!]} target="_blank" rel="noopener noreferrer"
+            style={{ display: "inline-block", marginTop: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, background: "#9A4E22", color: "#fff", borderRadius: 8, textDecoration: "none" }}>
+            Open {REGISTRAR_NAMES[regKey!]} Portal
+          </a>
+        </div>
+      )}
+
+      {/* PAN Input */}
       <div style={{ background: "#fff", borderRadius: 12, padding: 16, border: "1px solid #DEE1D9", marginBottom: 12 }}>
         <label style={{ fontSize: 12, fontWeight: 700, color: "#5A6B63", textTransform: "uppercase", letterSpacing: 0.5 }}>PAN</label>
         {cards.length > 0 ? (
@@ -118,11 +175,13 @@ export default function AllotmentPage() {
         )}
       </div>
 
+      {/* Check Button */}
       <button onClick={doCheck} disabled={!canCheck}
         style={{ width: "100%", padding: 12, fontSize: 15, fontWeight: 700, border: "none", borderRadius: 8, background: canCheck ? "#237355" : "#DEE1D9", color: canCheck ? "#fff" : "#8A968F", cursor: canCheck ? "pointer" : "default" }}>
-        {checking ? "Checking..." : "Check Allotment"}
+        {checking ? "Checking..." : isCaptchaBound ? "Open Registrar Portal" : "Check Allotment"}
       </button>
 
+      {/* Results */}
       {results.length > 0 && (
         <div style={{ marginTop: 16 }}>
           {results.map(({ pan, result }) => {
@@ -142,7 +201,19 @@ export default function AllotmentPage() {
         </div>
       )}
 
-      {cards.length === 0 && <div style={{ marginTop: 20, padding: 12, background: "#F1F2EC", borderRadius: 8 }}><p style={{ fontSize: 13, color: "#5A6B63", margin: 0 }}>Save PAN at <a href="/pan-cards" style={{ color: "#237355", fontWeight: 600 }}>PAN Cards</a> — no typing every time.</p></div>}
+      {/* Supported Registrars */}
+      <div style={{ marginTop: 24, padding: 12, background: "#F1F2EC", borderRadius: 8 }}>
+        <p style={{ fontSize: 12, fontWeight: 700, color: "#5A6B63", margin: "0 0 8px" }}>Supported Registrars</p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+          {Object.entries(REGISTRAR_NAMES).map(([key, name]) => (
+            <span key={key} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: PORTAL_URLS[key] ? "#F6EBE3" : "#E8F2ED", color: PORTAL_URLS[key] ? "#9A4E22" : "#237355" }}>
+              {name} {PORTAL_URLS[key] ? "🔐" : "✅"}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {cards.length === 0 && <div style={{ marginTop: 16, padding: 12, background: "#F1F2EC", borderRadius: 8 }}><p style={{ fontSize: 13, color: "#5A6B63", margin: 0 }}>Save PAN at <a href="/pan-cards" style={{ color: "#237355", fontWeight: 600 }}>PAN Cards</a> — no typing every time.</p></div>}
     </main>
   );
 }
