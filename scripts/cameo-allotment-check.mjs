@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
- * Cameo Corporate Services — Automated Allotment Check
+ * Cameo Corporate Services — Automated Allotment Check with CAPTCHA solving
  *
  * Usage:
  *   node scripts/cameo-allotment-check.mjs --pan ABCDE1234F --company TNE
  *   node scripts/cameo-allotment-check.mjs --pan ABCDE1234F --company TNE --headful
  *
- * Requires: playwright (npm install playwright)
- * The script solves Cameo's image CAPTCHA using canvas pixel analysis.
+ * Requires: playwright, tesseract.js
  */
 
 import { chromium } from "playwright";
+import { createWorker } from "tesseract.js";
 
 const args = process.argv.slice(2);
 function getArg(name) {
@@ -24,121 +24,94 @@ const HEADFUL = args.includes("--headful");
 
 if (!PAN || !COMPANY) {
   console.error("Usage: node cameo-allotment-check.mjs --pan <PAN> --company <CODE>");
-  console.error("Example: node cameo-allotment-check.mjs --pan ABCDE1234F --company TNE");
   process.exit(1);
 }
 
-async function solveCameoCaptcha(page) {
-  // Wait for CAPTCHA image to load
-  const captchaImg = page.locator("img[src*='Captcha'], img[src*='captcha'], img[src*='GenerateCaptcha']");
-  await captchaImg.first().waitFor({ timeout: 10000 });
+async function solveCaptcha(page) {
+  const worker = await createWorker("eng");
 
-  // Get the CAPTCHA image source (base64 or URL)
-  const captchaSrc = await captchaImg.first().getAttribute("src");
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    console.log(`  Attempt ${attempt}: Waiting for CAPTCHA...`);
 
-  // Take a screenshot of just the CAPTCHA element
-  const captchaElement = captchaImg.first();
-  const buffer = await captchaElement.screenshot();
+    const captchaImg = page.locator("img[src*='Captcha'], img[src*='captcha'], img[src*='GenerateCaptcha']");
+    await captchaImg.first().waitFor({ timeout: 10000 }).catch(() => null);
 
-  // Simple OCR approach: extract text from the CAPTCHA image
-  // Cameo uses simple text CAPTCHAs (4-5 characters, distorted text)
-  // We'll use a canvas-based approach to read the image
+    // Screenshot the CAPTCHA
+    const captchaElement = captchaImg.first();
+    const buffer = await captchaElement.screenshot();
 
-  // Get the image dimensions and try to read via page evaluation
-  const captchaText = await page.evaluate(async (imgSrc) => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0);
+    // OCR with Tesseract
+    const { data: { text } } = await worker.recognize(buffer);
+    const captchaText = text.replace(/[^a-zA-Z0-9]/g, "").trim();
 
-        // For simple text CAPTCHAs, we can try to read pixel patterns
-        // This is a simplified approach - for production, use Tesseract.js
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    console.log(`  OCR result: "${captchaText}"`);
 
-        // Convert to grayscale and threshold
-        const gray = [];
-        for (let i = 0; i < imageData.data.length; i += 4) {
-          const avg = (imageData.data[i] + imageData.data[i + 1] + imageData.data[i + 2]) / 3;
-          gray.push(avg < 128 ? 1 : 0); // Black = 1, White = 0
-        }
+    if (captchaText.length >= 3 && captchaText.length <= 6) {
+      // Fill CAPTCHA
+      const captchaInput = page.locator("input[name*='captcha'], input[id*='captcha'], input[id*='txtcaptcha']");
+      if (await captchaInput.count() > 0) {
+        await captchaInput.first().fill(captchaText);
+      }
 
-        resolve({ width: canvas.width, height: canvas.height, pixels: gray });
-      };
-      img.onerror = () => resolve(null);
-      img.src = imgSrc;
-    });
-  }, captchaSrc);
+      // Submit
+      await page.click("#btngenerate");
+      await page.waitForTimeout(3000);
 
-  return captchaText;
+      // Check if CAPTCHA was wrong
+      const bodyText = await page.locator("body").innerText();
+      if (!bodyText.toLowerCase().includes("invalid captcha") && !bodyText.toLowerCase().includes("wrong captcha")) {
+        await worker.terminate();
+        return bodyText;
+      }
+
+      console.log(`  CAPTCHA wrong, retrying...`);
+      // Refresh CAPTCHA
+      const refreshBtn = page.locator("a[href*='captcha'], img[src*='refresh'], a[onclick*='captcha']");
+      if (await refreshBtn.count() > 0) {
+        await refreshBtn.first().click();
+        await page.waitForTimeout(1000);
+      }
+    }
+  }
+
+  await worker.terminate();
+  return null;
 }
 
 async function main() {
   console.log(`🔍 Cameo Allotment Check: PAN=${PAN}, Company=${COMPANY}`);
 
-  const browser = await chromium.launch({
-    headless: !HEADFUL,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
-
+  const browser = await chromium.launch({ headless: !HEADFUL, args: ["--no-sandbox"] });
   try {
     const context = await browser.newContext({
-      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
     });
     const page = await context.newPage();
 
-    console.log("📄 Navigating to Cameo IPO Status...");
     await page.goto("https://ipostatus1.cameoindia.com/", { waitUntil: "networkidle" });
-
-    // Select company from dropdown
-    console.log(`📋 Selecting company: ${COMPANY}`);
     await page.selectOption("#drpCompany", COMPANY);
-
-    // Select PAN as user type
-    console.log("📋 Selecting PAN NO as lookup type...");
-    await page.selectOption("#ddlUserTypes", { label: "PAN NO" }).catch(() => {
-      // Try value-based selection
-      return page.selectOption("#ddlUserTypes", "PAN NO");
-    });
-
-    // Enter PAN
-    console.log(`⌨️  Entering PAN: ${PAN}`);
+    await page.selectOption("#ddlUserTypes", { label: "PAN NO" }).catch(() => page.selectOption("#ddlUserTypes", "PAN NO"));
     await page.fill("#txtfolio", PAN);
 
-    // Solve CAPTCHA
-    console.log("🔐 Solving CAPTCHA...");
-    const captchaData = await solveCameoCaptcha(page);
+    console.log("🔐 Solving CAPTCHA with Tesseract.js...");
+    const resultText = await solveCaptcha(page);
 
-    if (captchaData) {
-      console.log(`   CAPTCHA dimensions: ${captchaData.width}x${captchaData.height}`);
-
-      // For now, we'll try submitting with an empty CAPTCHA to see the error
-      // In production, integrate Tesseract.js or a CAPTCHA solving service
-      console.log("⚠️  CAPTCHA solving requires Tesseract.js or manual input");
-      console.log("   Attempting submission without CAPTCHA...");
-
-      // Try submitting
-      await page.click("#btngenerate");
-
-      // Wait for response
-      await page.waitForTimeout(3000);
-
-      // Get the result
-      const resultText = await page.locator("body").innerText();
-      console.log("\n📋 Page Response:");
+    if (resultText) {
+      console.log("\n📋 Result:");
       console.log(resultText.substring(0, 2000));
+
+      // Output JSON for API consumption
+      const result = { ok: true, registrar: "cameo", pan: PAN, raw: resultText.substring(0, 5000) };
+      console.log("\n__JSON__" + JSON.stringify(result));
+    } else {
+      console.log("\n❌ Could not solve CAPTCHA after 5 attempts");
+      console.log("__JSON__" + JSON.stringify({ ok: false, error: "CAPTCHA solving failed" }));
     }
 
-    // Take a screenshot for debugging
     await page.screenshot({ path: "/tmp/cameo-result.png", fullPage: true });
-    console.log("\n📸 Screenshot saved: /tmp/cameo-result.png");
-
   } catch (error) {
     console.error("❌ Error:", error.message);
+    console.log("__JSON__" + JSON.stringify({ ok: false, error: error.message }));
   } finally {
     await browser.close();
   }

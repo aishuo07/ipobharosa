@@ -1,24 +1,17 @@
 #!/usr/bin/env node
 /**
- * IPOBharosa — Unified Allotment Checker
- *
- * Checks IPO allotment across all registrars for a given PAN.
+ * IPOBharosa — Unified Allotment Checker (Local)
  *
  * Usage:
  *   node scripts/check-allotment.mjs --pan ABCDE1234F
- *   node scripts/check-allotment.mjs --pan ABCDE1234F --company "Horizon Industrial Parks"
- *   node scripts/check-allotment.mjs --pan ABCDE1234F --registrar mas
+ *   node scripts/check-allotment.mjs --pan ABCDE1234F --ipo "Horizon Industrial Parks"
  *
- * Supported Registrars:
- *   - KFin (no CAPTCHA, API-based)
- *   - Bigshare (no CAPTCHA, form-based)
- *   - Maashitla (no CAPTCHA, API-based)
- *   - MUFG/Link Intime (no CAPTCHA, API-based)
- *   - MAS Services (no CAPTCHA, direct POST)
- *   - Purva Sharegistry (math CAPTCHA, solvable)
- *   - Cameo Corporate (image CAPTCHA, needs Playwright)
- *   - Skyline Financial (image CAPTCHA, needs Playwright)
+ * Checks allotment across all registrars for a given PAN.
+ * For CAPTCHA-bound registrars (Cameo/Skyline/Purva), uses Playwright + Tesseract.js.
  */
+
+import { chromium } from "playwright";
+import { createWorker } from "tesseract.js";
 
 const args = process.argv.slice(2);
 function getArg(name) {
@@ -27,98 +20,122 @@ function getArg(name) {
 }
 
 const PAN = getArg("pan")?.toUpperCase();
-const COMPANY = getArg("company");
-const REGISTRAR = getArg("registrar");
+const IPO_NAME = getArg("ipo");
 const BASE_URL = getArg("url") || "https://ipobharosa.vercel.app";
+const HEADFUL = args.includes("--headful");
 
 if (!PAN) {
-  console.error("Usage: node check-allotment.mjs --pan <PAN> [--company <NAME>] [--registrar <KEY>]");
-  console.error("");
-  console.error("Examples:");
-  console.error("  node check-allotment.mjs --pan ABCDE1234F");
-  console.error("  node check-allotment.mjs --pan ABCDE1234F --company 'Horizon Industrial Parks'");
-  console.error("  node check-allotment.mjs --pan ABCDE1234F --registrar mas");
+  console.error("Usage: node check-allotment.mjs --pan <PAN> [--ipo <NAME>]");
   process.exit(1);
 }
 
-const REGISTRARS = {
-  kfin: { name: "KFinTech", endpoint: "/api/registrar/kfin/search", needsCompanyId: true },
-  bigshare: { name: "Bigshare", endpoint: "/api/registrar/bigshare/search", needsCompanyId: true },
-  maashitla: { name: "Maashitla", endpoint: "/api/registrar/maashitla/search", needsCompanyId: true },
-  mufg: { name: "MUFG/Link Intime", endpoint: "/api/registrar/mufg/search", needsCompanyId: false },
-  mas: { name: "MAS Services", endpoint: "/api/registrar/mas/search", needsCompanyId: false },
-  purva: { name: "Purva Sharegistry", endpoint: "/api/registrar/purva/search", needsCompanyId: false },
-  cameo: { name: "Cameo Corporate", endpoint: "/api/registrar/cameo/search", needsCompanyId: true },
-  skyline: { name: "Skyline Financial", endpoint: "/api/registrar/skyline/search", needsCompanyId: true },
-};
+const AUTOMATABLE = ["kfin", "bigshare", "mufg", "mas", "maashitla"];
+const CAPTCHA_REGISTRARS = ["cameo", "skyline", "purva"];
 
-async function checkRegistrar(key, registrar, pan, companyId) {
-  const body = { PAN: pan };
-  if (companyId) body.company_code = companyId;
-
+async function checkAutomatable(registrar, pan, companyName) {
   try {
-    const res = await fetch(`${BASE_URL}${registrar.endpoint}`, {
+    const res = await fetch(`${BASE_URL}/api/registrar/${registrar}/search`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ PAN: pan, company_name: companyName }),
       signal: AbortSignal.timeout(15000),
     });
-
     const data = await res.json();
-    return { key, name: registrar.name, ok: data.ok ?? false, data };
+    return { registrar, ...data };
   } catch (e) {
-    return { key, name: registrar.name, ok: false, error: e.message };
+    return { registrar, ok: false, error: e.message };
+  }
+}
+
+async function checkCaptchaRegistrar(registrar, pan, companyName) {
+  const browser = await chromium.launch({ headless: !HEADFUL, args: ["--no-sandbox"] });
+  try {
+    const context = await browser.newContext({
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+    });
+    const page = await context.newPage();
+
+    if (registrar === "cameo") {
+      await page.goto("https://ipostatus1.cameoindia.com/", { waitUntil: "networkidle" });
+      await page.selectOption("#drpCompany", companyName);
+      await page.selectOption("#ddlUserTypes", { label: "PAN NO" }).catch(() => {});
+      await page.fill("#txtfolio", pan);
+
+      // Solve CAPTCHA with Tesseract
+      const worker = await createWorker("eng");
+      for (let i = 0; i < 5; i++) {
+        const captchaImg = page.locator("img[src*='Captcha'], img[src*='captcha']");
+        await captchaImg.first().waitFor({ timeout: 5000 }).catch(() => null);
+        const buffer = await captchaImg.first().screenshot();
+        const { data: { text } } = await worker.recognize(buffer);
+        const captcha = text.replace(/[^a-zA-Z0-9]/g, "").trim();
+        if (captcha.length >= 3 && captcha.length <= 6) {
+          const captchaInput = page.locator("input[id*='captcha']");
+          if (await captchaInput.count() > 0) await captchaInput.first().fill(captcha);
+          await page.click("#btngenerate");
+          await page.waitForTimeout(3000);
+          const body = await page.locator("body").innerText();
+          if (!body.toLowerCase().includes("invalid captcha")) {
+            await worker.terminate();
+            return { registrar, ok: true, raw: body.substring(0, 3000) };
+          }
+        }
+      }
+      await worker.terminate();
+      return { registrar, ok: false, error: "CAPTCHA solving failed" };
+    }
+
+    return { registrar, ok: false, error: "CAPTCHA solver not implemented for this registrar" };
+  } catch (e) {
+    return { registrar, ok: false, error: e.message };
+  } finally {
+    await browser.close();
   }
 }
 
 async function main() {
-  console.log(`\n🔍 IPOBharosa Allotment Checker`);
+  console.log(`\n🔍 IPOBharosa Allotment Check`);
   console.log(`   PAN: ${PAN}`);
-  if (COMPANY) console.log(`   Company: ${COMPANY}`);
-  console.log(`   Base URL: ${BASE_URL}\n`);
-
-  const toCheck = REGISTRAR
-    ? { [REGISTRAR]: REGISTRARS[REGISTRAR] }
-    : REGISTRARS;
+  if (IPO_NAME) console.log(`   IPO: ${IPO_NAME}`);
+  console.log(`\n   Checking automatable registrars...`);
 
   const results = [];
 
-  for (const [key, registrar] of Object.entries(toCheck)) {
-    process.stdout.write(`   ${registrar.name}... `);
-    const result = await checkRegistrar(key, registrar, PAN, COMPANY);
+  // Check automatable registrars via API
+  for (const reg of AUTOMATABLE) {
+    process.stdout.write(`   ${reg}... `);
+    const result = await checkAutomatable(reg, PAN, IPO_NAME || "");
     results.push(result);
-
-    if (result.error) {
-      console.log(`❌ ${result.error}`);
-    } else if (result.data.requires_captcha) {
-      console.log(`🔐 CAPTCHA required`);
-    } else if (result.data.results?.length > 0) {
-      console.log(`✅ ${result.data.results.length} result(s)`);
-      for (const r of result.data.results) {
-        console.log(`      ${r.company}: ${r.status} (${r.shares} shares, ₹${r.amount})`);
-      }
-    } else if (result.data.ok) {
-      console.log(`✅ No allotment found`);
+    if (result.ok) {
+      console.log(`✅ ${result.results?.length || 0} results`);
     } else {
-      console.log(`⚠️  ${result.data.error || "Unknown response"}`);
+      console.log(`❌ ${result.error}`);
     }
   }
 
-  // Summary
-  const successful = results.filter((r) => r.ok && !r.data?.requires_captcha);
-  const captchaRequired = results.filter((r) => r.data?.requires_captcha);
-  const failed = results.filter((r) => !r.ok && !r.data?.requires_captcha);
-
-  console.log(`\n📊 Summary:`);
-  console.log(`   ✅ Successful: ${successful.length}/${results.length}`);
-  console.log(`   🔐 CAPTCHA required: ${captchaRequired.length}`);
-  console.log(`   ❌ Failed: ${failed.length}`);
-
-  if (captchaRequired.length > 0) {
-    console.log(`\n   CAPTCHA-bound registrars need Playwright scripts:`);
-    for (const r of captchaRequired) {
-      console.log(`   - ${r.name}: node scripts/${r.key}-allotment-check.mjs --pan ${PAN} --company <CODE>`);
+  // For CAPTCHA registrars, try local Playwright
+  const doCaptcha = args.includes("--captcha");
+  if (doCaptcha) {
+    console.log(`\n   Checking CAPTCHA registrars (local Playwright)...`);
+    for (const reg of CAPTCHA_REGISTRARS) {
+      process.stdout.write(`   ${reg}... `);
+      const result = await checkCaptchaRegistrar(reg, PAN, IPO_NAME || "");
+      results.push(result);
+      if (result.ok) {
+        console.log(`✅`);
+      } else {
+        console.log(`❌ ${result.error}`);
+      }
     }
+  } else {
+    console.log(`\n   CAPTCHA registrars skipped (use --captcha to enable)`);
+  }
+
+  // Summary
+  console.log(`\n📊 Summary:`);
+  for (const r of results) {
+    const status = r.ok ? (r.results?.length > 0 ? "FOUND" : "NOT_FOUND") : "ERROR";
+    console.log(`   ${r.registrar}: ${status} ${r.error ? `(${r.error})` : ""}`);
   }
 }
 
