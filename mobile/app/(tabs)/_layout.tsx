@@ -3,17 +3,18 @@ import { Tabs, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import { usePostHog } from "posthog-react-native";
-import { colors, spacing } from "@/src/lib/theme";
+import { useThemeColors, spacing } from "@/src/lib/theme";
 
 function BrandHeader() {
+  const colors = useThemeColors();
   return (
-    <View style={styles.brandRow}>
-      <View style={styles.brandMark}>
+    <View style={[styles.brandRow]}>
+      <View style={[styles.brandMark]}>
         <Ionicons name="trending-up" size={18} color={colors.white} />
       </View>
       <View>
-        <Text style={styles.brandWordmark}>IPOBharosa</Text>
-        <Text style={styles.brandEyebrow}>LOT SIZE · GMP · DATES · ALLOTMENT</Text>
+        <Text style={[styles.brandWordmark, { color: colors.ink }]}>IPOBharosa</Text>
+        <Text style={[styles.brandEyebrow, { color: colors.inkFaint }]}>LOT SIZE · GMP · DATES · ALLOTMENT</Text>
       </View>
     </View>
   );
@@ -22,6 +23,7 @@ function BrandHeader() {
 export default function TabsLayout() {
   const pathname = usePathname();
   const posthog = usePostHog();
+  const colors = useThemeColors();
   useEffect(() => {
     posthog?.capture("screen_view", { screen: pathname });
   }, [pathname, posthog]);
@@ -90,18 +92,16 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.green,
+    backgroundColor: "#237355",
   },
   brandWordmark: {
     fontSize: 20,
     fontWeight: "800",
-    color: colors.ink,
     letterSpacing: -0.3,
   },
   brandEyebrow: {
     fontSize: 8,
     fontWeight: "700",
     letterSpacing: 1,
-    color: colors.inkFaint,
   },
 });

@@ -8,6 +8,7 @@ import { registrarCheck } from "@/src/lib/allotment";
 import { effectiveStatus, STATUS_LABELS, type EffectiveStatus } from "@/src/lib/status";
 import { formatDecimal, formatMoney, formatPercent } from "@/src/lib/format";
 import { colors, radius, spacing, typography, statusColor, statusSoftColor } from "@/src/lib/theme";
+import { GmpChart, SubscriptionBar } from "@/src/components/Charts";
 import {
   applicationAmount,
   loadInvestorProfiles,
@@ -255,11 +256,19 @@ export default function IpoDetailScreen() {
           )}
         </View>
 
+        {ipo.gmpHistory && ipo.gmpHistory.length > 1 && (
+          <GmpChart ipo={ipo} />
+        )}
+
         {ipo.subscription && ipo.subscription.retailX !== null && (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Subscription</Text>
             <SubscriptionBars ipo={ipo} />
           </View>
+        )}
+
+        {ipo.subscription && ipo.subscription.retailX !== null && (
+          <SubscriptionBar ipo={ipo} />
         )}
 
         {check.portalUrl && (
