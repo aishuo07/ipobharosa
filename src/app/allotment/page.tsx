@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 type PanCard = { id: string; pan: string };
-type Ipo = { id: string; companyName: string; slug: string; registrar: string | null; status: string };
+type Ipo = { id: string; companyName: string; slug: string; registrar: string | null; status: string; closeDate: string };
 type Result = { pan: string; status: string; company?: string; shares?: string; amount?: string; error?: string };
 
 const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
