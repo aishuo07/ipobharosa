@@ -1,136 +1,80 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { DataBackup } from "@/components/DataBackup";
+import { useCallback, useEffect, useState } from "react";
 
-type InvestorProfile = {
-  id: string;
-  pan: string;
-  holderName: string;
-  upiId: string;
-  dematProvider: "CDSL" | "NSDL" | null;
-  dematClientId: string;
-  createdAt: string;
-};
+type Profile = { id: string; pan: string; name: string; upi: string; demat: string };
 
-const PAN_PATTERN = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
-const UPI_PATTERN = /^[\w.\-]{2,}@[a-zA-Z]{2,}$/;
-const DEMAT_PATTERNS = { CDSL: /^[0-9]{16}$/, NSDL: /^[0-9]{14}$/ };
+const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+const UPI_RE = /^[\w.\-]{2,}@[a-zA-Z]{2,}$/;
+const STORAGE_KEY = "ipobharosa.investors.v1";
 
-function loadProfiles(): InvestorProfile[] {
-  try {
-    return JSON.parse(localStorage.getItem("ipobharosa.investor-profiles.v1") || "[]");
-  } catch {
-    return [];
-  }
+function load(): Profile[] {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); } catch { return []; }
 }
-
-function saveProfiles(p: InvestorProfile[]) {
-  localStorage.setItem("ipobharosa.investor-profiles.v1", JSON.stringify(p));
-}
+function save(p: Profile[]) { localStorage.setItem(STORAGE_KEY, JSON.stringify(p)); }
 
 export default function InvestorsPage() {
-  const [profiles, setProfiles] = useState<InvestorProfile[]>([]);
-  const [holderName, setHolderName] = useState("");
+  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [pan, setPan] = useState("");
-  const [upiId, setUpiId] = useState("");
-  const [dematProvider, setDematProvider] = useState<"CDSL" | "NSDL">("CDSL");
-  const [dematClientId, setDematClientId] = useState("");
-  const [error, setError] = useState("");
-  const [mounted, setMounted] = useState(false);
+  const [name, setName] = useState("");
+  const [upi, setUpi] = useState("");
+  const [demat, setDemat] = useState("");
+  const [err, setErr] = useState("");
 
-  useEffect(() => {
-    setProfiles(loadProfiles());
-    setMounted(true);
-  }, []);
+  useEffect(() => { setProfiles(load()); }, []);
 
-  function handleAdd() {
-    if (!PAN_PATTERN.test(pan.trim().toUpperCase())) { setError("PAN: ABCDE1234F"); return; }
-    if (!holderName.trim()) { setError("Enter holder name"); return; }
-    if (!UPI_PATTERN.test(upiId.trim().toLowerCase())) { setError("UPI: 9876543210@ybl"); return; }
-    if (!DEMAT_PATTERNS[dematProvider].test(dematClientId.trim())) {
-      setError(`${dematProvider} client ID: ${dematProvider === "CDSL" ? "16" : "14"} digits`);
-      return;
-    }
-    const profile: InvestorProfile = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      pan: pan.trim().toUpperCase(),
-      holderName: holderName.trim(),
-      upiId: upiId.trim().toLowerCase(),
-      dematProvider,
-      dematClientId: dematClientId.trim(),
-      createdAt: new Date().toISOString(),
-    };
-    const next = [...profiles, profile];
-    setProfiles(next);
-    saveProfiles(next);
-    setHolderName(""); setPan(""); setUpiId(""); setDematClientId("");
-    setError("");
-  }
+  const add = useCallback(() => {
+    const p = pan.trim().toUpperCase();
+    if (!PAN_RE.test(p)) { setErr("PAN: ABCDE1234F"); return; }
+    if (!name.trim()) { setErr("Name required"); return; }
+    if (!UPI_RE.test(upi.trim())) { setErr("UPI: 9876543210@ybl"); return; }
+    if (!/^\d{14,16}$/.test(demat.trim())) { setErr("Demat: 14-16 digits"); return; }
+    const next = [...profiles, { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), pan: p, name: name.trim(), upi: upi.trim().toLowerCase(), demat: demat.trim() }];
+    setProfiles(next); save(next); setPan(""); setName(""); setUpi(""); setDemat(""); setErr("");
+  }, [pan, name, upi, demat, profiles]);
 
-  function handleRemove(id: string) {
+  const remove = useCallback((id: string) => {
     const next = profiles.filter((p) => p.id !== id);
-    setProfiles(next);
-    saveProfiles(next);
-  }
-
-  if (!mounted) return null;
+    setProfiles(next); save(next);
+  }, [profiles]);
 
   return (
-    <main className="page-content">
-      <div className="page-header">
-        <h1>Investor Profiles</h1>
-        <p className="board-kicker">Pre-fill IPO applications</p>
-      </div>
+    <main style={{ maxWidth: 480, margin: "0 auto", padding: "24px 16px", fontFamily: "system-ui, sans-serif" }}>
+      <h1 style={{ fontSize: 22, fontWeight: 800, margin: "0 0 4px" }}>Investor Profiles</h1>
+      <p style={{ fontSize: 13, color: "#5A6B63", margin: "0 0 20px" }}>Pre-fill IPO applications. Stored on-device only.</p>
 
-      <div className="card" style={{ marginBottom: 24 }}>
-        <p style={{ fontSize: 14, color: "var(--ink-muted)", marginBottom: 16 }}>
-          Profiles are stored in your browser only. Used to pre-fill IPO applications when in-app apply goes live.
-        </p>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-          <input className="input" placeholder="PAN (ABCDE1234F)" value={pan}
-            onChange={(e) => { setPan(e.target.value); setError(""); }} maxLength={10} />
-          <input className="input" placeholder="Holder name" value={holderName}
-            onChange={(e) => { setHolderName(e.target.value); setError(""); }} />
-          <input className="input" placeholder="UPI ID (9876543210@ybl)" value={upiId}
-            onChange={(e) => { setUpiId(e.target.value); setError(""); }} />
-          <div style={{ display: "flex", gap: 4 }}>
-            <select className="input" value={dematProvider}
-              onChange={(e) => setDematProvider(e.target.value as "CDSL" | "NSDL")}
-              style={{ width: 100 }}>
-              <option value="CDSL">CDSL</option>
-              <option value="NSDL">NSDL</option>
-            </select>
-            <input className="input" placeholder={`${dematProvider} Client ID`} value={dematClientId}
-              onChange={(e) => { setDematClientId(e.target.value); setError(""); }}
-              style={{ flex: 1 }} />
-          </div>
-        </div>
-        {error && <p style={{ color: "var(--red)", fontSize: 13, marginBottom: 8 }}>{error}</p>}
-        <button className="btn" onClick={handleAdd}>Add Profile</button>
+      <div style={{ background: "#fff", borderRadius: 12, padding: 16, border: "1px solid #DEE1D9", marginBottom: 16 }}>
+        <input value={pan} onChange={(e) => { setPan(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10)); setErr(""); }}
+          placeholder="PAN" autoCapitalize="characters" autoCorrect={false} spellCheck={false} maxLength={10}
+          style={{ width: "100%", padding: "10px 12px", fontSize: 16, fontWeight: 600, letterSpacing: 1.5, border: "1px solid #DEE1D9", borderRadius: 8, marginBottom: 8, boxSizing: "border-box", fontFamily: "monospace" }} />
+        <input value={name} onChange={(e) => { setName(e.target.value); setErr(""); }} placeholder="Holder name"
+          style={{ width: "100%", padding: "10px 12px", fontSize: 15, border: "1px solid #DEE1D9", borderRadius: 8, marginBottom: 8, boxSizing: "border-box" }} />
+        <input value={upi} onChange={(e) => { setUpi(e.target.value); setErr(""); }} placeholder="UPI ID (9876543210@ybl)" autoCapitalize="none"
+          style={{ width: "100%", padding: "10px 12px", fontSize: 15, border: "1px solid #DEE1D9", borderRadius: 8, marginBottom: 8, boxSizing: "border-box" }} />
+        <input value={demat} onChange={(e) => { setDemat(e.target.value.replace(/\D/g, "").slice(0, 16)); setErr(""); }} placeholder="Demat Client ID (14-16 digits)" maxLength={16}
+          style={{ width: "100%", padding: "10px 12px", fontSize: 15, border: "1px solid #DEE1D9", borderRadius: 8, marginBottom: 12, boxSizing: "border-box", fontFamily: "monospace" }} />
+        {err && <p style={{ color: "#A13F35", fontSize: 13, margin: "0 0 8px" }}>{err}</p>}
+        <button onClick={add} style={{ width: "100%", padding: 10, fontSize: 15, fontWeight: 700, background: "#237355", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
+          Add Profile
+        </button>
       </div>
 
       {profiles.length === 0 ? (
-        <p style={{ color: "var(--ink-muted)", textAlign: "center", marginTop: 40 }}>No profiles saved yet.</p>
+        <p style={{ color: "#8A968F", textAlign: "center", marginTop: 32 }}>No profiles yet</p>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {profiles.map((p) => (
-            <div key={p.id} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <p style={{ fontWeight: 700, fontSize: 15, margin: 0 }}>{p.holderName}</p>
-                <p style={{ color: "var(--ink-muted)", fontSize: 13, margin: "2px 0 0" }}>
-                  {p.pan} · {p.dematProvider} {p.dematClientId} · {p.upiId}
-                </p>
-              </div>
-              <button className="btn btn-ghost" style={{ color: "var(--red)", fontSize: 13 }}
-                onClick={() => handleRemove(p.id)}>Remove</button>
+        profiles.map((p) => (
+          <div key={p.id} style={{ background: "#fff", borderRadius: 12, padding: "12px 16px", border: "1px solid #DEE1D9", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <p style={{ margin: 0, fontWeight: 700, fontSize: 15, fontFamily: "monospace" }}>{p.pan}</p>
+              <p style={{ margin: "2px 0 0", fontSize: 13, color: "#5A6B63" }}>{p.name} · {p.upi}</p>
+              <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8A968F" }}>Demat: {p.demat}</p>
             </div>
-          ))}
-        </div>
+            <button onClick={() => remove(p.id)} style={{ background: "none", border: "none", color: "#A13F35", fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
+              Remove
+            </button>
+          </div>
+        ))
       )}
-
-      <DataBackup />
     </main>
   );
 }

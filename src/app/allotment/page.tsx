@@ -3,163 +3,126 @@
 import { useEffect, useState } from "react";
 
 type PanCard = { id: string; pan: string; holderName: string };
-type BoardIpo = {
-  id: string;
-  slug: string;
-  companyName: string;
-  registrar: string | null;
-  status: string;
-  closeDate: string;
-  listingDate: string;
-};
-type AllotmentResult = {
-  pan: string;
-  status: "ALLOTTED" | "NOT_ALLOTTED" | "NOT_APPLIED" | "ERROR";
-  allotted?: string;
-  amount?: string;
-  error?: string;
-};
+type Result = { pan: string; company: string; status: string; shares?: string; amount?: string };
 
-const STATUS_STYLES: Record<string, { bg: string; fg: string; label: string }> = {
-  ALLOTTED: { bg: "#E8F2ED", fg: "#237355", label: "Allotted" },
-  NOT_ALLOTTED: { bg: "#F6EAE8", fg: "#A13F35", label: "Not Allotted" },
-  NOT_APPLIED: { bg: "#F6EBE3", fg: "#9A4E22", label: "No Application" },
-  ERROR: { bg: "#F6EAE8", fg: "#A13F35", label: "Error" },
-};
+const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+const STORAGE_KEY = "ipobharosa.pan-cards.v1";
 
-function loadCards(): PanCard[] {
-  try {
-    return JSON.parse(localStorage.getItem("ipobharosa.pan-cards.v1") || "[]");
-  } catch {
-    return [];
-  }
+function loadPans(): PanCard[] {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); } catch { return []; }
 }
+
+const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
+  ALLOTTED: { bg: "#E8F2ED", fg: "#237355" },
+  NOT_ALLOTTED: { bg: "#F6EAE8", fg: "#A13F35" },
+  NOT_APPLIED: { bg: "#F6EBE3", fg: "#9A4E22" },
+};
 
 export default function AllotmentPage() {
   const [cards, setCards] = useState<PanCard[]>([]);
-  const [ipos, setIpos] = useState<BoardIpo[]>([]);
-  const [selectedIpo, setSelectedIpo] = useState<string>("");
-  const [results, setResults] = useState<AllotmentResult[]>([]);
-  const [checking, setChecking] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const [manualPan, setManualPan] = useState("");
+  const [company, setCompany] = useState("");
+  const [results, setResults] = useState<Result[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [registrar, setRegistrar] = useState("kfin");
 
-  useEffect(() => {
-    setCards(loadCards());
-    fetch("/api/public/board?board=ALL")
-      .then((r) => r.json())
-      .then((data: BoardIpo[]) => {
-        const eligible = data.filter((ipo) => ipo.status === "CLOSED" || ipo.status === "LISTED");
-        setIpos(eligible);
-        if (eligible[0]) setSelectedIpo(eligible[0].id);
-      })
-      .catch(() => {});
-    setMounted(true);
-  }, []);
+  useEffect(() => { setCards(loadPans()); }, []);
 
-  async function handleCheck() {
-    if (!selectedIpo || cards.length === 0 || checking) return;
-    setChecking(true);
-    setResults([]);
-    const ipo = ipos.find((i) => i.id === selectedIpo);
-    if (!ipo) { setChecking(false); return; }
-
-    const newResults: AllotmentResult[] = [];
-    for (const card of cards) {
-      try {
-        const res = await fetch("/api/allotment/check", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pan: card.pan, ipoId: ipo.id, slug: ipo.slug }),
-        });
-        const data = await res.json();
-        newResults.push({
-          pan: card.pan,
-          status: data.status || "ERROR",
-          allotted: data.allotted,
-          amount: data.amount,
-          error: data.error,
-        });
-      } catch {
-        newResults.push({ pan: card.pan, status: "ERROR", error: "Request failed" });
+  async function check(pan: string) {
+    if (!pan || !company) return null;
+    try {
+      const r = await fetch(`/api/registrar/${registrar}/search`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ PAN: pan, company_code: company }),
+      });
+      const d = await r.json();
+      if (d.results?.length > 0) {
+        return { pan, company, status: d.results[0].status || "UNKNOWN", shares: d.results[0].shares, amount: d.results[0].amount };
       }
+      return { pan, company, status: "NOT_APPLIED" };
+    } catch {
+      return { pan, company, status: "ERROR" };
     }
-    setResults(newResults);
-    setChecking(false);
   }
 
-  if (!mounted) return null;
+  async function handleCheck() {
+    setLoading(true); setResults([]);
+    const pans = cards.length > 0 ? cards.map((c) => c.pan) : [manualPan.trim().toUpperCase()];
+    const res = await Promise.all(pans.map(check));
+    setResults(res.filter(Boolean) as Result[]);
+    setLoading(false);
+  }
 
   return (
-    <main className="page-content">
-      <div className="page-header">
-        <h1>Check Allotment</h1>
-        <p className="board-kicker">Verify your IPO allotment status</p>
-      </div>
+    <main style={{ maxWidth: 480, margin: "0 auto", padding: "24px 16px", fontFamily: "system-ui, sans-serif" }}>
+      <h1 style={{ fontSize: 22, fontWeight: 800, margin: "0 0 4px" }}>Check Allotment</h1>
+      <p style={{ fontSize: 13, color: "#5A6B63", margin: "0 0 20px" }}>Check your IPO allotment status</p>
 
-      <div className="card" style={{ marginBottom: 24 }}>
-        {cards.length === 0 ? (
-          <p style={{ color: "var(--ink-muted)", fontSize: 14 }}>
-            No PAN cards saved.{" "}
-            <a href="/pan-cards" style={{ color: "var(--green)", fontWeight: 600 }}>Add PAN cards first</a>
-          </p>
-        ) : (
-          <>
-            <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "end" }}>
-              <div style={{ flex: 1, minWidth: 200 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "var(--ink-muted)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4, display: "block" }}>
-                  Select IPO
-                </label>
-                <select
-                  className="input"
-                  value={selectedIpo}
-                  onChange={(e) => setSelectedIpo(e.target.value)}
-                  style={{ width: "100%" }}
-                >
-                  {ipos.map((ipo) => (
-                    <option key={ipo.id} value={ipo.id}>
-                      {ipo.companyName} ({ipo.status})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <button className="btn" onClick={handleCheck} disabled={checking || !selectedIpo}>
-                {checking ? "Checking..." : "Check Allotment"}
-              </button>
-            </div>
-            <p style={{ fontSize: 13, color: "var(--ink-muted)" }}>
-              Checking for {cards.length} PAN card(s): {cards.map((c) => c.pan).join(", ")}
-            </p>
-          </>
+      <div style={{ background: "#fff", borderRadius: 12, padding: 16, border: "1px solid #DEE1D9", marginBottom: 16 }}>
+        {cards.length === 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <input
+              value={manualPan}
+              onChange={(e) => setManualPan(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10))}
+              placeholder="PAN NUMBER"
+              autoCapitalize="characters"
+              autoCorrect={false}
+              spellCheck={false}
+              maxLength={10}
+              style={{ width: "100%", padding: "10px 12px", fontSize: 16, fontWeight: 600, letterSpacing: 1.5, border: "1px solid #DEE1D9", borderRadius: 8, boxSizing: "border-box", fontFamily: "monospace" }}
+            />
+          </div>
         )}
+
+        <input
+          value={company}
+          onChange={(e) => setCompany(e.target.value)}
+          placeholder="Company code (e.g. TNE, ABC)"
+          style={{ width: "100%", padding: "10px 12px", fontSize: 15, border: "1px solid #DEE1D9", borderRadius: 8, marginBottom: 8, boxSizing: "border-box" }}
+        />
+
+        <select
+          value={registrar}
+          onChange={(e) => setRegistrar(e.target.value)}
+          style={{ width: "100%", padding: "10px 12px", fontSize: 15, border: "1px solid #DEE1D9", borderRadius: 8, marginBottom: 12, boxSizing: "border-box", background: "#fff" }}
+        >
+          <option value="kfin">KFin Technologies</option>
+          <option value="bigshare">Bigshare Services</option>
+          <option value="maashitla">Maashitla Securities</option>
+          <option value="mufg">MUFG / Link Intime</option>
+          <option value="mas">MAS Services</option>
+        </select>
+
+        {cards.length > 0 && (
+          <p style={{ fontSize: 13, color: "#5A6B63", margin: "0 0 8px" }}>
+            Checking: {cards.map((c) => c.pan).join(", ")}
+          </p>
+        )}
+
+        <button
+          onClick={handleCheck}
+          disabled={loading || (!manualPan && cards.length === 0) || !company}
+          style={{ width: "100%", padding: 10, fontSize: 15, fontWeight: 700, background: loading ? "#8A968F" : "#237355", color: "#fff", border: "none", borderRadius: 8, cursor: loading ? "default" : "pointer" }}
+        >
+          {loading ? "Checking..." : "Check Allotment"}
+        </button>
       </div>
 
-      {results.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {results.map((r) => {
-            const style = STATUS_STYLES[r.status] || STATUS_STYLES.ERROR;
-            return (
-              <div key={r.pan} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <p style={{ fontWeight: 700, fontSize: 15, margin: 0 }}>{r.pan}</p>
-                  {r.allotted && <p style={{ fontSize: 13, color: "var(--ink-muted)", margin: "2px 0 0" }}>Shares: {r.allotted}</p>}
-                  {r.amount && <p style={{ fontSize: 13, color: "var(--ink-muted)", margin: "2px 0 0" }}>Amount: ₹{r.amount}</p>}
-                  {r.error && <p style={{ fontSize: 13, color: "var(--red)", margin: "2px 0 0" }}>{r.error}</p>}
-                </div>
-                <span style={{
-                  padding: "4px 12px",
-                  borderRadius: 999,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  backgroundColor: style.bg,
-                  color: style.fg,
-                }}>
-                  {style.label}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {results.map((r) => {
+        const c = STATUS_COLORS[r.status] || STATUS_COLORS.NOT_APPLIED;
+        return (
+          <div key={r.pan + r.company} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fff", borderRadius: 12, padding: "12px 16px", border: "1px solid #DEE1D9", marginBottom: 8 }}>
+            <div>
+              <p style={{ margin: 0, fontWeight: 700, fontSize: 15, fontFamily: "monospace" }}>{r.pan}</p>
+              {r.shares && <p style={{ margin: "2px 0 0", fontSize: 13, color: "#5A6B63" }}>{r.shares} shares · ₹{r.amount}</p>}
+            </div>
+            <span style={{ padding: "4px 12px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: c.bg, color: c.fg }}>
+              {r.status}
+            </span>
+          </div>
+        );
+      })}
     </main>
   );
 }
