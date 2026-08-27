@@ -1,59 +1,59 @@
-import type { Metadata } from "next";
-import LegalPage from "@/components/LegalPage";
-
-export const metadata: Metadata = {
-  title: "Privacy — IPOBharosa",
-  description: "What IPOBharosa collects, why, and how to request access, correction, or deletion.",
-};
-
-export default function PrivacyPage() {
+export default function PrivacyPolicy() {
   return (
-    <LegalPage title="Privacy" updated="12 Aug 2026">
-      <p>
-        This page describes what personal data IPOBharosa collects when you create an account, and what we do
-        — and don&apos;t do — with it.
-      </p>
+    <main style={{ maxWidth: 680, margin: "0 auto", padding: "40px 20px 80px", fontFamily: "system-ui, -apple-system, sans-serif", color: "#1A2B25", lineHeight: 1.7 }}>
+      <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 8 }}>Privacy Policy</h1>
+      <p style={{ fontSize: 13, color: "#5A6B63", marginBottom: 32 }}>Effective: 25 August 2026</p>
 
-      <h2>What we collect</h2>
-      <ul>
-        <li>Your email address and name, from Google sign-in.</li>
-        <li>The IPOs you add to your watchlist.</li>
-        <li>A session token, so you stay signed in between visits.</li>
-      </ul>
-      <p>We don&apos;t collect PAN, bank, demat, or any other financial identifiers — the site doesn&apos;t need them and never asks for them.</p>
+      <section style={{ marginBottom: 28 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>1. What We Collect</h2>
+        <p style={{ fontSize: 15 }}>IPOBharosa collects <b>only</b> the following data:</p>
+        <ul style={{ fontSize: 15, paddingLeft: 20 }}>
+          <li><b>PAN numbers</b> — stored locally on your device only. Never sent to our servers.</li>
+          <li><b>Usage analytics</b> — anonymous page views, feature usage (via PostHog). No personal identification.</li>
+          <li><b>Error reports</b> — anonymous technical errors (via Sentry). No personal data included.</li>
+        </ul>
+      </section>
 
-      <h2>Why we collect it</h2>
-      <p>
-        Solely to sign you in and to save your watchlist. Email status-change reminders are planned but not
-        live yet — once they are, they&apos;ll only go to IPOs you&apos;ve explicitly watchlisted. We don&apos;t
-        use your data for anything beyond that.
-      </p>
+      <section style={{ marginBottom: 28 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>2. What We Don&apos;t Collect</h2>
+        <ul style={{ fontSize: 15, paddingLeft: 20 }}>
+          <li>We do <b>not</b> collect names, email addresses, phone numbers, or bank details.</li>
+          <li>We do <b>not</b> use cookies for tracking or advertising.</li>
+          <li>We do <b>not</b> sell or share any data with third parties.</li>
+          <li>We do <b>not</b> store PAN numbers on our servers. All PAN data stays on your device in localStorage.</li>
+        </ul>
+      </section>
 
-      <h2>What we don&apos;t do</h2>
-      <ul>
-        <li>We don&apos;t sell your data.</li>
-        <li>We don&apos;t use it for advertising or share it with advertisers.</li>
-        <li>We don&apos;t show your watchlist, email, or activity to other users.</li>
-        <li>We don&apos;t use tracking or analytics cookies — page views are counted in-memory (PostHog) without storing anything on your device, and errors are reported to Sentry without personal data.</li>
-      </ul>
+      <section style={{ marginBottom: 28 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>3. How We Use Data</h2>
+        <p style={{ fontSize: 15 }}>Anonymous analytics help us understand which features are used most and fix bugs. That&apos;s it.</p>
+      </section>
 
-      <h2>Third parties involved</h2>
-      <p>
-        Sign-in is handled by <strong>Google</strong> (OAuth). Once email reminders go live, we&apos;ll use{" "}
-        <strong>Resend</strong> to send them and update this page. Each processes only the minimum data
-        needed to perform that function — your email address, and for Google sign-in, your name and profile
-        email as shared by Google.
-      </p>
+      <section style={{ marginBottom: 28 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>4. Third-Party Services</h2>
+        <ul style={{ fontSize: 15, paddingLeft: 20 }}>
+          <li><b>Vercel</b> — hosting (no personal data beyond anonymous server logs)</li>
+          <li><b>CockroachDB</b> — stores IPO data and anonymous analytics (no personal data)</li>
+          <li><b>PostHog</b> — anonymous usage analytics</li>
+          <li><b>Sentry</b> — anonymous error tracking</li>
+          <li><b>Resend</b> — transactional emails (alerts only, no marketing)</li>
+        </ul>
+      </section>
 
-      <h2>How long we keep it</h2>
-      <p>Your account and watchlist data is kept for as long as your account exists.</p>
+      <section style={{ marginBottom: 28 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>5. Data Security</h2>
+        <p style={{ fontSize: 15 }}>All data is transmitted over HTTPS. PAN numbers never leave your device. We use industry-standard encryption for all connections.</p>
+      </section>
 
-      <h2>Your rights</h2>
-      <p>
-        You can ask us to show you what data we hold on your account, correct it, or delete your account and
-        all associated data entirely. Email{" "}
-        <a href="mailto:aish.iiitb@gmail.com">aish.iiitb@gmail.com</a> to make any of these requests.
-      </p>
-    </LegalPage>
+      <section style={{ marginBottom: 28 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>6. Changes</h2>
+        <p style={{ fontSize: 15 }}>We may update this policy. Changes will be posted on this page with a new effective date.</p>
+      </section>
+
+      <section style={{ marginBottom: 28 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>7. Contact</h2>
+        <p style={{ fontSize: 15 }}>Questions? Open an issue at <a href="https://github.com/aishuo07/ipobharosa/issues" style={{ color: "#237355" }}>github.com/aishuo07/ipobharosa</a></p>
+      </section>
+    </main>
   );
 }

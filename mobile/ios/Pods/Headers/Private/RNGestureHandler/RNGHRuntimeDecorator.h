@@ -1,0 +1,1 @@
+../../../../../node_modules/react-native-gesture-handler/shared/runtime/RNGHRuntimeDecorator.h

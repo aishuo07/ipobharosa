@@ -1,0 +1,1 @@
+../../../../../node_modules/expo-router/node_modules/@expo/ui/ios/ExpoUITouchHandlerHelper.h

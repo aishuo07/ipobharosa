@@ -1,0 +1,1 @@
+../../../../../node_modules/react-native-screens/ios/gamma/scroll-view-marker/RNSScrollViewMarkerComponentView.h

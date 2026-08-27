@@ -1,0 +1,1 @@
+../../../Target Support Files/ExpoModulesWorkletsAdapter/ExpoModulesWorkletsAdapter-umbrella.h

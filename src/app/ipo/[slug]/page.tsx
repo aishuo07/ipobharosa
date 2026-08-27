@@ -84,7 +84,7 @@ export default async function IpoDetailPage({
   return (
     <div className="wrap ipo-detail-page">
       <div className="legal-head ipo-detail-back">
-        <Link href="/" className="legal-back">
+        <Link href="/board" className="legal-back">
           ← Back to IPO board
         </Link>
       </div>

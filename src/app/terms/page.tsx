@@ -1,56 +1,38 @@
-import type { Metadata } from "next";
-import LegalPage from "@/components/LegalPage";
-
-export const metadata: Metadata = {
-  title: "Terms — IPOBharosa",
-  description: "Terms of use for IPOBharosa.",
-};
-
-export default function TermsPage() {
+export default function TermsOfService() {
   return (
-    <LegalPage title="Terms of use" updated="12 Aug 2026">
-      <p>By using IPOBharosa, you agree to these terms.</p>
+    <main style={{ maxWidth: 680, margin: "0 auto", padding: "40px 20px 80px", fontFamily: "system-ui, -apple-system, sans-serif", color: "#1A2B25", lineHeight: 1.7 }}>
+      <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 8 }}>Terms of Service</h1>
+      <p style={{ fontSize: 13, color: "#5A6B63", marginBottom: 32 }}>Effective: 25 August 2026</p>
 
-      <h2>What this service is</h2>
-      <p>
-        IPOBharosa aggregates publicly available information about Indian IPOs — grey market premium,
-        subscription figures, filing dates, and financials — from third-party sources, and lets signed-in
-        users maintain a watchlist. Email status-change reminders are planned but not live yet. See our{" "}
-        <a href="/methodology">Methodology</a> for exactly how that data is sourced, and our{" "}
-        <a href="/disclaimer">Disclaimer</a> for what it isn&apos;t.
-      </p>
+      <section style={{ marginBottom: 28 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>1. What We Offer</h2>
+        <p style={{ fontSize: 15 }}>IPOBharosa is a free, open-source tool that aggregates publicly available Indian IPO data from NSE, BSE, and registrar websites. We display dates, GMP, subscription status, and allotment information.</p>
+      </section>
 
-      <h2>Accounts</h2>
-      <p>
-        You need an account (currently via Google sign-in) to use the watchlist feature. You&apos;re
-        responsible for keeping your sign-in access secure. Don&apos;t use the service to scrape, automate
-        against, or place unreasonable load on our systems.
-      </p>
+      <section style={{ marginBottom: 28 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>2. Not Financial Advice</h2>
+        <p style={{ fontSize: 15 }}><b>IPOBharosa does not provide financial advice.</b> All data shown is from public sources. We do not recommend buying, selling, or applying for any IPO. Always do your own research and consult a SEBI-registered financial advisor.</p>
+      </section>
 
-      <h2>No warranty</h2>
-      <p>
-        The service is provided &quot;as is,&quot; without warranty of any kind, express or implied, including
-        accuracy, completeness, or uninterrupted availability. We rely on third-party sources and automated
-        data collection, which can and occasionally will produce errors or gaps.
-      </p>
+      <section style={{ marginBottom: 28 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>3. Data Accuracy</h2>
+        <p style={{ fontSize: 15 }}>We strive for accuracy but cannot guarantee it. IPO data comes from NSE, BSE, and registrar APIs. Delays, errors, or omissions may occur. Always verify critical information (allotment status, subscription numbers) directly with the registrar or exchange.</p>
+      </section>
 
-      <h2>Limitation of liability</h2>
-      <p>
-        To the maximum extent permitted by law, IPOBharosa and its operator are not liable for any loss or
-        damage — financial or otherwise — arising from your use of, or reliance on, information provided
-        through this service.
-      </p>
+      <section style={{ marginBottom: 28 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>4. Limitation of Liability</h2>
+        <p style={{ fontSize: 15 }}>IPOBharosa is provided &quot;as is&quot; without warranties. We are not liable for any losses, damages, or decisions made based on the information displayed on this platform.</p>
+      </section>
 
-      <h2>Changes</h2>
-      <p>
-        We may update these terms from time to time. The version at this URL is always the current one. If
-        you keep using the service after a change, that means you accept the update.
-      </p>
+      <section style={{ marginBottom: 28 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>5. Open Source</h2>
+        <p style={{ fontSize: 15 }}>IPOBharosa is open-source software. You can view, audit, and contribute to the code at <a href="https://github.com/aishuo07/ipobharosa" style={{ color: "#237355" }}>github.com/aishuo07/ipobharosa</a></p>
+      </section>
 
-      <h2>Contact</h2>
-      <p>
-        Questions about these terms? Email <a href="mailto:aish.iiitb@gmail.com">aish.iiitb@gmail.com</a>.
-      </p>
-    </LegalPage>
+      <section style={{ marginBottom: 28 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>6. Changes</h2>
+        <p style={{ fontSize: 15 }}>We may update these terms. Continued use of IPOBharosa constitutes acceptance of the updated terms.</p>
+      </section>
+    </main>
   );
 }

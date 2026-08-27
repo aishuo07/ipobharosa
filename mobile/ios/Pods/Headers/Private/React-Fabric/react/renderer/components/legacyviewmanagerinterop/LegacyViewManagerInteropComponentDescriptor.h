@@ -1,0 +1,1 @@
+../../../../../../../../../node_modules/react-native/ReactCommon/react/renderer/components/legacyviewmanagerinterop/platform/ios/react/renderer/components/legacyviewmanagerinterop/LegacyViewManagerInteropComponentDescriptor.h
