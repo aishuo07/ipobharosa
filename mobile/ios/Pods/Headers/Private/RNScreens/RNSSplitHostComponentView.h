@@ -1,1 +1,0 @@
-../../../../../node_modules/react-native-screens/ios/gamma/split/RNSSplitHostComponentView.h

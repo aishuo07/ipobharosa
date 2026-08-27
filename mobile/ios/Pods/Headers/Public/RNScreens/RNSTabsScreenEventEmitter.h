@@ -1,1 +1,0 @@
-../../../../../node_modules/react-native-screens/ios/tabs/screen/RNSTabsScreenEventEmitter.h

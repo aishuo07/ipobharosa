@@ -229,7 +229,7 @@ export default function IpoBoard({
                 <path d="M21 20V8" />
               </svg>
             </span>
-            <a href="/" className="wordmark" style={{ textDecoration: "none", color: "inherit" }}>IPOBharosa</a>
+            <span className="wordmark">IPOBharosa</span>
             <span className="eyebrow">Lot Size · GMP · Dates · Allotment</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 13 }}>

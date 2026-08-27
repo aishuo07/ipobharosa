@@ -1,0 +1,31 @@
+import { NextResponse } from "next/server";
+import { runIngestionStep } from "@/lib/ingestion/run-cycle";
+import { monitorPipeline } from "@/lib/monitor";
+import { pipelineLog } from "@/lib/ingestion/logger";
+
+export const maxDuration = 120;
+
+export async function GET(request: Request) {
+  const authHeader = request.headers.get("authorization");
+  if (!process.env.CRON_SECRET) {
+    return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
+  }
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const start = Date.now();
+  pipelineLog.info("Cron ingest triggered", { triggeredBy: "vercel-cron" });
+
+  try {
+    const result = await monitorPipeline("ingestion", async () => {
+      const outcome = await runIngestionStep();
+      return outcome;
+    });
+    pipelineLog.info("Cron ingest complete", { durationMs: Date.now() - start, complete: result?.complete });
+    return NextResponse.json({ ok: true, ...result });
+  } catch (e) {
+    pipelineLog.error("Cron ingest failed", { durationMs: Date.now() - start, error: (e as Error).message });
+    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
+  }
+}

@@ -19,7 +19,7 @@ export default function LegalPage({
   return (
     <>
       <div className="legal-head">
-        <Link href="/board" className="legal-back">
+        <Link href="/" className="legal-back">
           ← IPOBharosa
         </Link>
       </div>

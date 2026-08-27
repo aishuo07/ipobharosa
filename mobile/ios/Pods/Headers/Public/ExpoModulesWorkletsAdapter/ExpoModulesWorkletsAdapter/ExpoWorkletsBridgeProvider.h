@@ -1,1 +1,0 @@
-../../../../../../node_modules/expo-modules-core/ios/WorkletsAdapter/ExpoWorkletsBridgeProvider.h

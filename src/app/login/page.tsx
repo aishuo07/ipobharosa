@@ -91,7 +91,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           ? "Watchlist reminders are available for saved IPOs."
           : "Email sign-in and reminders will appear after the sender domain is fully verified."}
       </p>
-      <Link href="/board" className="legal-back" style={{ display: "inline-block", marginTop: 16 }}>← Back to IPO board</Link>
+      <Link href="/" className="legal-back" style={{ display: "inline-block", marginTop: 16 }}>← Back to IPO board</Link>
     </div>
   );
 }
