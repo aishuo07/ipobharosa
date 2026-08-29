@@ -36,14 +36,8 @@ const REGISTRAR_NAMES: Record<string, string> = {
   skyline: "Skyline Financial",
 };
 
-// Registrars with broken APIs — show portal link as fallback
-const PORTAL_URLS: Record<string, string> = {
-  kfin: "https://ipostatus.kfintech.com/",
-  bigshare: "https://ipo.bigshareonline.com/ipo_status.html",
-  cameo: "https://ipostatus.cameoindia.com",
-  skyline: "https://www.skylinerta.com/ipo.php",
-  purva: "https://www.purvashare.com/investor-service/ipo-query",
-};
+// All registrars are now automated — no portal links needed
+const PORTAL_URLS: Record<string, string> = {};
 
 const STATUS_STYLE: Record<string, { bg: string; fg: string; label: string }> = {
   ALLOTTED: { bg: "#E8F2ED", fg: "#237355", label: "Allotted" },

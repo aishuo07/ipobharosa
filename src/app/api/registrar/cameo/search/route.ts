@@ -5,10 +5,24 @@ import { ocrCaptchaImage } from "@/lib/captcha-solver";
 
 const OPERATION_KEY = "registrar:cameo:search";
 
-/**
- * Cameo Corporate Services allotment search.
- * Auto-solves image CAPTCHA using Tesseract.js OCR (free, no API key).
- */
+async function fetchCameoPage() {
+  const res = await fetch("https://ipostatus1.cameoindia.com/", {
+    headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" },
+  });
+  return res.text();
+}
+
+async function fetchCaptchaImage(): Promise<Buffer | null> {
+  const res = await fetch(`https://ipostatus1.cameoindia.com/GenerateCaptcha.aspx?${Date.now()}`, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      Referer: "https://ipostatus1.cameoindia.com/",
+    },
+  });
+  if (!res.ok) return null;
+  return Buffer.from(await res.arrayBuffer());
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -21,153 +35,94 @@ export async function POST(request: Request) {
       );
     }
 
-    // Step 1: Fetch the page to get ASP.NET tokens
-    const pageRes = await fetch("https://ipostatus1.cameoindia.com/", {
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" },
-    });
-    const html = await pageRes.text();
+    // Retry loop: fresh page + fresh CAPTCHA each attempt
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const html = await fetchCameoPage();
+      const viewState = html.match(/__VIEWSTATE[^>]*value="([^"]*)"/)?.[1] || "";
+      const eventValidation = html.match(/__EVENTVALIDATION[^>]*value="([^"]*)"/)?.[1] || "";
+      const viewStateGen = html.match(/__VIEWSTATEGENERATOR[^>]*value="([^"]*)"/)?.[1] || "";
 
-    // Extract ASP.NET tokens
-    const viewState = html.match(/__VIEWSTATE[^>]*value="([^"]*)"/)?.[1] || "";
-    const eventValidation = html.match(/__EVENTVALIDATION[^>]*value="([^"]*)"/)?.[1] || "";
-    const viewStateGen = html.match(/__VIEWSTATEGENERATOR[^>]*value="([^"]*)"/)?.[1] || "";
+      if (!viewState) {
+        return NextResponse.json({ error: "Could not extract ASP.NET tokens from Cameo" }, { status: 502 });
+      }
 
-    if (!viewState) {
-      return NextResponse.json(
-        { error: "Could not extract ASP.NET tokens from Cameo" },
-        { status: 502 }
-      );
-    }
+      const captchaBuffer = await fetchCaptchaImage();
+      if (!captchaBuffer) {
+        return NextResponse.json({ error: "Could not fetch Cameo CAPTCHA image" }, { status: 502 });
+      }
 
-    // Step 2: Fetch CAPTCHA image
-    const captchaUrl = `https://ipostatus1.cameoindia.com/GenerateCaptcha.aspx?${Date.now()}`;
-    const captchaRes = await fetch(captchaUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        Referer: "https://ipostatus1.cameoindia.com/",
-      },
-    });
+      const captchaText = await ocrCaptchaImage(captchaBuffer);
+      if (!captchaText || captchaText.length < 3 || captchaText.length > 8) continue;
 
-    if (!captchaRes.ok) {
-      return NextResponse.json({ error: "Could not fetch Cameo CAPTCHA image" }, { status: 502 });
-    }
+      const formData = new URLSearchParams();
+      formData.append("__VIEWSTATE", viewState);
+      formData.append("__VIEWSTATEGENERATOR", viewStateGen);
+      formData.append("__EVENTVALIDATION", eventValidation);
+      formData.append("drpCompany", code);
+      formData.append("ddlUserTypes", "PAN NO");
+      formData.append("txtfolio", PAN.toUpperCase());
+      formData.append("txt_phy_captcha", captchaText);
+      formData.append("btnSubmit", "Submit");
 
-    const captchaBuffer = Buffer.from(await captchaRes.arrayBuffer());
+      const submitRes = await fetch("https://ipostatus1.cameoindia.com/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          Referer: "https://ipostatus1.cameoindia.com/",
+        },
+        body: formData.toString(),
+      });
 
-    // Step 3: OCR the CAPTCHA image (free, local)
-    const captchaText = await ocrCaptchaImage(captchaBuffer);
+      const resultHtml = await submitRes.text();
 
-    if (!captchaText || captchaText.length < 2 || captchaText.length > 8) {
-      return NextResponse.json({
-        ok: false,
-        registrar: "cameo",
-        requires_captcha: true,
-        error: `CAPTCHA OCR returned unexpected text: "${captchaText}". Retrying may help.`,
-        captcha_image_url: captchaUrl,
-      }, { status: 502 });
-    }
+      if (resultHtml.includes("Invalid Captcha") || resultHtml.includes("invalid captcha") || resultHtml.includes("Wrong CAPTCHA")) {
+        continue; // retry
+      }
 
-    // Step 4: Submit the form with solved CAPTCHA
-    const formData = new URLSearchParams();
-    formData.append("__VIEWSTATE", viewState);
-    formData.append("__VIEWSTATEGENERATOR", viewStateGen);
-    formData.append("__EVENTVALIDATION", eventValidation);
-    formData.append("drpCompany", code);
-    formData.append("ddlUserTypes", "PAN NO");
-    formData.append("txtfolio", PAN.toUpperCase());
-    formData.append("txt_phy_captcha", captchaText);
-    formData.append("btnSubmit", "Submit");
-
-    const submitRes = await fetch("https://ipostatus1.cameoindia.com/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        Referer: "https://ipostatus1.cameoindia.com/",
-      },
-      body: formData.toString(),
-    });
-
-    const resultHtml = await submitRes.text();
-
-    // Check if CAPTCHA was wrong
-    if (resultHtml.includes("Invalid Captcha") || resultHtml.includes("invalid captcha") || resultHtml.includes("Wrong CAPTCHA")) {      return NextResponse.json({
-        ok: false,
-        registrar: "cameo",
-        requires_captcha: true,
-        error: "CAPTCHA OCR was incorrect. Retrying may help.",
-        captcha_image_url: captchaUrl,
-      }, { status: 502 });
-    }
-
-    // Parse allotment results from the response
-    const results: { company: string; status: string; shares: string; amount: string }[] = [];
-
-    // Try parsing result rows
-    const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-    let rowMatch: RegExpExecArray | null;
-    while ((rowMatch = rowRegex.exec(resultHtml)) !== null) {
-      const cells = rowMatch[1].match(/<td[^>]*>([\s\S]*?)<\/td>/gi);
-      if (cells && cells.length >= 2) {
-        const clean = (s: string) => s.replace(/<[^>]+>/g, "").trim();
-        const col1 = clean(cells[0] ?? "");
-        const col2 = clean(cells[1] ?? "");
-        const col3 = cells.length > 2 ? clean(cells[2]) : "";
-        const col4 = cells.length > 3 ? clean(cells[3]) : "";
-
-        // Skip headers
-        if (col1.toLowerCase().includes("application") || col1.toLowerCase().includes("sno")) continue;
-
-        if (col1 && col2) {
-          // Determine if allotted
-          let status = "UNKNOWN";
-          const combined = (col2 + " " + col3 + " " + col4).toLowerCase();
-          if (combined.includes("allotted") && !combined.includes("not allotted")) {
-            status = "ALLOTTED";
-          } else if (combined.includes("not allotted")) {
-            status = "NOT_ALLOTTED";
+      // Parse results
+      const results: { company: string; status: string; shares: string; amount: string }[] = [];
+      const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+      let rowMatch: RegExpExecArray | null;
+      while ((rowMatch = rowRegex.exec(resultHtml)) !== null) {
+        const cells = rowMatch[1].match(/<td[^>]*>([\s\S]*?)<\/td>/gi);
+        if (cells && cells.length >= 2) {
+          const clean = (s: string) => s.replace(/<[^>]+>/g, "").trim();
+          const col1 = clean(cells[0] ?? "");
+          const col2 = clean(cells[1] ?? "");
+          const col3 = cells.length > 2 ? clean(cells[2]) : "";
+          const col4 = cells.length > 3 ? clean(cells[3]) : "";
+          if (col1.toLowerCase().includes("application") || col1.toLowerCase().includes("sno")) continue;
+          if (col1 && col2) {
+            let status = "UNKNOWN";
+            const combined = (col2 + " " + col3 + " " + col4).toLowerCase();
+            if (combined.includes("allotted") && !combined.includes("not allotted")) status = "ALLOTTED";
+            else if (combined.includes("not allotted")) status = "NOT_ALLOTTED";
+            results.push({ company: code, status, shares: col3 || "0", amount: col4 || "" });
           }
-
-          results.push({
-            company: company_code,
-            status,
-            shares: col3 || "0",
-            amount: col4 || "",
-          });
         }
       }
-    }
 
-    // If no table results found, try other patterns
-    if (results.length === 0) {
-      // Check for "No records found" or similar
-      if (resultHtml.includes("No Record") || resultHtml.includes("no record") || resultHtml.includes("No Data")) {
-        return NextResponse.json({
-          ok: true,
-          registrar: "cameo",
-          pan: PAN,
-          results: [],
-          note: "No application found for this PAN",
-        });
+      if (results.length === 0 && (resultHtml.includes("No Record") || resultHtml.includes("no record") || resultHtml.includes("No Data"))) {
+        return NextResponse.json({ ok: true, registrar: "cameo", pan: PAN, results: [], note: "No application found" });
       }
 
-      // Check for direct status text
-      const statusText = resultHtml.match(/Allotted|Not Allotted/gi);
-      if (statusText) {
-        results.push({
-          company: company_code,
-          status: statusText[0].toLowerCase().includes("not") ? "NOT_ALLOTTED" : "ALLOTTED",
-          shares: "0",
-          amount: "",
-        });
+      if (results.length > 0) {
+        await recordSourceSuccess(OPERATION_KEY, "Cameo", "allotment-pan-search");
+        return NextResponse.json({ ok: true, registrar: "cameo", pan: PAN, results });
       }
+
+      // If no results parsed but no explicit error, might be wrong CAPTCHA
     }
 
-    await recordSourceSuccess(OPERATION_KEY, "Cameo", "allotment-pan-search");
-    return NextResponse.json(
-      { ok: true, registrar: "cameo", pan: PAN, results },
-      { headers: { "Access-Control-Allow-Origin": "*" } }
-    );
+    // All 3 attempts failed
+    await recordSourceFailure(OPERATION_KEY, "Cameo", "allotment-pan-search", new Error("CAPTCHA OCR failed after 3 attempts"));
+    return NextResponse.json({
+      ok: false,
+      registrar: "cameo",
+      requires_captcha: true,
+      error: "CAPTCHA solving failed after 3 attempts. Please try again.",
+    }, { status: 502 });
   } catch (e) {
     await logApiError("registrar:cameo:search", e);
     await recordSourceFailure(OPERATION_KEY, "Cameo", "allotment-pan-search", e);
