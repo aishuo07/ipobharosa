@@ -31,9 +31,9 @@ async function findCompanyId(companyName: string): Promise<string | null> {
     const list = JSON.parse(jsonStr);
     const items = Array.isArray(list) ? list : list?.Table || [];
     const match = items.find((c: Record<string, string>) =>
-      (c.COMPANY_NAME || c.company_name || c.Name || "").toLowerCase().includes(companyName.toLowerCase())
+      (c.COMPANYNAME || c.COMPANY_NAME || c.company_name || c.Name || "").toLowerCase().includes(companyName.toLowerCase())
     );
-    return match?.CLIENT_ID || match?.client_id || match?.CompanyId || match?.Id || null;
+    return match?.COMPANY_ID || match?.CLIENT_ID || match?.client_id || match?.CompanyId || match?.Id || null;
   } catch {
     return null;
   }
