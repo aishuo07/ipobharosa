@@ -620,7 +620,7 @@ async function checkServerRegistrarAllotment(ipo: BoardIpo, pans: string[], regi
             pan,
             companyName: ipo.companyName,
             registrar: ipo.registrar,
-            status: match.status.toUpperCase().includes("ALLOTTED") ? "ALLOTTED" : match.status.toUpperCase().includes("NOT") ? "NOT_ALLOTTED" : "NOT_APPLIED",
+            status: match.status.toUpperCase().includes("NOT") ? "NOT_ALLOTTED" : match.status.toUpperCase().includes("ALLOTTED") ? "ALLOTTED" : "NOT_APPLIED",
             allotted: match.shares,
             amount: match.amount,
             checkedAt: new Date().toISOString(),
