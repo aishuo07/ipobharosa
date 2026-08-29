@@ -6,7 +6,7 @@ import { loadPanCards, type PanCard } from "@/src/lib/pan-store";
 import { checkAllotmentForPans, registrarCheck, type AllotmentResult } from "@/src/lib/allotment";
 import { cacheAllotmentResult, loadAllotmentCache, type IpoAllotmentCache } from "@/src/lib/allotment-store";
 import { usePostHog } from "posthog-react-native";
-import { useThemeColors, radius, spacing, typography, statusColor } from "@/src/lib/theme";
+import { useThemeColors, colors, radius, spacing, typography, statusColor } from "@/src/lib/theme";
 
 const STATUS_LABELS: Record<AllotmentResult["status"], string> = {
   ALLOTTED: "Allotted",

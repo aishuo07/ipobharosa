@@ -16,7 +16,7 @@ import { getCachedBoard, setCachedBoard } from "@/src/lib/cache";
 import type { BoardFilter, BoardIpo } from "@/src/lib/types";
 import { effectiveSection, type StatusSection } from "@/src/lib/status";
 import { IpoRow } from "@/src/components/IpoRow";
-import { useThemeColors, statusColor, radius, spacing, typography } from "@/src/lib/theme";
+import { useThemeColors, colors, statusColor, radius, spacing, typography } from "@/src/lib/theme";
 
 const FILTERS: { label: string; value: BoardFilter }[] = [
   { label: "All", value: "ALL" },

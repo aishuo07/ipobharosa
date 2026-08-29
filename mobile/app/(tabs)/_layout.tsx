@@ -3,7 +3,7 @@ import { Tabs, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import { usePostHog } from "posthog-react-native";
-import { useThemeColors, spacing } from "@/src/lib/theme";
+import { useThemeColors, colors, spacing } from "@/src/lib/theme";
 
 function BrandHeader() {
   const colors = useThemeColors();
