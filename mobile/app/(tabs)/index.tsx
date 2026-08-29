@@ -16,7 +16,7 @@ import { getCachedBoard, setCachedBoard } from "@/src/lib/cache";
 import type { BoardFilter, BoardIpo } from "@/src/lib/types";
 import { effectiveSection, type StatusSection } from "@/src/lib/status";
 import { IpoRow } from "@/src/components/IpoRow";
-import { colors, radius, spacing, statusColor, typography } from "@/src/lib/theme";
+import { useThemeColors, statusColor, radius, spacing, typography } from "@/src/lib/theme";
 
 const FILTERS: { label: string; value: BoardFilter }[] = [
   { label: "All", value: "ALL" },
@@ -49,6 +49,7 @@ function matchesSearch(ipo: BoardIpo, query: string): boolean {
 }
 
 export default function BoardScreen() {
+  const colors = useThemeColors();
   const router = useRouter();
   const posthog = usePostHog();
   const [filter, setFilter] = useState<BoardFilter>("ALL");

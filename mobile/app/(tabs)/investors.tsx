@@ -22,9 +22,10 @@ import {
   removeInvestorProfile,
   type InvestorProfile,
 } from "@/src/lib/investor-profile";
-import { colors, radius, spacing, typography } from "@/src/lib/theme";
+import { useThemeColors, radius, spacing, typography } from "@/src/lib/theme";
 
 export default function InvestorsScreen() {
+  const colors = useThemeColors();
   const posthog = usePostHog();
   const [profiles, setProfiles] = useState<InvestorProfile[]>([]);
   const [holderName, setHolderName] = useState("");

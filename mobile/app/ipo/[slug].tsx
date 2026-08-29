@@ -7,7 +7,7 @@ import type { BoardIpo } from "@/src/lib/types";
 import { registrarCheck } from "@/src/lib/allotment";
 import { effectiveStatus, STATUS_LABELS, type EffectiveStatus } from "@/src/lib/status";
 import { formatDecimal, formatMoney, formatPercent } from "@/src/lib/format";
-import { colors, radius, spacing, typography, statusColor, statusSoftColor } from "@/src/lib/theme";
+import { useThemeColors, radius, spacing, typography, statusColor, statusSoftColor } from "@/src/lib/theme";
 import { GmpChart, SubscriptionBar } from "@/src/components/Charts";
 import {
   applicationAmount,
@@ -141,6 +141,7 @@ function SubscriptionBars({ ipo }: { ipo: BoardIpo }) {
 }
 
 export default function IpoDetailScreen() {
+  const colors = useThemeColors();
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const posthog = usePostHog();
   const [ipo, setIpo] = useState<BoardIpo | null>(null);

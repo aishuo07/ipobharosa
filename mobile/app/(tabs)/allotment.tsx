@@ -6,7 +6,7 @@ import { loadPanCards, type PanCard } from "@/src/lib/pan-store";
 import { checkAllotmentForPans, registrarCheck, type AllotmentResult } from "@/src/lib/allotment";
 import { cacheAllotmentResult, loadAllotmentCache, type IpoAllotmentCache } from "@/src/lib/allotment-store";
 import { usePostHog } from "posthog-react-native";
-import { colors, radius, spacing, typography, statusColor } from "@/src/lib/theme";
+import { useThemeColors, radius, spacing, typography, statusColor } from "@/src/lib/theme";
 
 const STATUS_LABELS: Record<AllotmentResult["status"], string> = {
   ALLOTTED: "Allotted",
@@ -22,6 +22,7 @@ function statusCounts(results: AllotmentResult[]) {
 }
 
 export default function AllotmentScreen() {
+  const colors = useThemeColors();
   const posthog = usePostHog();
   const [ipos, setIpos] = useState<BoardIpo[]>([]);
   const [cards, setCards] = useState<PanCard[]>([]);

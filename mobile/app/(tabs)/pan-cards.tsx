@@ -14,9 +14,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import { usePostHog } from "posthog-react-native";
 import { addPanCard, isValidPan, loadPanCards, removePanCard, type PanCard } from "@/src/lib/pan-store";
-import { colors, radius, spacing, typography } from "@/src/lib/theme";
+import { useThemeColors, radius, spacing, typography } from "@/src/lib/theme";
 
 export default function PanCardsScreen() {
+  const colors = useThemeColors();
   const posthog = usePostHog();
   const [cards, setCards] = useState<PanCard[]>([]);
   const [pan, setPan] = useState("");
