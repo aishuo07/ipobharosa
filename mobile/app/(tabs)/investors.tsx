@@ -22,7 +22,7 @@ import {
   removeInvestorProfile,
   type InvestorProfile,
 } from "@/src/lib/investor-profile";
-import { useThemeColors, radius, spacing, typography } from "@/src/lib/theme";
+import { useThemeColors, colors, radius, spacing, typography } from "@/src/lib/theme";
 
 export default function InvestorsScreen() {
   const colors = useThemeColors();

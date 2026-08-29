@@ -56,6 +56,30 @@ export function useThemeColors() {
 
 export { LIGHT_COLORS as colors };
 
+export const spacing = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+} as const;
+
+export const radius = {
+  sm: 6,
+  md: 10,
+  lg: 14,
+  xl: 20,
+  pill: 999,
+} as const;
+
+export const typography = {
+  display: { fontSize: 24, lineHeight: 30 },
+  title: { fontSize: 20, lineHeight: 26 },
+  body: { fontSize: 15, lineHeight: 21 },
+  caption: { fontSize: 12, lineHeight: 17 },
+  label: { fontSize: 11, lineHeight: 15, letterSpacing: 0.6 },
+} as const;
+
 export type ColorName = keyof typeof LIGHT_COLORS;
 
 export function statusColor(status: string): ColorName {
