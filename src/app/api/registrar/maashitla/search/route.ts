@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const pan = body.PAN || body.pan;
-    const company_name = body.company_code || body.companyCode || body.Company;
+    const company_name = body.company_name || body.company_code || body.companyCode || body.Company;
     if (!pan) {
       return NextResponse.json({ error: "PAN required" }, { status: 400 });
     }

@@ -40,6 +40,9 @@ const REGISTRAR_NAMES: Record<string, string> = {
 const PORTAL_URLS: Record<string, string> = {
   kfin: "https://ipostatus.kfintech.com/",
   bigshare: "https://ipo.bigshareonline.com/ipo_status.html",
+  cameo: "https://ipostatus.cameoindia.com",
+  skyline: "https://www.skylinerta.com/ipo.php",
+  purva: "https://www.purvashare.com/investor-service/ipo-query",
 };
 
 const STATUS_STYLE: Record<string, { bg: string; fg: string; label: string }> = {
