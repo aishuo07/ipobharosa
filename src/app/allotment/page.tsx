@@ -38,6 +38,7 @@ const REGISTRAR_NAMES: Record<string, string> = {
 
 // CAPTCHA-bound registrars — can't automate, show portal link
 const PORTAL_URLS: Record<string, string> = {
+  kfin: "https://ipostatus.kfintech.com/",
   cameo: "https://ipostatus.cameoindia.com",
   skyline: "https://www.skylinerta.com/ipo.php",
   purva: "https://www.purvashare.com/investor-service/ipo-query",
