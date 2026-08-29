@@ -165,12 +165,12 @@ export default function AllotmentPage() {
         <label style={{ fontSize: 12, fontWeight: 700, color: "#5A6B63", textTransform: "uppercase", letterSpacing: 0.5 }}>PAN</label>
         {cards.length > 0 ? (
           <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {cards.map((c) => <span key={c.id} style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 700, background: "#E8F2ED", color: "#237355", padding: "4px 10px", borderRadius: 6 }}>{c.pan}</span>)}
+            {cards.map((c) => <span key={c.id} style={{ fontSize: 14, fontWeight: 700, background: "#E8F2ED", color: "#237355", padding: "4px 10px", borderRadius: 6 }}>{c.pan}</span>)}
           </div>
         ) : (
           <input value={manualPan} onChange={(e) => setManualPan(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10))}
             placeholder="ABCDE1234F" autoCapitalize="characters" autoCorrect="off" spellCheck={false} maxLength={10}
-            style={{ width: "100%", padding: "10px 12px", fontSize: 16, fontWeight: 600, letterSpacing: 1.5, border: "1px solid #DEE1D9", borderRadius: 8, marginTop: 6, boxSizing: "border-box", fontFamily: "monospace" }} />
+            style={{ width: "100%", padding: "10px 12px", fontSize: 15, fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", border: "1px solid #DEE1D9", borderRadius: 8, marginTop: 6, boxSizing: "border-box" }} />
         )}
       </div>
 
@@ -188,7 +188,7 @@ export default function AllotmentPage() {
             return (
               <div key={pan} style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", border: "1px solid #DEE1D9", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
-                  <p style={{ margin: 0, fontFamily: "monospace", fontWeight: 700, fontSize: 15 }}>{pan}</p>
+                  <p style={{ margin: 0, fontWeight: 700, fontSize: 15, textTransform: "uppercase" }}>{pan}</p>
                   {result.company && <p style={{ margin: "2px 0 0", fontSize: 13, color: "#5A6B63" }}>{result.company}</p>}
                   {result.shares && <p style={{ margin: "2px 0 0", fontSize: 13, color: "#237355", fontWeight: 600 }}>{result.shares} shares · ₹{result.amount}</p>}
                   {result.error && <p style={{ margin: "2px 0 0", fontSize: 12, color: "#A13F35" }}>{result.error}</p>}
