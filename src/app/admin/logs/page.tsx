@@ -23,20 +23,24 @@ function fetchLogs(route: string): Promise<Log[]> {
 }
 
 export default function AdminLogsPage() {
-  const [logs, setLogs] = useState<Log[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState<{ logs: Log[]; loading: boolean }>({ logs: [], loading: true });
   const [filter, setFilter] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     fetchLogs(filter)
-      .then((data) => { if (!cancelled) setLogs(data); })
-      .catch(() => { if (!cancelled) setLogs([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .then((logs) => { if (!cancelled) setState({ logs, loading: false }); })
+      .catch(() => { if (!cancelled) setState({ logs: [], loading: false }); });
     return () => { cancelled = true; };
   }, [filter]);
+
+  function refresh() {
+    setState((s) => ({ ...s, loading: true }));
+    fetchLogs(filter)
+      .then((logs) => setState({ logs, loading: false }))
+      .catch(() => setState({ logs: [], loading: false }));
+  }
 
   return (
     <main style={{ maxWidth: 800, margin: "0 auto", padding: "24px 16px", fontFamily: "system-ui, sans-serif" }}>
@@ -50,17 +54,17 @@ export default function AdminLogsPage() {
           placeholder="Filter by route (e.g. kfin, mas)"
           style={{ flex: 1, padding: "8px 12px", fontSize: 14, border: "1px solid #DEE1D9", borderRadius: 8 }}
         />
-        <button onClick={() => { setLoading(true); fetchLogs(filter).then(setLogs).catch(() => setLogs([])).finally(() => setLoading(false)); }} style={{ padding: "8px 16px", fontSize: 14, fontWeight: 600, background: "#237355", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
+        <button onClick={refresh} style={{ padding: "8px 16px", fontSize: 14, fontWeight: 600, background: "#237355", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
           Refresh
         </button>
       </div>
 
-      {loading ? (
+      {state.loading ? (
         <p style={{ color: "#8A968F", textAlign: "center", marginTop: 40 }}>Loading...</p>
-      ) : logs.length === 0 ? (
+      ) : state.logs.length === 0 ? (
         <p style={{ color: "#8A968F", textAlign: "center", marginTop: 40 }}>No errors found</p>
       ) : (
-        logs.map((log) => {
+        state.logs.map((log) => {
           const c = LEVEL_COLORS[log.level] || LEVEL_COLORS.error;
           const isExpanded = expanded === log.id;
           return (
