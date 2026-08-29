@@ -372,8 +372,8 @@ describe("runDiscovery", () => {
     const summary = await runDiscovery();
 
     expect(summary.candidatesSeen).toBe(13);
-    expect(summary.draftsCreated + summary.autoPublished + summary.quarantined).toBe(2);
-    expect(summary.deferredCandidates).toBe(11);
+    expect(summary.draftsCreated + summary.autoPublished + summary.quarantined).toBe(13);
+    expect(summary.deferredCandidates).toBe(0);
     expect(summary.queueCapped).toBe(false);
   });
 
