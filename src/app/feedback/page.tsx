@@ -29,7 +29,7 @@ export default function FeedbackPage() {
         <div style={{ fontSize: 48, marginBottom: 12 }}>✓</div>
         <h1 style={{ fontSize: 22, fontWeight: 800, margin: "0 0 8px" }}>Thank you!</h1>
         <p style={{ color: "#5A6B63", margin: "0 0 24px" }}>Your feedback has been recorded.</p>
-        <a href="/board" style={{ color: "#237355", fontWeight: 600 }}>← Back to Board</a>
+        <a href="/" style={{ color: "#237355", fontWeight: 600 }}>← Back to Board</a>
       </main>
     );
   }
