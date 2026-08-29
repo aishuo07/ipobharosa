@@ -68,31 +68,35 @@ describe("registrarCheck", () => {
     });
   });
 
-  it("flags KFinTech as automatable via its public API", () => {
+  it("flags KFinTech as non-automatable (API broken)", () => {
     expect(registrarCheck(makeIpo({ registrar: "KFin Technologies Ltd" }))).toEqual({
-      automatable: true,
-      portalUrl: "https://ipostatus.kfintech.com",
+      automatable: false,
+      portalUrl: "https://ipostatus.kfintech.com/",
     });
   });
 
-  it("flags Bigshare as automatable via its JSON API", () => {
+  it("flags Bigshare as non-automatable (server-side CAPTCHA)", () => {
     expect(registrarCheck(makeIpo({ registrar: "Bigshare Services Pvt Ltd" }))).toEqual({
-      automatable: true,
+      automatable: false,
       portalUrl: "https://ipo.bigshareonline.com/ipo_status.html",
     });
   });
 
   it("classifies registrar kinds for dispatching", () => {
     expect(registrarKind(makeIpo({ registrar: "MUFG Intime India Pvt Ltd" }))).toBe("mufg");
-    expect(registrarKind(makeIpo({ registrar: "KFin Technologies Ltd" }))).toBe("kfintech");
-    expect(registrarKind(makeIpo({ registrar: "Bigshare Services Pvt Ltd" }))).toBe("bigshare");
-    expect(registrarKind(makeIpo({ registrar: "Cameo Corporate Services Ltd" }))).toBe("manual");
+    expect(registrarKind(makeIpo({ registrar: "KFin Technologies Ltd" }))).toBe("manual");
+    expect(registrarKind(makeIpo({ registrar: "Bigshare Services Pvt Ltd" }))).toBe("manual");
+    expect(registrarKind(makeIpo({ registrar: "Cameo Corporate Services Ltd" }))).toBe("cameo");
   });
 
-  it("flags CAPTCHA-gated registrars as non-automatable with a portal link", () => {
-    expect(registrarCheck(makeIpo({ registrar: "Cameo Corporate Services Ltd" }))).toEqual({
+  it("flags KFin/Bigshare as non-automatable with a portal link", () => {
+    expect(registrarCheck(makeIpo({ registrar: "KFin Technologies Ltd" }))).toEqual({
       automatable: false,
-      portalUrl: "https://ipostatus.cameoindia.com",
+      portalUrl: "https://ipostatus.kfintech.com/",
+    });
+    expect(registrarCheck(makeIpo({ registrar: "Bigshare Services Pvt Ltd" }))).toEqual({
+      automatable: false,
+      portalUrl: "https://ipo.bigshareonline.com/ipo_status.html",
     });
   });
 
@@ -337,25 +341,26 @@ describe("checkAllotmentForPans (dispatcher)", () => {
     vi.unstubAllGlobals();
   });
 
-  it("routes KFinTech IPOs to the KFinTech adapter", async () => {
+  it("routes KFinTech IPOs to the manual portal (API broken)", async () => {
     const ipo = makeIpo({ companyName: "Shiprocket Ltd", registrar: "Kfin Technologies Ltd." });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValueOnce(
-        new Response(JSON.stringify({ data: [{ All_Shares: "0", App_Shares: "154", Name: "AISH KANODIA", Pan_No: "HFQPK9233H" }] }), { status: 200 }),
-      ),
-    );
     const results = await checkAllotmentForPans(ipo, ["HFQPK9233H"]);
-    expect(results[0].status).toBe("NOT_ALLOTTED");
-    vi.unstubAllGlobals();
+    expect(results[0].status).toBe("ERROR");
+    expect(results[0].error).toContain("not supported");
   });
 
-  it("routes Bigshare IPOs to the Bigshare adapter", async () => {
+  it("routes Bigshare IPOs to the manual portal (server-side CAPTCHA)", async () => {
     const ipo = makeIpo({ companyName: "Technocraft Ventures Ltd", registrar: "Bigshare Services Pvt Ltd" });
+    const results = await checkAllotmentForPans(ipo, ["HFQPK9233H"]);
+    expect(results[0].status).toBe("ERROR");
+    expect(results[0].error).toContain("not supported");
+  });
+
+  it("routes Cameo IPOs to the server API for CAPTCHA solving", async () => {
+    const ipo = makeIpo({ companyName: "Some Issue Ltd", registrar: "Cameo Corporate Services Ltd" });
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValueOnce(
-        new Response(JSON.stringify({ d: { __type: "Data+Company", APPLICATION_NO: "AB1", DPID: "123", Name: "AISH KANODIA", APPLIED: "50", ALLOTED: "50" } }), {
+        new Response(JSON.stringify({ ok: true, results: [{ company: "Some Issue Ltd", status: "ALLOTTED", shares: "50", amount: "5000" }] }), {
           status: 200,
         }),
       ),
@@ -363,12 +368,5 @@ describe("checkAllotmentForPans (dispatcher)", () => {
     const results = await checkAllotmentForPans(ipo, ["HFQPK9233H"]);
     expect(results[0].status).toBe("ALLOTTED");
     vi.unstubAllGlobals();
-  });
-
-  it("returns an ERROR for non-automatable registrars instead of querying", async () => {
-    const ipo = makeIpo({ companyName: "Some Issue Ltd", registrar: "Cameo Corporate Services Ltd" });
-    const results = await checkAllotmentForPans(ipo, ["HFQPK9233H"]);
-    expect(results[0].status).toBe("ERROR");
-    expect(results[0].error).toContain("not supported");
   });
 });
