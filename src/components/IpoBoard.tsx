@@ -269,7 +269,7 @@ export default function IpoBoard({
       <section className="board-intro board-intro-compact" aria-labelledby="board-title">
         <div>
           <p className="board-kicker">Indian IPO tracker</p>
-          <h1 id="board-title">Dates, demand and GMP—without the noise.</h1>
+          <h1 id="board-title">Dates, demand and GMP, without the noise.</h1>
           <p className="board-sub">Every Indian mainboard &amp; SME IPO, verified against official sources every hour.</p>
         </div>
         <p className="board-coverage">
