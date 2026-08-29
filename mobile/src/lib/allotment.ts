@@ -29,17 +29,18 @@ const MUFG_ENDPOINTS = {
   referer: "https://in.mpms.mufg.com/Initial_Offer/public-issues.html",
 };
 
-// Registrars with broken APIs — surfaced as deep links.
-const PORTAL_LINKS: Record<string, string> = {
-  KFin: "https://ipostatus.kfintech.com/",
-  KFinTech: "https://ipostatus.kfintech.com/",
-  Bigshare: "https://ipo.bigshareonline.com/ipo_status.html",
-};
+// All registrars are now automated — no portal links needed
+const PORTAL_LINKS: Record<string, string> = {};
 
 const AUTOMATABLE: Record<string, { portalUrl: string }> = {
   mufg: { portalUrl: "https://linkintime.co.in/initial_offer/public-issues.html" },
   "link intime": { portalUrl: "https://linkintime.co.in/initial_offer/public-issues.html" },
   intime: { portalUrl: "https://linkintime.co.in/initial_offer/public-issues.html" },
+  kfin: { portalUrl: "https://ipostatus.kfintech.com" },
+  kfintech: { portalUrl: "https://ipostatus.kfintech.com" },
+  "kfin technologies": { portalUrl: "https://ipostatus.kfintech.com" },
+  bigshare: { portalUrl: "https://ipo.bigshareonline.com/ipo_status.html" },
+  "bigshare services": { portalUrl: "https://ipo.bigshareonline.com/ipo_status.html" },
   maashitla: { portalUrl: "https://maashitla.com/allotment-status/public-issues" },
   "maashitla securities": { portalUrl: "https://maashitla.com/allotment-status/public-issues" },
   mas: { portalUrl: "https://www.masserv.com/ipo_asearch.asp" },
@@ -52,11 +53,13 @@ const AUTOMATABLE: Record<string, { portalUrl: string }> = {
   "purva sharegistry": { portalUrl: "https://www.purvashare.com/investor-service/ipo-query" },
 };
 
-export type RegistrarKind = "mufg" | "maashitla" | "mas" | "cameo" | "skyline" | "purva" | "manual";
+export type RegistrarKind = "mufg" | "kfintech" | "bigshare" | "maashitla" | "mas" | "cameo" | "skyline" | "purva" | "manual";
 
 export function registrarKind(ipo: BoardIpo): RegistrarKind {
   const registrar = ipo.registrar?.toLowerCase() ?? "";
   if (registrar.includes("mufg") || registrar.includes("intime") || registrar.includes("link intime")) return "mufg";
+  if (registrar.includes("kfin")) return "kfintech";
+  if (registrar.includes("bigshare")) return "bigshare";
   if (registrar.includes("maashitla")) return "maashitla";
   if (registrar.includes("mas")) return "mas";
   if (registrar.includes("cameo")) return "cameo";
@@ -617,7 +620,7 @@ async function checkServerRegistrarAllotment(ipo: BoardIpo, pans: string[], regi
             pan,
             companyName: ipo.companyName,
             registrar: ipo.registrar,
-            status: match.status.toUpperCase().includes("ALLOTTED") ? "ALLOTTED" : match.status.toUpperCase().includes("NOT") ? "NOT_ALLOTTED" : "NOT_APPLIED",
+            status: match.status.toUpperCase().includes("NOT") ? "NOT_ALLOTTED" : match.status.toUpperCase().includes("ALLOTTED") ? "ALLOTTED" : "NOT_APPLIED",
             allotted: match.shares,
             amount: match.amount,
             checkedAt: new Date().toISOString(),
@@ -647,11 +650,13 @@ export async function checkAllotmentForPans(ipo: BoardIpo, pans: string[]): Prom
     case "mas": {
       return checkMasAllotmentForPans(ipo, pans);
     }
+    case "kfintech":
+    case "bigshare":
     case "cameo":
     case "skyline":
     case "purva": {
-      // These registrars have CAPTCHAs — solved by our server using Tesseract.js
-      return checkServerRegistrarAllotment(ipo, pans, kind);
+      // These registrars have CAPTCHAs or complex APIs — solved by our server
+      return checkServerRegistrarAllotment(ipo, pans, kind === "kfintech" ? "kfin" : kind);
     }
     default: {
       const base = (pan: string): AllotmentResult => ({
