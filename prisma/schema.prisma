@@ -192,7 +192,7 @@ model Ipo {
 // size, or even an exchange board yet. Keeping it here lets the public product
 // show the full pipeline without inventing application-ready terms.
 model IpoFilingCatalogue {
-  id          String         @id @default(uuid())
+  id        String   @id @default(dbgenerated("gen_random_uuid()"))
   issuerKey   String
   companyName String
   stage       IpoFilingStage

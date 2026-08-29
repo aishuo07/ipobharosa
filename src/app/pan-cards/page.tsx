@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 type PanCard = { id: string; pan: string; holderName: string };
 
@@ -13,13 +13,11 @@ function load(): PanCard[] {
 function save(cards: PanCard[]) { localStorage.setItem(STORAGE_KEY, JSON.stringify(cards)); }
 
 export default function PanCardsPage() {
-  const [cards, setCards] = useState<PanCard[]>([]);
+  const [cards, setCards] = useState<PanCard[]>(() => load());
   const [pan, setPan] = useState("");
   const [name, setName] = useState("");
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
-
-  useEffect(() => { setCards(load()); }, []);
 
   const add = useCallback(() => {
     const p = pan.trim().toUpperCase();

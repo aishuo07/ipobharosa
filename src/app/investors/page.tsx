@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 type Profile = { id: string; pan: string; name: string; upi: string; demat: string };
 
@@ -14,14 +14,12 @@ function load(): Profile[] {
 function save(p: Profile[]) { localStorage.setItem(STORAGE_KEY, JSON.stringify(p)); }
 
 export default function InvestorsPage() {
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>(() => load());
   const [pan, setPan] = useState("");
   const [name, setName] = useState("");
   const [upi, setUpi] = useState("");
   const [demat, setDemat] = useState("");
   const [err, setErr] = useState("");
-
-  useEffect(() => { setProfiles(load()); }, []);
 
   const add = useCallback(() => {
     const p = pan.trim().toUpperCase();

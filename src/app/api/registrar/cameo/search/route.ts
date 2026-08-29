@@ -1,6 +1,6 @@
 import { logApiError } from "@/lib/api-logger";
 import { NextResponse } from "next/server";
-import { recordSourceSuccess, recordSourceFailure } from "@/lib/ingestion/source-operation";
+import { recordSourceFailure } from "@/lib/ingestion/source-operation";
 
 const OPERATION_KEY = "registrar:cameo:search";
 

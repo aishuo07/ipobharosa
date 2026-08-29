@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type Log = {
   id: string;
@@ -23,7 +23,7 @@ export default function AdminLogsPage() {
   const [filter, setFilter] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  function load() {
+  const load = useCallback(() => {
     setLoading(true);
     const url = filter ? `/api/admin/error-log?route=${encodeURIComponent(filter)}` : "/api/admin/error-log";
     fetch(url)
@@ -31,9 +31,9 @@ export default function AdminLogsPage() {
       .then((data) => setLogs(Array.isArray(data) ? data : []))
       .catch(() => setLogs([]))
       .finally(() => setLoading(false));
-  }
+  }, [filter]);
 
-  useEffect(() => { load(); }, [filter]);
+  useEffect(() => { load(); }, [load]);
 
   return (
     <main style={{ maxWidth: 800, margin: "0 auto", padding: "24px 16px", fontFamily: "system-ui, sans-serif" }}>

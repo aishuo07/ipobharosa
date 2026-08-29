@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     const pageRes = await fetch("https://www.purvashare.com/investor-service/ipo-query", {
       headers: { "User-Agent": "IPOBharosa/1.0" },
     });
-    const _cookies = pageRes.headers.get("set-cookie") || "";
+    void pageRes; // cookies available if needed for future use
 
     // Step 2: Solve math CAPTCHA if present
     // Purva uses a simple math CAPTCHA like "3 + 5 = ?"
