@@ -29,36 +29,32 @@ const MUFG_ENDPOINTS = {
   referer: "https://in.mpms.mufg.com/Initial_Offer/public-issues.html",
 };
 
-// Registrars that enforce a CAPTCHA must not be automated (source-policy:
-// never bypass provider access controls). They are surfaced as deep links.
+// Registrars that enforce a CAPTCHA or have broken APIs must not be automated.
+// They are surfaced as deep links.
 const PORTAL_LINKS: Record<string, string> = {
   Cameo: "https://ipostatus.cameoindia.com",
   Skyline: "https://www.skylinerta.com/ipo.php",
   Purva: "https://www.purvashare.com/investor-service/ipo-query",
+  KFin: "https://ipostatus.kfintech.com/",
+  KFinTech: "https://ipostatus.kfintech.com/",
+  Bigshare: "https://ipo.bigshareonline.com/ipo_status.html",
 };
 
 const AUTOMATABLE: Record<string, { portalUrl: string }> = {
   mufg: { portalUrl: "https://linkintime.co.in/initial_offer/public-issues.html" },
   "link intime": { portalUrl: "https://linkintime.co.in/initial_offer/public-issues.html" },
   intime: { portalUrl: "https://linkintime.co.in/initial_offer/public-issues.html" },
-  kfin: { portalUrl: "https://ipostatus.kfintech.com" },
-  kfintech: { portalUrl: "https://ipostatus.kfintech.com" },
-  "kfin technologies": { portalUrl: "https://ipostatus.kfintech.com" },
-  bigshare: { portalUrl: "https://ipo.bigshareonline.com/ipo_status.html" },
-  "bigshare services": { portalUrl: "https://ipo.bigshareonline.com/ipo_status.html" },
   maashitla: { portalUrl: "https://maashitla.com/allotment-status/public-issues" },
   "maashitla securities": { portalUrl: "https://maashitla.com/allotment-status/public-issues" },
   mas: { portalUrl: "https://www.masserv.com/ipo_asearch.asp" },
   "mas services": { portalUrl: "https://www.masserv.com/ipo_asearch.asp" },
 };
 
-export type RegistrarKind = "mufg" | "kfintech" | "bigshare" | "maashitla" | "mas" | "manual";
+export type RegistrarKind = "mufg" | "maashitla" | "mas" | "manual";
 
 export function registrarKind(ipo: BoardIpo): RegistrarKind {
   const registrar = ipo.registrar?.toLowerCase() ?? "";
   if (registrar.includes("mufg") || registrar.includes("intime") || registrar.includes("link intime")) return "mufg";
-  if (registrar.includes("kfin")) return "kfintech";
-  if (registrar.includes("bigshare")) return "bigshare";
   if (registrar.includes("maashitla")) return "maashitla";
   if (registrar.includes("mas")) return "mas";
   return "manual";
@@ -590,14 +586,6 @@ export async function checkAllotmentForPans(ipo: BoardIpo, pans: string[]): Prom
   switch (kind) {
     case "mufg":
       return checkMufgAllotmentForPans(ipo, pans);
-    case "kfintech": {
-      const catalogue = await fetchRegistrarCatalogue("kfin");
-      return checkKfintechAllotmentForPans(ipo, pans, catalogue);
-    }
-    case "bigshare": {
-      const catalogue = await fetchRegistrarCatalogue("bigshare");
-      return checkBigshareAllotmentForPans(ipo, pans, catalogue);
-    }
     case "maashitla": {
       const catalogue = await fetchRegistrarCatalogue("maashitla");
       return checkMaashitlaAllotmentForPans(ipo, pans, catalogue);
