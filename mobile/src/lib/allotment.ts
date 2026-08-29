@@ -29,12 +29,8 @@ const MUFG_ENDPOINTS = {
   referer: "https://in.mpms.mufg.com/Initial_Offer/public-issues.html",
 };
 
-// Registrars that enforce a CAPTCHA or have broken APIs must not be automated.
-// They are surfaced as deep links.
+// Registrars with broken APIs — surfaced as deep links.
 const PORTAL_LINKS: Record<string, string> = {
-  Cameo: "https://ipostatus.cameoindia.com",
-  Skyline: "https://www.skylinerta.com/ipo.php",
-  Purva: "https://www.purvashare.com/investor-service/ipo-query",
   KFin: "https://ipostatus.kfintech.com/",
   KFinTech: "https://ipostatus.kfintech.com/",
   Bigshare: "https://ipo.bigshareonline.com/ipo_status.html",
@@ -48,15 +44,24 @@ const AUTOMATABLE: Record<string, { portalUrl: string }> = {
   "maashitla securities": { portalUrl: "https://maashitla.com/allotment-status/public-issues" },
   mas: { portalUrl: "https://www.masserv.com/ipo_asearch.asp" },
   "mas services": { portalUrl: "https://www.masserv.com/ipo_asearch.asp" },
+  cameo: { portalUrl: "https://ipostatus.cameoindia.com" },
+  "cameo corporate": { portalUrl: "https://ipostatus.cameoindia.com" },
+  skyline: { portalUrl: "https://www.skylinerta.com/ipo.php" },
+  "skyline financial": { portalUrl: "https://www.skylinerta.com/ipo.php" },
+  purva: { portalUrl: "https://www.purvashare.com/investor-service/ipo-query" },
+  "purva sharegistry": { portalUrl: "https://www.purvashare.com/investor-service/ipo-query" },
 };
 
-export type RegistrarKind = "mufg" | "maashitla" | "mas" | "manual";
+export type RegistrarKind = "mufg" | "maashitla" | "mas" | "cameo" | "skyline" | "purva" | "manual";
 
 export function registrarKind(ipo: BoardIpo): RegistrarKind {
   const registrar = ipo.registrar?.toLowerCase() ?? "";
   if (registrar.includes("mufg") || registrar.includes("intime") || registrar.includes("link intime")) return "mufg";
   if (registrar.includes("maashitla")) return "maashitla";
   if (registrar.includes("mas")) return "mas";
+  if (registrar.includes("cameo")) return "cameo";
+  if (registrar.includes("skyline")) return "skyline";
+  if (registrar.includes("purva")) return "purva";
   return "manual";
 }
 
@@ -581,6 +586,55 @@ async function checkMasAllotmentForPans(ipo: BoardIpo, pans: string[]): Promise<
   return results;
 }
 
+const SERVER_BASE = "https://ipobharosa.vercel.app";
+
+async function serverRegistrarSearch(registrar: string, pan: string, companyCode: string): Promise<{ ok: boolean; results?: { company: string; status: string; shares: string; amount: string }[]; error?: string }> {
+  const res = await fetch(`${SERVER_BASE}/api/registrar/${registrar}/search`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ PAN: pan, company_code: companyCode }),
+  });
+  return res.json();
+}
+
+async function checkServerRegistrarAllotment(ipo: BoardIpo, pans: string[], registrar: string): Promise<AllotmentResult[]> {
+  const base = (pan: string): AllotmentResult => ({
+    pan,
+    companyName: ipo.companyName,
+    registrar: ipo.registrar,
+    status: "ERROR",
+    checkedAt: new Date().toISOString(),
+  });
+
+  const results: AllotmentResult[] = [];
+  for (const pan of pans) {
+    try {
+      const data = await serverRegistrarSearch(registrar, pan, ipo.companyName);
+      if (data.ok && data.results) {
+        const match = data.results.find((r) => r.company.toLowerCase().includes(ipo.companyName.toLowerCase()));
+        if (match) {
+          results.push({
+            pan,
+            companyName: ipo.companyName,
+            registrar: ipo.registrar,
+            status: match.status.toUpperCase().includes("ALLOTTED") ? "ALLOTTED" : match.status.toUpperCase().includes("NOT") ? "NOT_ALLOTTED" : "NOT_APPLIED",
+            allotted: match.shares,
+            amount: match.amount,
+            checkedAt: new Date().toISOString(),
+          });
+        } else {
+          results.push({ ...base(pan), status: "NOT_APPLIED" });
+        }
+      } else {
+        results.push({ ...base(pan), error: data.error || "Server error" });
+      }
+    } catch {
+      results.push({ ...base(pan), error: "Network error" });
+    }
+  }
+  return results;
+}
+
 export async function checkAllotmentForPans(ipo: BoardIpo, pans: string[]): Promise<AllotmentResult[]> {
   const kind = registrarKind(ipo);
   switch (kind) {
@@ -592,6 +646,12 @@ export async function checkAllotmentForPans(ipo: BoardIpo, pans: string[]): Prom
     }
     case "mas": {
       return checkMasAllotmentForPans(ipo, pans);
+    }
+    case "cameo":
+    case "skyline":
+    case "purva": {
+      // These registrars have CAPTCHAs — solved by our server using Tesseract.js
+      return checkServerRegistrarAllotment(ipo, pans, kind);
     }
     default: {
       const base = (pan: string): AllotmentResult => ({

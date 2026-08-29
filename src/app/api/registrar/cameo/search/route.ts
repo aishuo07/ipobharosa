@@ -1,24 +1,20 @@
 import { logApiError } from "@/lib/api-logger";
 import { NextResponse } from "next/server";
-import { recordSourceFailure } from "@/lib/ingestion/source-operation";
+import { recordSourceSuccess, recordSourceFailure } from "@/lib/ingestion/source-operation";
+import { ocrCaptchaImage } from "@/lib/captcha-solver";
 
 const OPERATION_KEY = "registrar:cameo:search";
 
 /**
  * Cameo Corporate Services allotment search.
- *
- * CAPTCHA LIMITATION: Cameo uses an image CAPTCHA that cannot be solved
- * in a serverless environment. This endpoint returns the form structure
- * and CAPTCHA image URL for manual solving or local Playwright automation.
- *
- * For automated solving, run the companion script:
- *   node scripts/cameo-allotment-check.mjs --pan <PAN> --company <CODE>
+ * Auto-solves image CAPTCHA using Tesseract.js OCR (free, no API key).
  */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { PAN, company_code } = body;
-    if (!PAN || !company_code) {
+    const { PAN, company_code, company_name } = body;
+    const code = company_code || company_name;
+    if (!PAN || !code) {
       return NextResponse.json(
         { error: "PAN and company_code required", available_companies_url: "https://ipostatus1.cameoindia.com/" },
         { status: 400 }
@@ -27,47 +23,158 @@ export async function POST(request: Request) {
 
     // Step 1: Fetch the page to get ASP.NET tokens
     const pageRes = await fetch("https://ipostatus1.cameoindia.com/", {
-      headers: { "User-Agent": "IPOBharosa/1.0" },
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" },
     });
     const html = await pageRes.text();
 
     // Extract ASP.NET tokens
     const viewState = html.match(/__VIEWSTATE[^>]*value="([^"]*)"/)?.[1] || "";
     const eventValidation = html.match(/__EVENTVALIDATION[^>]*value="([^"]*)"/)?.[1] || "";
+    const viewStateGen = html.match(/__VIEWSTATEGENERATOR[^>]*value="([^"]*)"/)?.[1] || "";
 
     if (!viewState) {
       return NextResponse.json(
-        { error: "Could not extract ASP.NET tokens — CAPTCHA solving required", raw_html_snippet: html.substring(0, 1000) },
-        { status: 501 }
+        { error: "Could not extract ASP.NET tokens from Cameo" },
+        { status: 502 }
       );
     }
 
-    // Step 2: CAPTCHA is required — return form structure for manual/local solving
-    const captchaImageUrl = `https://ipostatus1.cameoindia.com/GenerateCaptcha.aspx?${Date.now()}`;
+    // Step 2: Fetch CAPTCHA image
+    const captchaUrl = `https://ipostatus1.cameoindia.com/GenerateCaptcha.aspx?${Date.now()}`;
+    const captchaRes = await fetch(captchaUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        Referer: "https://ipostatus1.cameoindia.com/",
+      },
+    });
 
-    await recordSourceFailure(OPERATION_KEY, "Cameo", "allotment-pan-search", new Error("CAPTCHA solving required — use local Playwright script"));
+    if (!captchaRes.ok) {
+      return NextResponse.json({ error: "Could not fetch Cameo CAPTCHA image" }, { status: 502 });
+    }
 
-    return NextResponse.json(
-      {
+    const captchaBuffer = Buffer.from(await captchaRes.arrayBuffer());
+
+    // Step 3: OCR the CAPTCHA image (free, local)
+    const captchaText = await ocrCaptchaImage(captchaBuffer);
+
+    if (!captchaText || captchaText.length < 2 || captchaText.length > 8) {
+      return NextResponse.json({
         ok: false,
         registrar: "cameo",
         requires_captcha: true,
-        captcha_image_url: captchaImageUrl,
-        form_action: "https://ipostatus1.cameoindia.com/",
-        form_fields: {
-          drpCompany: company_code,
-          ddlUserTypes: "PAN NO",
-          txtfolio: PAN.toUpperCase(),
-          __VIEWSTATE: viewState.substring(0, 50) + "...",
-          __EVENTVALIDATION: eventValidation.substring(0, 50) + "...",
-        },
-        instructions: "Solve the CAPTCHA image and POST all fields including txt_phy_captcha to the form action URL",
-        note: "For automated solving, use: node scripts/cameo-allotment-check.mjs --pan <PAN> --company <CODE>",
+        error: `CAPTCHA OCR returned unexpected text: "${captchaText}". Retrying may help.`,
+        captcha_image_url: captchaUrl,
+      }, { status: 502 });
+    }
+
+    // Step 4: Submit the form with solved CAPTCHA
+    const formData = new URLSearchParams();
+    formData.append("__VIEWSTATE", viewState);
+    formData.append("__VIEWSTATEGENERATOR", viewStateGen);
+    formData.append("__EVENTVALIDATION", eventValidation);
+    formData.append("drpCompany", code);
+    formData.append("ddlUserTypes", "PAN NO");
+    formData.append("txtfolio", PAN.toUpperCase());
+    formData.append("txt_phy_captcha", captchaText);
+    formData.append("btnSubmit", "Submit");
+
+    const submitRes = await fetch("https://ipostatus1.cameoindia.com/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        Referer: "https://ipostatus1.cameoindia.com/",
       },
+      body: formData.toString(),
+    });
+
+    const resultHtml = await submitRes.text();
+
+    // Check if CAPTCHA was wrong
+    if (resultHtml.includes("Invalid Captcha") || resultHtml.includes("invalid captcha") || resultHtml.includes("Wrong CAPTCHA")) {
+      return NextResponse.json({
+        ok: false,
+        registrar: "cameo",
+        requires_captcha: true,
+        error: "CAPTCHA OCR was incorrect. Retrying may help.",
+        captcha_image_url: captchaUrl,
+      }, { status: 502 });
+    }
+
+    // Parse allotment results from the response
+    const results: { company: string; status: string; shares: string; amount: string }[] = [];
+
+    // Cameo shows results in a table with Application No, Name, Allotted/Not Allotted
+    const allottedMatch = resultHtml.match(/Allotted|Not Allotted|Applied|Shares Applied|Shares Allotted/gi);
+    const statusMatch = resultHtml.match(/status[^>]*>([^<]+)/gi);
+
+    // Try parsing result rows
+    const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+    let rowMatch: RegExpExecArray | null;
+    while ((rowMatch = rowRegex.exec(resultHtml)) !== null) {
+      const cells = rowMatch[1].match(/<td[^>]*>([\s\S]*?)<\/td>/gi);
+      if (cells && cells.length >= 2) {
+        const clean = (s: string) => s.replace(/<[^>]+>/g, "").trim();
+        const col1 = clean(cells[0] ?? "");
+        const col2 = clean(cells[1] ?? "");
+        const col3 = cells.length > 2 ? clean(cells[2]) : "";
+        const col4 = cells.length > 3 ? clean(cells[3]) : "";
+
+        // Skip headers
+        if (col1.toLowerCase().includes("application") || col1.toLowerCase().includes("sno")) continue;
+
+        if (col1 && col2) {
+          // Determine if allotted
+          let status = "UNKNOWN";
+          const combined = (col2 + " " + col3 + " " + col4).toLowerCase();
+          if (combined.includes("allotted") && !combined.includes("not allotted")) {
+            status = "ALLOTTED";
+          } else if (combined.includes("not allotted")) {
+            status = "NOT_ALLOTTED";
+          }
+
+          results.push({
+            company: company_code,
+            status,
+            shares: col3 || "0",
+            amount: col4 || "",
+          });
+        }
+      }
+    }
+
+    // If no table results found, try other patterns
+    if (results.length === 0) {
+      // Check for "No records found" or similar
+      if (resultHtml.includes("No Record") || resultHtml.includes("no record") || resultHtml.includes("No Data")) {
+        return NextResponse.json({
+          ok: true,
+          registrar: "cameo",
+          pan: PAN,
+          results: [],
+          note: "No application found for this PAN",
+        });
+      }
+
+      // Check for direct status text
+      const statusText = resultHtml.match(/Allotted|Not Allotted/gi);
+      if (statusText) {
+        results.push({
+          company: company_code,
+          status: statusText[0].toLowerCase().includes("not") ? "NOT_ALLOTTED" : "ALLOTTED",
+          shares: "0",
+          amount: "",
+        });
+      }
+    }
+
+    await recordSourceSuccess(OPERATION_KEY, "Cameo", "allotment-pan-search");
+    return NextResponse.json(
+      { ok: true, registrar: "cameo", pan: PAN, results },
       { headers: { "Access-Control-Allow-Origin": "*" } }
     );
   } catch (e) {
-    await logApiError("registrar:search", e);
+    await logApiError("registrar:cameo:search", e);
     await recordSourceFailure(OPERATION_KEY, "Cameo", "allotment-pan-search", e);
     return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown error" }, { status: 500 });
   }
