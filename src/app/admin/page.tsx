@@ -122,7 +122,7 @@ export default async function AdminPage({
     <div className="wrap">
       <div className="admin-shell">
       <div className="admin-topbar">
-        <Link href="/" className="legal-back">← IPOBharosa</Link>
+        <Link href="/board" className="legal-back">← IPOBharosa</Link>
         <nav className="admin-nav" aria-label="Admin sections">
           <Link href="/admin" aria-current="page">IPO review</Link>
           <Link href="/admin/financials">Financial review</Link>
