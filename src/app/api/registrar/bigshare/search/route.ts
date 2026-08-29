@@ -19,17 +19,34 @@ function headers() {
 
 async function findCompanyId(companyName: string): Promise<string | null> {
   try {
+    // Primary: try the API endpoint
     const res = await fetch(BIGSHARE_LIST, { method: "POST", headers: headers(), body: "{}" });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const items = Array.isArray(data) ? data : data?.d ? JSON.parse(data.d) : [];
-    const match = items.find((c: Record<string, string>) =>
-      (c.COMPANY_NAME || c.CompanyName || c.Name || "").toLowerCase().includes(companyName.toLowerCase())
-    );
-    return match?.COMPANY_ID || match?.CompanyId || match?.Id || null;
-  } catch {
-    return null;
-  }
+    if (res.ok) {
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : data?.d ? JSON.parse(data.d) : [];
+      const match = items.find((c: Record<string, string>) =>
+        (c.COMPANY_NAME || c.CompanyName || c.Name || "").toLowerCase().includes(companyName.toLowerCase())
+      );
+      if (match) return match.COMPANY_ID || match.CompanyId || match.Id || null;
+    }
+  } catch {}
+
+  try {
+    // Fallback: scrape the HTML dropdown
+    const htmlRes = await fetch("https://ipo.bigshareonline.com/ipo_status.html", {
+      headers: { "User-Agent": "Mozilla/5.0" },
+    });
+    if (!htmlRes.ok) return null;
+    const html = await htmlRes.text();
+    const optionRe = /<option\s+value="(\d+)">([^<]+)<\/option>/gi;
+    let m: RegExpExecArray | null;
+    while ((m = optionRe.exec(html)) !== null) {
+      if (m[2].toLowerCase().includes(companyName.toLowerCase())) {
+        return m[1];
+      }
+    }
+  } catch {}
+  return null;
 }
 
 export async function POST(request: Request) {
