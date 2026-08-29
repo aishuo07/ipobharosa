@@ -7,7 +7,7 @@ const OPERATION_KEY = "registrar:mas:search";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { PAN, company_code } = body;
+    const { PAN } = body;
     if (!PAN) {
       return NextResponse.json({ error: "PAN required" }, { status: 400 });
     }

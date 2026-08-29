@@ -51,7 +51,7 @@ const STATUS_STYLE: Record<string, { bg: string; fg: string; label: string }> = 
 };
 
 export default function AllotmentPage() {
-  const [cards, setCards] = useState<PanCard[]>([]);
+  const [cards] = useState<PanCard[]>(() => loadPans());
   const [manualPan, setManualPan] = useState("");
   const [ipos, setIpos] = useState<Ipo[]>([]);
   const [selectedIpo, setSelectedIpo] = useState("");
@@ -60,7 +60,6 @@ export default function AllotmentPage() {
   const [loadingIpos, setLoadingIpos] = useState(true);
 
   useEffect(() => {
-    setCards(loadPans());
     fetch("/api/public/board?board=ALL")
       .then((r) => r.json())
       .then((data: Ipo[]) => {

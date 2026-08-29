@@ -17,7 +17,7 @@ describe("registrarCatalogueKey", () => {
   });
 
   it("returns null for unknown registrars", () => {
-    expect(registrarCatalogueKey("Cameo Corporate Services Ltd")).toBeNull();
+    expect(registrarCatalogueKey("Totally Unknown Registrar Ltd")).toBeNull();
     expect(registrarCatalogueKey(null)).toBeNull();
   });
 });

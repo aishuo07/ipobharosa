@@ -786,7 +786,7 @@ model PushBroadcast {
 }
 
 model ErrorLog {
-  id        String   @id @default(uuid())
+  id        String   @id @default(dbgenerated("gen_random_uuid()"))
   level     String   @default("error") // error | warn | info
   message   String
   route     String   @default("")

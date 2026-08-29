@@ -6,10 +6,9 @@ import {
 } from "./service-worker";
 
 describe("IPOBharosa service worker", () => {
-  it("caches only an explicit offline shell", () => {
+  it("caches an offline shell and static icons", () => {
     expect(SERVICE_WORKER_SOURCE).toContain(`const OFFLINE_URL = "${OFFLINE_URL}"`);
-    expect(SERVICE_WORKER_SOURCE).toContain("cache.add(new Request(OFFLINE_URL");
-    expect(SERVICE_WORKER_SOURCE).not.toContain("cache.addAll");
+    expect(SERVICE_WORKER_SOURCE).toContain("cache.addAll");
   });
 
   it("never intercepts private or API navigation", () => {
@@ -20,7 +19,7 @@ describe("IPOBharosa service worker", () => {
   });
 
   it("removes old app caches during activation", () => {
-    expect(SERVICE_WORKER_CACHE_PREFIX).toBe("ipobharosa-shell");
+    expect(SERVICE_WORKER_CACHE_PREFIX).toBe("ipobharosa");
     expect(SERVICE_WORKER_SOURCE).toContain("caches.delete(key)");
     expect(SERVICE_WORKER_SOURCE).toContain("key.startsWith(CACHE_PREFIX)");
   });
