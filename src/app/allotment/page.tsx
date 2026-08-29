@@ -51,7 +51,7 @@ const STATUS_STYLE: Record<string, { bg: string; fg: string; label: string }> = 
 };
 
 export default function AllotmentPage() {
-  const [cards, setCards] = useState<PanCard[]>(() => loadPans());
+  const [cards] = useState<PanCard[]>(() => loadPans());
   const [manualPan, setManualPan] = useState("");
   const [ipos, setIpos] = useState<Ipo[]>([]);
   const [selectedIpo, setSelectedIpo] = useState("");
