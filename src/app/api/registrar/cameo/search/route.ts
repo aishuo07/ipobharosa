@@ -91,8 +91,7 @@ export async function POST(request: Request) {
     const resultHtml = await submitRes.text();
 
     // Check if CAPTCHA was wrong
-    if (resultHtml.includes("Invalid Captcha") || resultHtml.includes("invalid captcha") || resultHtml.includes("Wrong CAPTCHA")) {
-      return NextResponse.json({
+    if (resultHtml.includes("Invalid Captcha") || resultHtml.includes("invalid captcha") || resultHtml.includes("Wrong CAPTCHA")) {      return NextResponse.json({
         ok: false,
         registrar: "cameo",
         requires_captcha: true,
@@ -103,10 +102,6 @@ export async function POST(request: Request) {
 
     // Parse allotment results from the response
     const results: { company: string; status: string; shares: string; amount: string }[] = [];
-
-    // Cameo shows results in a table with Application No, Name, Allotted/Not Allotted
-    const allottedMatch = resultHtml.match(/Allotted|Not Allotted|Applied|Shares Applied|Shares Allotted/gi);
-    const statusMatch = resultHtml.match(/status[^>]*>([^<]+)/gi);
 
     // Try parsing result rows
     const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
