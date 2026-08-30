@@ -571,7 +571,7 @@ async function checkMasAllotmentForPans(ipo: BoardIpo, pans: string[]): Promise<
               pan,
               companyName: ipo.companyName,
               registrar: ipo.registrar,
-              status: status.toUpperCase().includes("ALLOTTED") ? "ALLOTTED" : status.toUpperCase().includes("NOT") ? "NOT_ALLOTTED" : "NOT_APPLIED",
+              status: status.toUpperCase().includes("NOT") ? "NOT_ALLOTTED" : status.toUpperCase().includes("ALLOTTED") ? "ALLOTTED" : "NOT_APPLIED",
               allotted: shares,
               amount,
               checkedAt: new Date().toISOString(),
